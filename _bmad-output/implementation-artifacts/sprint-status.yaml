@@ -43,7 +43,7 @@ development_status:
   # Epic 1: 项目基础与右键菜单核心链路
   epic-1: in-progress
   1-1-xcode-project-init-and-triple-target-setup: done
-  1-2-shared-data-layer-and-config-persistence: backlog
+  1-2-shared-data-layer-and-config-persistence: done
   1-3-finder-context-menu-and-script-execution-e2e: backlog
   epic-1-retrospective: optional
 
