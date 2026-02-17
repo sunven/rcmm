@@ -48,8 +48,8 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: 应用发现与菜单配置管理
-  epic-2: backlog
-  2-1-app-discovery-service-and-app-info-model: backlog
+  epic-2: in-progress
+  2-1-app-discovery-service-and-app-info-model: done
   2-2-settings-window-and-menu-item-management: backlog
   2-3-menu-item-drag-sort-and-default: backlog
   2-4-config-realtime-sync-and-dynamic-context-menu: backlog
