@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		74DD7C942F46FF96003EE810 /* SettingsAccess in Frameworks */ = {isa = PBXBuildFile; productRef = 74DD7C932F46FF96003EE810 /* SettingsAccess */; };
 		A1000001 /* RCMMShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000002 /* RCMMShared */; };
 		A1000003 /* RCMMShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000004 /* RCMMShared */; };
 		A1000021 /* RCMMFinderExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1000202 /* RCMMFinderExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -83,6 +84,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000001 /* RCMMShared in Frameworks */,
+				74DD7C942F46FF96003EE810 /* SettingsAccess in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -97,6 +99,13 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		74DD7C922F46FF95003EE810 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		A1000060 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -111,6 +120,7 @@
 			children = (
 				A1000040 /* RCMMApp */,
 				A1000041 /* RCMMFinderExtension */,
+				74DD7C922F46FF95003EE810 /* Frameworks */,
 				A1000060 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -161,6 +171,7 @@
 			name = rcmm;
 			packageProductDependencies = (
 				A1000002 /* RCMMShared */,
+				74DD7C932F46FF96003EE810 /* SettingsAccess */,
 			);
 			productName = rcmm;
 			productReference = A1000200 /* rcmm.app */;
@@ -195,6 +206,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A1000005 /* XCLocalSwiftPackageReference "RCMMShared" */,
+				74DD7C912F46FD15003EE810 /* XCRemoteSwiftPackageReference "SettingsAccess" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A1000060 /* Products */;
@@ -525,7 +537,23 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		74DD7C912F46FD15003EE810 /* XCRemoteSwiftPackageReference "SettingsAccess" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/orchetect/SettingsAccess";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		74DD7C932F46FF96003EE810 /* SettingsAccess */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 74DD7C912F46FD15003EE810 /* XCRemoteSwiftPackageReference "SettingsAccess" */;
+			productName = SettingsAccess;
+		};
 		A1000002 /* RCMMShared */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RCMMShared;
