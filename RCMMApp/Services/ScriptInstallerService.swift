@@ -61,14 +61,11 @@ final class ScriptInstallerService {
                 do shell script "\(escapedCommand)"
             """
         } else {
-            // 默认分支：Terminal.app 专用（do script 是 Terminal 独有命令）
-            // Epic 4 将通过 CommandMappingService 提供通用 open -a 和应用专用命令
-            let escapedAppName = escapeForAppleScript(item.appName)
+            // 默认分支：通用 open -a 命令，对大多数应用有效（Terminal、VS Code、Sublime Text 等）
+            // Epic 4 将通过 CommandMappingService 为特殊终端（kitty/Alacritty/WezTerm）提供专用命令映射
+            let escapedAppPath = escapeForAppleScript(item.appPath)
             command = """
-                tell application "\(escapedAppName)"
-                    activate
-                    do script "cd " & quoted form of thePath
-                end tell
+                do shell script "open -a " & quoted form of "\(escapedAppPath)" & " " & quoted form of thePath
             """
         }
 
@@ -103,9 +100,17 @@ final class ScriptInstallerService {
 
         try process.run()
 
+        // 超时保护：10 秒后终止进程，防止 osacompile 挂起导致无限阻塞
+        let timeoutWorkItem = DispatchWorkItem { [weak process] in
+            process?.terminate()
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 10, execute: timeoutWorkItem)
+
         // 先读取 stderr 再等待进程结束，避免管道缓冲区满时死锁
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+
+        timeoutWorkItem.cancel()
 
         if process.terminationStatus != 0 {
             let errorMsg = String(data: errorData, encoding: .utf8) ?? "Unknown error"

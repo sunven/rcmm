@@ -10,11 +10,19 @@ class FinderSync: FIFinderSync {
     )
     private let configService = SharedConfigService()
     private let scriptExecutor = ScriptExecutor()
+    private var configObservation: DarwinObservation?
 
     override init() {
         super.init()
         FIFinderSyncController.default().directoryURLs = [URL(fileURLWithPath: "/")]
-        logger.info("FinderSync Extension 已初始化")
+
+        configObservation = DarwinNotificationCenter.shared.addObserver(
+            name: NotificationNames.configChanged
+        ) { [weak self] in
+            self?.logger.info("收到配置变更通知，下次右键将使用最新配置")
+        }
+
+        logger.info("FinderSync Extension 已初始化，已注册配置变更监听")
     }
 
     // MARK: - Menu

@@ -65,12 +65,11 @@ public final class DarwinObservation: @unchecked Sendable {
     public func cancel() {
         guard !isCancelled else { return }
         isCancelled = true
-        let pointer = observerPointer
-        DispatchQueue.main.async {
-            CFNotificationCenterRemoveObserver(
-                CFNotificationCenterGetDarwinNotifyCenter(),
-                pointer, nil, nil
-            )
-        }
+        // 同步移除观察者，避免 deinit 后 closure 被释放导致 use-after-free
+        // Darwin notify center (CFNotificationCenterGetDarwinNotifyCenter) 的移除操作是线程安全的
+        CFNotificationCenterRemoveObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            observerPointer, nil, nil
+        )
     }
 }
