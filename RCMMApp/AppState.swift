@@ -83,13 +83,25 @@ final class AppState {
         return false
     }
 
+    /// 移动菜单项到新位置（拖拽排序）
+    func moveMenuItem(from source: IndexSet, to destination: Int) {
+        menuItems.move(fromOffsets: source, toOffset: destination)
+        recalculateSortOrders()
+        saveAndSync()
+    }
+
     /// 删除指定位置的菜单项
     func removeMenuItem(at offsets: IndexSet) {
         menuItems.remove(atOffsets: offsets)
+        recalculateSortOrders()
+        saveAndSync()
+    }
+
+    /// 重新计算所有菜单项的 sortOrder（索引即排序值）
+    private func recalculateSortOrders() {
         for (index, _) in menuItems.enumerated() {
             menuItems[index].sortOrder = index
         }
-        saveAndSync()
     }
 
     /// 保存配置 + 同步脚本 + 发送 Darwin Notification
@@ -98,9 +110,12 @@ final class AppState {
         syncScriptsInBackground()
     }
 
+    /// 串行队列确保脚本同步任务不会并发执行，避免竞态导致孤立脚本文件
+    private static let syncQueue = DispatchQueue(label: "com.sunven.rcmm.scriptSync", qos: .userInitiated)
+
     private func syncScriptsInBackground() {
         let items = menuItems
-        DispatchQueue.global(qos: .userInitiated).async {
+        Self.syncQueue.async {
             let installer = ScriptInstallerService()
             installer.syncScripts(with: items)
             DarwinNotificationCenter.shared.post(NotificationNames.configChanged)

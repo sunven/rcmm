@@ -18,8 +18,18 @@ struct MenuConfigTab: View {
                 Spacer()
             } else {
                 List {
-                    ForEach(appState.menuItems) { item in
-                        AppListRow(menuItem: item)
+                    ForEach(Array(appState.menuItems.enumerated()), id: \.element.id) { index, item in
+                        AppListRow(
+                            menuItem: item,
+                            isDefault: index == 0,
+                            onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
+                            onMoveDown: index < appState.menuItems.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                            position: index + 1,
+                            total: appState.menuItems.count
+                        )
+                    }
+                    .onMove { source, destination in
+                        appState.moveMenuItem(from: source, to: destination)
                     }
                     .onDelete { offsets in
                         appState.removeMenuItem(at: offsets)
@@ -61,5 +71,11 @@ struct MenuConfigTab: View {
                 appState.addMenuItem(from: appInfo)
             }
         }
+    }
+
+    /// VoiceOver 辅助排序：将指定位置的项上移或下移一位
+    private func moveItem(at index: Int, direction: Int) {
+        let destination = direction < 0 ? index - 1 : index + 2
+        appState.moveMenuItem(from: IndexSet(integer: index), to: destination)
     }
 }
