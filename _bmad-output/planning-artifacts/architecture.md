@@ -364,6 +364,7 @@ struct ErrorRecord: Codable {
 - 所有共享键名/通知名使用 RCMMShared/Constants/ 中的常量，禁止硬编码字符串
 - 新增 Codable 字段必须可选或有默认值
 - Extension 内禁止使用 Process/NSTask，只能通过 NSUserAppleScriptTask
+- 主 App 内 FinderSync framework 仅限 FIFinderSyncController 状态检测 API（isExtensionEnabled / showExtensionManagementInterface），禁止其他用途
 - 主 App 内禁止直接操作 Finder（不使用 ScriptingBridge 或 tell application "Finder"）
 - 所有 os_log 调用必须指定 subsystem 和 category
 - UI 状态修改必须在 @MainActor 上下文
@@ -411,7 +412,7 @@ rcmm/
 │   │       ├── SelectAppsStepView.swift     # 选择应用步骤
 │   │       └── EnableExtensionStepView.swift # 启用扩展步骤
 │   └── Services/
-│       ├── PluginKitService.swift           # pluginkit 调用，扩展健康检测
+│       ├── PluginKitService.swift           # FIFinderSyncController 调用，扩展状态检测
 │       ├── ScriptInstallerService.swift     # .scpt 文件生成与安装
 │       ├── AppDiscoveryService.swift        # /Applications 扫描
 │       └── ActivationPolicyManager.swift    # NSApplication.ActivationPolicy 切换 workaround
@@ -463,6 +464,7 @@ rcmm/
 │                              │     │                               │
 │  AppState (@Observable)      │     │  FinderSync (FIFinderSync)    │
 │  PluginKitService            │     │  ScriptExecutor               │
+│  (FIFinderSyncController)    │     │                               │
 │  ScriptInstallerService      │     │                               │
 │  AppDiscoveryService         │     │  ✅ NSUserAppleScriptTask     │
 │  ActivationPolicyManager     │     │  ✅ App Group UserDefaults 读  │
@@ -482,7 +484,7 @@ rcmm/
 | 模块 | 可依赖 | 禁止依赖 |
 |---|---|---|
 | RCMMShared | Foundation | SwiftUI, AppKit, FinderSync |
-| RCMMApp | RCMMShared, SwiftUI, AppKit, ServiceManagement | FinderSync |
+| RCMMApp | RCMMShared, SwiftUI, AppKit, ServiceManagement, FinderSync（仅限 FIFinderSyncController 状态检测） | — |
 | RCMMFinderExtension | RCMMShared, FinderSync, Foundation | SwiftUI, AppKit |
 
 **数据流边界：**
@@ -522,7 +524,7 @@ rcmm/
 - `RCMMApp/Services/PluginKitService.swift` — Extension 状态检测
 
 **FR-HEALTH (扩展健康) →**
-- `RCMMApp/Services/PluginKitService.swift` — pluginkit 调用
+- `RCMMApp/Services/PluginKitService.swift` — FIFinderSyncController 状态检测
 - `RCMMApp/Views/MenuBar/HealthWarningView.swift` — 健康警告 UI
 
 **FR-UI (用户界面) →**

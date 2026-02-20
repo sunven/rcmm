@@ -1,12 +1,23 @@
 import Foundation
 import os.log
 import RCMMShared
+import SwiftUI
 
 @Observable
 @MainActor
 final class AppState {
     var menuItems: [MenuItemConfig] = []
     var discoveredApps: [AppInfo] = []
+
+    var isOnboardingCompleted: Bool {
+        didSet {
+            let defaults = UserDefaults(suiteName: AppGroupConstants.appGroupID)
+            defaults?.set(isOnboardingCompleted, forKey: SharedKeys.onboardingCompleted)
+        }
+    }
+
+    private var onboardingWindow: NSWindow?
+    private var windowCloseObserver: Any?
 
     private let configService = SharedConfigService()
     private let logger = Logger(
@@ -15,8 +26,70 @@ final class AppState {
     )
 
     init() {
+        let defaults = UserDefaults(suiteName: AppGroupConstants.appGroupID)
+        isOnboardingCompleted = defaults?.bool(forKey: SharedKeys.onboardingCompleted) ?? false
         loadMenuItems()
+
+        if !isOnboardingCompleted {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                self.showOnboardingIfNeeded()
+            }
+        }
     }
+
+    // MARK: - Onboarding Window
+
+    func showOnboardingIfNeeded() {
+        guard !isOnboardingCompleted, onboardingWindow == nil else { return }
+
+        let contentView = OnboardingFlowView()
+            .environment(self)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 500),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = NSHostingView(rootView: contentView)
+        window.title = "欢迎使用 rcmm"
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.setContentSize(NSSize(width: 480, height: 500))
+        window.minSize = NSSize(width: 480, height: 500)
+        window.maxSize = NSSize(width: 480, height: 500)
+
+        windowCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.onboardingWindow = nil
+                self?.windowCloseObserver = nil
+                NSApp.setActivationPolicy(.accessory)
+            }
+        }
+
+        onboardingWindow = window
+        window.makeKeyAndOrderFront(nil)
+
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func closeOnboarding() {
+        if let observer = windowCloseObserver {
+            NotificationCenter.default.removeObserver(observer)
+            windowCloseObserver = nil
+        }
+        onboardingWindow?.close()
+        onboardingWindow = nil
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    // MARK: - Menu Items
 
     /// 从 SharedConfigService 加载已配置菜单项；首次启动时创建默认 Terminal 配置
     ///
