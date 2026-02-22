@@ -1,9 +1,17 @@
+import ServiceManagement
 import SwiftUI
+import os.log
 
 struct OnboardingFlowView: View {
     @Environment(AppState.self) private var appState
     @State private var currentStep: OnboardingStep = .enableExtension
     @State private var isExtensionEnabled = false
+    @State private var selectedAppIds: Set<UUID> = []
+    @State private var launchAtLogin = true
+    @State private var isCompleting = false
+    @State private var registrationErrorMessage: String? = nil
+
+    private let logger = Logger(subsystem: "com.sunven.rcmm", category: "onboarding")
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,16 +24,20 @@ struct OnboardingFlowView: View {
 
             // 步骤内容
             Group {
-                switch currentStep {
-                case .enableExtension:
-                    EnableExtensionStepView(
-                        isExtensionEnabled: $isExtensionEnabled,
-                        onNext: { advanceToStep(.selectApps) }
-                    )
-                case .selectApps:
-                    selectAppsPlaceholder
-                case .verify:
-                    verifyPlaceholder
+                if isCompleting {
+                    completionConfirmationView
+                } else {
+                    switch currentStep {
+                    case .enableExtension:
+                        EnableExtensionStepView(
+                            isExtensionEnabled: $isExtensionEnabled,
+                            onNext: { advanceToStep(.selectApps) }
+                        )
+                    case .selectApps:
+                        SelectAppsStepView(selectedAppIds: $selectedAppIds)
+                    case .verify:
+                        VerifyStepView(launchAtLogin: $launchAtLogin)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -36,23 +48,42 @@ struct OnboardingFlowView: View {
 
             // 底部导航
             HStack {
-                if currentStep == .enableExtension {
-                    Button("跳过") {
-                        advanceToStep(.selectApps)
+                if !isCompleting {
+                    if currentStep == .enableExtension || currentStep == .selectApps {
+                        Button("跳过") {
+                            advanceToNextStep()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(currentStep == .enableExtension ? "跳过启用扩展步骤" : "跳过应用选择步骤")
+                    } else if currentStep == .verify {
+                        Button("跳过") {
+                            completeOnboarding()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("跳过验证步骤并完成引导")
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("跳过启用扩展步骤")
                 }
 
                 Spacer()
 
-                if currentStep != .enableExtension {
-                    Button("下一步") {
-                        advanceToNextStep()
+                if !isCompleting {
+                    if currentStep == .selectApps {
+                        Button("下一步") {
+                            saveSelectedApps()
+                            advanceToNextStep()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(selectedAppIds.isEmpty)
+                        .accessibilityLabel("前往下一步")
+                    } else if currentStep == .verify {
+                        Button("完成") {
+                            completeOnboarding()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityLabel("完成引导设置")
                     }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityLabel("前往下一步")
                 }
             }
             .padding(.horizontal, 24)
@@ -68,30 +99,38 @@ struct OnboardingFlowView: View {
         }
     }
 
-    // MARK: - 占位视图（Story 3.2 / 3.3 实现）
+    // MARK: - 完成确认视图
 
-    private var selectAppsPlaceholder: some View {
+    private var completionConfirmationView: some View {
         VStack(spacing: 16) {
-            Image(systemName: "app.badge.checkmark")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            Text("选择常用应用")
-                .font(.title2.bold())
-            Text("此步骤将在后续版本中实现。")
-                .foregroundStyle(.secondary)
-        }
-    }
+            Spacer()
 
-    private var verifyPlaceholder: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            Text("验证完成")
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(.green)
+                .accessibilityHidden(true)
+
+            Text("设置完成！")
                 .font(.title2.bold())
-            Text("此步骤将在后续版本中实现。")
+                .accessibilityLabel("引导设置已完成")
+
+            Text("现在可以在 Finder 中右键目录使用 rcmm 了")
+                .font(.body)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            if let errorMessage = registrationErrorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 4)
+            }
+
+            Spacer()
         }
+        .frame(maxWidth: .infinity)
+        .transition(.opacity)
     }
 
     // MARK: - 导航
@@ -105,6 +144,46 @@ struct OnboardingFlowView: View {
     private func advanceToNextStep() {
         guard let nextStep = OnboardingStep(rawValue: currentStep.rawValue + 1) else { return }
         advanceToStep(nextStep)
+    }
+
+    private func saveSelectedApps() {
+        let appsToAdd = appState.discoveredApps.filter { selectedAppIds.contains($0.id) }
+        appState.addMenuItems(from: appsToAdd)
+    }
+
+    // MARK: - 引导完成
+
+    private func completeOnboarding() {
+        guard !isCompleting else { return }
+
+        // 根据 Toggle 状态注册或取消开机自启
+        if launchAtLogin {
+            do {
+                try SMAppService.mainApp.register()
+            } catch {
+                logger.error("开机自启注册失败: \(error.localizedDescription)")
+                registrationErrorMessage = "开机自启设置失败，可在系统设置中手动开启"
+            }
+        } else {
+            do {
+                try SMAppService.mainApp.unregister()
+            } catch {
+                // 首次安装时未注册属正常情况，记录 debug 日志
+                logger.debug("开机自启取消注册（可能未注册）: \(error.localizedDescription)")
+            }
+        }
+
+        appState.isOnboardingCompleted = true
+
+        // 显示完成确认，短暂延迟后关闭窗口
+        withAnimation(.easeInOut(duration: 0.3)) {
+            isCompleting = true
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            appState.closeOnboarding()
+        }
     }
 }
 
