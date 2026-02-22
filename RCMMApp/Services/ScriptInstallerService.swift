@@ -55,16 +55,16 @@ final class ScriptInstallerService {
     private func generateAppleScript(for item: MenuItemConfig) -> String {
         let command: String
         if let customCommand = item.customCommand, !customCommand.isEmpty {
-            // 优先级 1: 用户自定义命令
-            let escapedCommand = escapeForAppleScript(customCommand)
-            command = """
-                do shell script "\(escapedCommand)"
-            """
+            // 优先级 1: 用户自定义命令（支持 {app} 和 {path} 占位符）
+            command = CommandTemplateProcessor.buildAppleScriptCommand(
+                template: customCommand,
+                appPath: item.appPath
+            )
         } else if let builtInCommand = CommandMappingService.command(for: item.bundleId) {
             // 优先级 2: 内置命令映射（特殊终端：kitty/Alacritty/WezTerm）
             let parts = builtInCommand.components(separatedBy: "{path}")
-            let prefix = escapeForAppleScript(parts[0])
-            let suffix = parts.count > 1 ? escapeForAppleScript(parts[1]) : ""
+            let prefix = CommandTemplateProcessor.escapeForAppleScript(parts[0])
+            let suffix = parts.count > 1 ? CommandTemplateProcessor.escapeForAppleScript(parts[1]) : ""
             if suffix.isEmpty {
                 command = """
                     do shell script "\(prefix)" & quoted form of thePath
@@ -76,7 +76,7 @@ final class ScriptInstallerService {
             }
         } else {
             // 优先级 3: 默认 open -a
-            let escapedAppPath = escapeForAppleScript(item.appPath)
+            let escapedAppPath = CommandTemplateProcessor.escapeForAppleScript(item.appPath)
             command = """
                 do shell script "open -a " & quoted form of "\(escapedAppPath)" & " " & quoted form of thePath
             """
@@ -87,13 +87,6 @@ final class ScriptInstallerService {
         \(command)
         end openApp
         """
-    }
-
-    /// 转义字符串以安全嵌入 AppleScript 双引号字符串
-    private func escapeForAppleScript(_ string: String) -> String {
-        string
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     /// 使用 osacompile 编译 AppleScript 源码为 .scpt

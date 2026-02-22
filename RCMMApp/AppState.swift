@@ -170,6 +170,13 @@ final class AppState {
         saveAndSync()
     }
 
+    /// 更新指定菜单项的自定义命令
+    func updateCustomCommand(for itemId: UUID, command: String?) {
+        guard let index = menuItems.firstIndex(where: { $0.id == itemId }) else { return }
+        menuItems[index].customCommand = command
+        saveAndSync()
+    }
+
     /// 重新计算所有菜单项的 sortOrder（索引即排序值）
     private func recalculateSortOrders() {
         for (index, _) in menuItems.enumerated() {
