@@ -63,8 +63,8 @@ development_status:
   epic-3-retrospective: optional
 
   # Epic 4: 自定义命令与特殊终端支持
-  epic-4: backlog
-  4-1-command-mapping-service-and-builtin-terminal-support: backlog
+  epic-4: in-progress
+  4-1-command-mapping-service-and-builtin-terminal-support: done
   4-2-custom-command-editor: backlog
   4-3-command-preview-and-validation: backlog
   epic-4-retrospective: optional

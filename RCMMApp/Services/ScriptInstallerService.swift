@@ -54,15 +54,28 @@ final class ScriptInstallerService {
     /// 生成 AppleScript 源码
     private func generateAppleScript(for item: MenuItemConfig) -> String {
         let command: String
-        if let customCommand = item.customCommand {
-            // TODO: Epic 4 (CommandMappingService) 将实现 {app}/{path} 占位符替换
+        if let customCommand = item.customCommand, !customCommand.isEmpty {
+            // 优先级 1: 用户自定义命令
             let escapedCommand = escapeForAppleScript(customCommand)
             command = """
                 do shell script "\(escapedCommand)"
             """
+        } else if let builtInCommand = CommandMappingService.command(for: item.bundleId) {
+            // 优先级 2: 内置命令映射（特殊终端：kitty/Alacritty/WezTerm）
+            let parts = builtInCommand.components(separatedBy: "{path}")
+            let prefix = escapeForAppleScript(parts[0])
+            let suffix = parts.count > 1 ? escapeForAppleScript(parts[1]) : ""
+            if suffix.isEmpty {
+                command = """
+                    do shell script "\(prefix)" & quoted form of thePath
+                """
+            } else {
+                command = """
+                    do shell script "\(prefix)" & quoted form of thePath & "\(suffix)"
+                """
+            }
         } else {
-            // 默认分支：通用 open -a 命令，对大多数应用有效（Terminal、VS Code、Sublime Text 等）
-            // Epic 4 将通过 CommandMappingService 为特殊终端（kitty/Alacritty/WezTerm）提供专用命令映射
+            // 优先级 3: 默认 open -a
             let escapedAppPath = escapeForAppleScript(item.appPath)
             command = """
                 do shell script "open -a " & quoted form of "\(escapedAppPath)" & " " & quoted form of thePath
