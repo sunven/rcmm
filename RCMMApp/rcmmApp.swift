@@ -8,26 +8,15 @@ struct rcmmApp: App {
 
     var body: some Scene {
         MenuBarExtra("rcmm", systemImage: "contextualmenu.and.cursorarrow") {
-            SettingsLink {
-                Text("设置…")
-            } preAction: {
-                NSApp.setActivationPolicy(.regular)
-                NSApp.activate(ignoringOtherApps: true)
-            } postAction: {
-            }
-            .keyboardShortcut(",", modifiers: .command)
-            Divider()
-            Button("退出") {
-                NSApplication.shared.terminate(nil)
-            }
+            PopoverContainerView()
+                .environment(appState)
         }
+        .menuBarExtraStyle(.window)
         Settings {
             SettingsView()
                 .environment(appState)
                 .onDisappear {
-                    DispatchQueue.main.async {
-                        NSApp.setActivationPolicy(.accessory)
-                    }
+                    ActivationPolicyManager.hideToMenuBar()
                 }
         }
     }

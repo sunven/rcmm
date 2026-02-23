@@ -70,8 +70,8 @@ development_status:
   epic-4-retrospective: optional
 
   # Epic 5: 系统集成与菜单栏体验
-  epic-5: backlog
-  5-1-menubar-resident-app-and-popover: backlog
+  epic-5: in-progress
+  5-1-menubar-resident-app-and-popover: done
   5-2-launch-at-login-management: backlog
   epic-5-retrospective: optional
 

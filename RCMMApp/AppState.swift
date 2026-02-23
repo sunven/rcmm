@@ -8,6 +8,8 @@ import SwiftUI
 final class AppState {
     var menuItems: [MenuItemConfig] = []
     var discoveredApps: [AppInfo] = []
+    var popoverState: PopoverState = .normal
+    var extensionStatus: ExtensionStatus = .unknown
 
     var isOnboardingCompleted: Bool {
         didSet {
@@ -25,10 +27,14 @@ final class AppState {
         category: "appState"
     )
 
-    init() {
+    init(forPreview: Bool = false) {
         let defaults = UserDefaults(suiteName: AppGroupConstants.appGroupID)
         isOnboardingCompleted = defaults?.bool(forKey: SharedKeys.onboardingCompleted) ?? false
+
+        guard !forPreview else { return }
+
         loadMenuItems()
+        checkExtensionStatus()
 
         if !isOnboardingCompleted {
             Task { @MainActor in
@@ -36,6 +42,16 @@ final class AppState {
                 self.showOnboardingIfNeeded()
             }
         }
+    }
+
+    // MARK: - Extension Status
+
+    /// 检测 Finder 扩展状态，更新 extensionStatus 和 popoverState
+    func checkExtensionStatus() {
+        let enabled = PluginKitService.isExtensionEnabled
+        extensionStatus = enabled ? .enabled : .disabled
+        popoverState = extensionStatus == .disabled ? .healthWarning : .normal
+        logger.info("Extension 状态: \(self.extensionStatus.rawValue), popoverState: \(String(describing: self.popoverState))")
     }
 
     // MARK: - Onboarding Window
@@ -68,15 +84,14 @@ final class AppState {
             Task { @MainActor in
                 self?.onboardingWindow = nil
                 self?.windowCloseObserver = nil
-                NSApp.setActivationPolicy(.accessory)
+                ActivationPolicyManager.hideToMenuBar()
             }
         }
 
         onboardingWindow = window
         window.makeKeyAndOrderFront(nil)
 
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        ActivationPolicyManager.activateAsRegularApp()
     }
 
     func closeOnboarding() {
@@ -86,7 +101,7 @@ final class AppState {
         }
         onboardingWindow?.close()
         onboardingWindow = nil
-        NSApp.setActivationPolicy(.accessory)
+        ActivationPolicyManager.hideToMenuBar()
     }
 
     // MARK: - Menu Items
