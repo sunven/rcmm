@@ -78,7 +78,7 @@ development_status:
   # Epic 6: 扩展健康检测与恢复引导
   epic-6: in-progress
   6-1-extension-status-detection-service: done
-  6-2-menubar-icon-health-status-indicator: backlog
+  6-2-menubar-icon-health-status-indicator: ready-for-dev
   6-3-recovery-guide-panel: backlog
   epic-6-retrospective: optional
 
