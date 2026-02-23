@@ -72,7 +72,7 @@ development_status:
   # Epic 5: 系统集成与菜单栏体验
   epic-5: in-progress
   5-1-menubar-resident-app-and-popover: done
-  5-2-launch-at-login-management: backlog
+  5-2-launch-at-login-management: done
   epic-5-retrospective: optional
 
   # Epic 6: 扩展健康检测与恢复引导
