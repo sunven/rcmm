@@ -18,6 +18,9 @@ struct PopoverContainerView: View {
             }
         }
         .frame(width: 300)
+        .onAppear {
+            appState.checkExtensionStatus()
+        }
     }
 }
 

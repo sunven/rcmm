@@ -21,6 +21,9 @@ final class AppState {
     private var onboardingWindow: NSWindow?
     private var windowCloseObserver: Any?
 
+    private var healthCheckTimer: Timer?
+    private let healthCheckInterval: TimeInterval = 1800 // 30 分钟
+
     private let configService = SharedConfigService()
     private let logger = Logger(
         subsystem: "com.sunven.rcmm",
@@ -35,6 +38,7 @@ final class AppState {
 
         loadMenuItems()
         checkExtensionStatus()
+        startHealthMonitoring()
 
         if !isOnboardingCompleted {
             Task { @MainActor in
@@ -46,12 +50,44 @@ final class AppState {
 
     // MARK: - Extension Status
 
-    /// 检测 Finder 扩展状态，更新 extensionStatus 和 popoverState
+    /// 检测 Finder 扩展状态，仅在状态变化时更新 extensionStatus 和 popoverState
     func checkExtensionStatus() {
-        let enabled = PluginKitService.isExtensionEnabled
-        extensionStatus = enabled ? .enabled : .disabled
-        popoverState = extensionStatus == .disabled ? .healthWarning : .normal
-        logger.info("Extension 状态: \(self.extensionStatus.rawValue), popoverState: \(String(describing: self.popoverState))")
+        let newStatus = PluginKitService.checkHealth()
+        let oldStatus = extensionStatus
+
+        guard oldStatus != newStatus else { return }
+
+        extensionStatus = newStatus
+
+        switch newStatus {
+        case .enabled:
+            popoverState = .normal
+        case .disabled:
+            popoverState = .healthWarning
+        case .unknown:
+            popoverState = .normal
+        }
+
+        logger.info("Extension 状态变化: \(oldStatus.rawValue) → \(newStatus.rawValue), popoverState: \(String(describing: self.popoverState))")
+    }
+
+    /// 启动定期健康监控（每 30 分钟检测一次）
+    private func startHealthMonitoring() {
+        healthCheckTimer?.invalidate()
+        healthCheckTimer = Timer.scheduledTimer(
+            withTimeInterval: healthCheckInterval,
+            repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.checkExtensionStatus()
+            }
+        }
+    }
+
+    /// 停止定期健康监控
+    private func stopHealthMonitoring() {
+        healthCheckTimer?.invalidate()
+        healthCheckTimer = nil
     }
 
     // MARK: - Onboarding Window
