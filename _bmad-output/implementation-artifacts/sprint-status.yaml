@@ -79,7 +79,7 @@ development_status:
   epic-6: in-progress
   6-1-extension-status-detection-service: done
   6-2-menubar-icon-health-status-indicator: done
-  6-3-recovery-guide-panel: backlog
+  6-3-recovery-guide-panel: done
   epic-6-retrospective: optional
 
   # Epic 7: 错误处理与用户反馈

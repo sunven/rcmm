@@ -10,8 +10,7 @@ struct PopoverContainerView: View {
             case .normal:
                 NormalPopoverView()
             case .healthWarning:
-                // 占位符 — Epic 6 实现 RecoveryGuidePanel
-                NormalPopoverView()
+                RecoveryGuidePanel()
             case .onboarding:
                 // 占位符 — 当前引导使用独立 NSWindow，不通过 PopoverState 路由
                 NormalPopoverView()
