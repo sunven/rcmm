@@ -24,25 +24,17 @@ struct HealthStatusPanel: View {
         }
     }
 
-    private var statusText: String {
-        switch status {
-        case .enabled: "Finder 扩展已启用"
-        case .unknown: "扩展状态未知"
-        case .disabled: "Finder 扩展未启用"
-        }
-    }
-
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: statusIcon)
                 .foregroundStyle(statusColor)
                 .font(.body)
-            Text(statusText)
+            Text(status.statusDescription)
                 .font(.subheadline)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("扩展状态：\(statusText)")
-        .accessibilityValue(statusText)
+        .accessibilityLabel("扩展状态：\(status.statusDescription)")
+        .accessibilityValue(status.statusDescription)
     }
 }
 

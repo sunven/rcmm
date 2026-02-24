@@ -7,9 +7,11 @@ struct rcmmApp: App {
     @State private var appState = AppState()
 
     var body: some Scene {
-        MenuBarExtra("rcmm", systemImage: "contextualmenu.and.cursorarrow") {
+        MenuBarExtra {
             PopoverContainerView()
                 .environment(appState)
+        } label: {
+            MenuBarStatusIcon(status: appState.extensionStatus)
         }
         .menuBarExtraStyle(.window)
         Settings {
