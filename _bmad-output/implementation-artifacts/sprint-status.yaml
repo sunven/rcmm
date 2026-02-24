@@ -67,7 +67,7 @@ development_status:
   4-1-command-mapping-service-and-builtin-terminal-support: done
   4-2-custom-command-editor: done
   4-3-command-preview-and-validation: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 
   # Epic 5: 系统集成与菜单栏体验
   epic-5: in-progress
