@@ -38,6 +38,10 @@ final class ScriptInstallerService {
 
     /// 为单个菜单项安装脚本
     private func installScript(for item: MenuItemConfig) {
+        if !FileManager.default.fileExists(atPath: item.appPath) {
+            logger.warning("应用路径无效，仍将生成脚本: \(item.appName) → \(item.appPath)")
+        }
+
         let scriptSource = generateAppleScript(for: item)
         let outputURL = scriptsDirectory
             .appendingPathComponent(item.id.uuidString)
@@ -174,8 +178,16 @@ final class ScriptInstallerService {
         }
 
         // 安装或更新所有预期脚本（覆盖已有文件确保内容同步）
+        var invalidCount = 0
         for item in items {
+            if !FileManager.default.fileExists(atPath: item.appPath) {
+                invalidCount += 1
+            }
             installScript(for: item)
+        }
+
+        if invalidCount > 0 {
+            logger.warning("同步完成，\(invalidCount) 个应用路径无效")
         }
     }
 }

@@ -19,6 +19,8 @@ struct AppListRow: View {
             Image(nsImage: NSWorkspace.shared.icon(forFile: menuItem.appPath))
                 .resizable()
                 .frame(width: 32, height: 32)
+                .saturation(appExists ? 1 : 0)
+                .opacity(appExists ? 1 : 0.4)
             Text(menuItem.appName)
                 .font(.body)
             if isDefault {
@@ -47,6 +49,34 @@ struct AppListRow: View {
             view.accessibilityAction(named: "下移", action)
         }
     }
+}
+
+#Preview("应用存在") {
+    AppListRow(
+        menuItem: MenuItemConfig(
+            appName: "Terminal",
+            bundleId: "com.apple.Terminal",
+            appPath: "/System/Applications/Utilities/Terminal.app",
+            sortOrder: 0
+        ),
+        isDefault: true,
+        position: 1,
+        total: 3
+    )
+    .padding()
+}
+
+#Preview("应用未找到") {
+    AppListRow(
+        menuItem: MenuItemConfig(
+            appName: "不存在的应用",
+            appPath: "/Applications/NonExistent.app",
+            sortOrder: 1
+        ),
+        position: 2,
+        total: 3
+    )
+    .padding()
 }
 
 extension View {
