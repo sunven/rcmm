@@ -41,14 +41,14 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   # Epic 1: 项目基础与右键菜单核心链路
-  epic-1: in-progress
+  epic-1: done
   1-1-xcode-project-init-and-triple-target-setup: done
   1-2-shared-data-layer-and-config-persistence: done
   1-3-finder-context-menu-and-script-execution-e2e: done
   epic-1-retrospective: done
 
   # Epic 2: 应用发现与菜单配置管理
-  epic-2: in-progress
+  epic-2: done
   2-1-app-discovery-service-and-app-info-model: done
   2-2-settings-window-and-menu-item-management: done
   2-3-menu-item-drag-sort-and-default: done
@@ -56,34 +56,34 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: 首次引导体验
-  epic-3: in-progress
+  epic-3: done
   3-1-onboarding-flow-and-extension-enable-guide: done
   3-2-app-selection-onboarding-step: done
   3-3-verification-step-and-onboarding-completion: done
   epic-3-retrospective: done
 
   # Epic 4: 自定义命令与特殊终端支持
-  epic-4: in-progress
+  epic-4: done
   4-1-command-mapping-service-and-builtin-terminal-support: done
   4-2-custom-command-editor: done
   4-3-command-preview-and-validation: done
   epic-4-retrospective: done
 
   # Epic 5: 系统集成与菜单栏体验
-  epic-5: in-progress
+  epic-5: done
   5-1-menubar-resident-app-and-popover: done
   5-2-launch-at-login-management: done
   epic-5-retrospective: done
 
   # Epic 6: 扩展健康检测与恢复引导
-  epic-6: in-progress
+  epic-6: done
   6-1-extension-status-detection-service: done
   6-2-menubar-icon-health-status-indicator: done
   6-3-recovery-guide-panel: done
   epic-6-retrospective: done
 
   # Epic 7: 错误处理与用户反馈
-  epic-7: in-progress
+  epic-7: done
   7-1-app-existence-check-and-execution-error-capture: done
   7-2-error-display-and-recovery-suggestions: done
   epic-7-retrospective: done
