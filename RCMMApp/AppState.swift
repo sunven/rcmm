@@ -10,6 +10,8 @@ final class AppState {
     var discoveredApps: [AppInfo] = []
     var popoverState: PopoverState = .normal
     var extensionStatus: ExtensionStatus = .unknown
+    var errorRecords: [ErrorRecord] = []
+    var autoRepairMessage: String? = nil
 
     var isOnboardingCompleted: Bool {
         didSet {
@@ -25,6 +27,8 @@ final class AppState {
     private let healthCheckInterval: TimeInterval = 1800 // 30 分钟
 
     private let configService = SharedConfigService()
+    private let errorQueue = SharedErrorQueue()
+    private var hasTriggeredAutoRepair = false
     private let logger = Logger(
         subsystem: "com.sunven.rcmm",
         category: "appState"
@@ -46,6 +50,37 @@ final class AppState {
                 self.showOnboardingIfNeeded()
             }
         }
+    }
+
+    // MARK: - Error Queue
+
+    func loadErrors() {
+        errorRecords = errorQueue.loadAll()
+
+        guard !hasTriggeredAutoRepair else { return }
+
+        let hasScriptFileErrors = errorRecords.contains { record in
+            record.message.contains("脚本文件不存在") || record.message.contains("脚本文件无法加载")
+        }
+        if hasScriptFileErrors {
+            hasTriggeredAutoRepair = true
+            let items = menuItems
+            Self.syncQueue.async { [weak self] in
+                let installer = ScriptInstallerService()
+                installer.syncScripts(with: items)
+                DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
+                Task { @MainActor in
+                    self?.autoRepairMessage = "已自动修复脚本文件"
+                }
+            }
+        }
+    }
+
+    func dismissAllErrors() {
+        errorQueue.removeAll()
+        errorRecords = []
+        hasTriggeredAutoRepair = false
+        autoRepairMessage = nil
     }
 
     // MARK: - Extension Status

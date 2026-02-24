@@ -85,5 +85,5 @@ development_status:
   # Epic 7: 错误处理与用户反馈
   epic-7: in-progress
   7-1-app-existence-check-and-execution-error-capture: done
-  7-2-error-display-and-recovery-suggestions: backlog
+  7-2-error-display-and-recovery-suggestions: done
   epic-7-retrospective: optional

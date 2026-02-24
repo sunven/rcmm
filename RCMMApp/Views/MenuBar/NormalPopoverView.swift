@@ -1,7 +1,8 @@
+import RCMMShared
 import SettingsAccess
 import SwiftUI
 
-/// 正常状态弹出窗口，展示扩展状态 + 打开设置 + 退出按钮
+/// 正常状态弹出窗口，展示扩展状态 + 错误信息 + 打开设置 + 退出按钮
 struct NormalPopoverView: View {
     @Environment(AppState.self) private var appState
 
@@ -10,6 +11,11 @@ struct NormalPopoverView: View {
             HealthStatusPanel(status: appState.extensionStatus)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
+
+            if !appState.errorRecords.isEmpty || appState.autoRepairMessage != nil {
+                Divider()
+                ErrorBannerView()
+            }
 
             Divider()
 
@@ -41,5 +47,15 @@ struct NormalPopoverView: View {
 #Preview {
     NormalPopoverView()
         .environment(AppState(forPreview: true))
+        .frame(width: 300)
+}
+
+#Preview("有错误") {
+    let state = AppState(forPreview: true)
+    state.errorRecords = [
+        ErrorRecord(source: "ScriptExecutor", message: "脚本执行失败: exit code 1", context: "VS Code"),
+    ]
+    return NormalPopoverView()
+        .environment(state)
         .frame(width: 300)
 }
