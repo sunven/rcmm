@@ -45,7 +45,7 @@ development_status:
   1-1-xcode-project-init-and-triple-target-setup: done
   1-2-shared-data-layer-and-config-persistence: done
   1-3-finder-context-menu-and-script-execution-e2e: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # Epic 2: 应用发现与菜单配置管理
   epic-2: in-progress

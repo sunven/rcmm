@@ -200,7 +200,7 @@ private extension AppCategory {
 #Preview("列表状态") {
     let appState = AppState()
     appState.discoveredApps = [
-        AppInfo(name: "Terminal", bundleId: "com.apple.Terminal", path: "/Applications/Utilities/Terminal.app", category: .terminal),
+        AppInfo(name: "Terminal", bundleId: "com.apple.Terminal", path: "/System/Applications/Utilities/Terminal.app", category: .terminal),
         AppInfo(name: "iTerm", bundleId: "com.googlecode.iterm2", path: "/Applications/iTerm.app", category: .terminal),
         AppInfo(name: "Visual Studio Code", bundleId: "com.microsoft.VSCode", path: "/Applications/Visual Studio Code.app", category: .editor),
     ]

@@ -189,7 +189,7 @@ final class AppState {
             let terminalConfig = MenuItemConfig(
                 appName: "Terminal",
                 bundleId: "com.apple.Terminal",
-                appPath: "/Applications/Utilities/Terminal.app",
+                appPath: "/System/Applications/Utilities/Terminal.app",
                 sortOrder: 0
             )
             menuItems = [terminalConfig]
