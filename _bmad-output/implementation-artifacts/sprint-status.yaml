@@ -53,7 +53,7 @@ development_status:
   2-2-settings-window-and-menu-item-management: done
   2-3-menu-item-drag-sort-and-default: done
   2-4-config-realtime-sync-and-dynamic-context-menu: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   # Epic 3: 首次引导体验
   epic-3: in-progress
