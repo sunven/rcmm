@@ -263,6 +263,13 @@ final class AppState {
         saveAndSync()
     }
 
+    /// 切换菜单项的启用/禁用状态
+    func toggleMenuItem(for itemId: UUID, isEnabled: Bool) {
+        guard let index = menuItems.firstIndex(where: { $0.id == itemId }) else { return }
+        menuItems[index].isEnabled = isEnabled
+        saveAndSync()
+    }
+
     /// 重新计算所有菜单项的 sortOrder（索引即排序值）
     private func recalculateSortOrders() {
         for (index, _) in menuItems.enumerated() {
