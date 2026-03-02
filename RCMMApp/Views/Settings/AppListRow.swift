@@ -7,6 +7,7 @@ struct AppListRow: View {
     var isDefault: Bool = false
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
+    var onDelete: (() -> Void)?
     var position: Int?
     var total: Int?
 
@@ -35,6 +36,15 @@ struct AppListRow: View {
             Text(appExists ? "就绪" : "未找到")
                 .font(.caption)
                 .foregroundStyle(appExists ? Color.secondary : Color.red)
+
+            if let onDelete = onDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("删除此菜单项")
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(isDefault ? "\(menuItem.appName)，默认项" : menuItem.appName)
@@ -47,6 +57,9 @@ struct AppListRow: View {
         }
         .ifLet(onMoveDown) { view, action in
             view.accessibilityAction(named: "下移", action)
+        }
+        .ifLet(onDelete) { view, action in
+            view.accessibilityAction(named: "删除", action)
         }
     }
 }
