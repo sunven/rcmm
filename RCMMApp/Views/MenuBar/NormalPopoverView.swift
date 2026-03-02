@@ -5,6 +5,8 @@ import SwiftUI
 /// 正常状态弹出窗口，展示扩展状态 + 错误信息 + 打开设置 + 退出按钮
 struct NormalPopoverView: View {
     @Environment(AppState.self) private var appState
+    @State private var settingsHovered = false
+    @State private var quitHovered = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -26,7 +28,9 @@ struct NormalPopoverView: View {
                 ActivationPolicyManager.activateAsRegularApp()
             } postAction: {
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MenuItemButtonStyle())
+            .environment(\.isHovered, settingsHovered)
+            .onHover { settingsHovered = $0 }
             .accessibilityLabel("打开设置")
             .keyboardShortcut(",", modifiers: .command)
 
@@ -36,7 +40,9 @@ struct NormalPopoverView: View {
                 Text("退出")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MenuItemButtonStyle())
+            .environment(\.isHovered, quitHovered)
+            .onHover { quitHovered = $0 }
             .accessibilityLabel("退出 rcmm")
             .keyboardShortcut("q", modifiers: .command)
         }
@@ -47,7 +53,7 @@ struct NormalPopoverView: View {
 #Preview {
     NormalPopoverView()
         .environment(AppState(forPreview: true))
-        .frame(width: 300)
+        .frame(width: 220)
 }
 
 #Preview("有错误") {
@@ -57,5 +63,5 @@ struct NormalPopoverView: View {
     ]
     return NormalPopoverView()
         .environment(state)
-        .frame(width: 300)
+        .frame(width: 220)
 }
