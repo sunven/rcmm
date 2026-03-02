@@ -7,6 +7,7 @@ public struct MenuItemConfig: Codable, Identifiable, Hashable, Sendable {
     public var appPath: String
     public var customCommand: String?
     public var sortOrder: Int
+    public var isEnabled: Bool
 
     public init(
         id: UUID = UUID(),
@@ -14,7 +15,8 @@ public struct MenuItemConfig: Codable, Identifiable, Hashable, Sendable {
         bundleId: String? = nil,
         appPath: String,
         customCommand: String? = nil,
-        sortOrder: Int = 0
+        sortOrder: Int = 0,
+        isEnabled: Bool = true
     ) {
         self.id = id
         self.appName = appName
@@ -22,5 +24,6 @@ public struct MenuItemConfig: Codable, Identifiable, Hashable, Sendable {
         self.appPath = appPath
         self.customCommand = customCommand
         self.sortOrder = sortOrder
+        self.isEnabled = isEnabled
     }
 }
