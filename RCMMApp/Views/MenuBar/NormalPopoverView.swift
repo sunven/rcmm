@@ -9,7 +9,7 @@ struct NormalPopoverView: View {
     @State private var quitHovered = false
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             HealthStatusPanel(status: appState.extensionStatus)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
@@ -46,7 +46,7 @@ struct NormalPopoverView: View {
             .accessibilityLabel("退出 rcmm")
             .keyboardShortcut("q", modifiers: .command)
         }
-        .padding(12)
+        .padding(10)
     }
 }
 

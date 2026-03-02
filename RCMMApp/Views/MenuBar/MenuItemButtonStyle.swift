@@ -6,7 +6,7 @@ struct MenuItemButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
             .padding(.horizontal, 8)
             .background(
                 RoundedRectangle(cornerRadius: 4)

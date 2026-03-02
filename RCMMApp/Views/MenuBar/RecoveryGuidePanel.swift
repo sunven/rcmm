@@ -11,7 +11,7 @@ struct RecoveryGuidePanel: View {
     @State private var transitionTask: Task<Void, Never>?
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             if isRecovered {
                 recoverySuccessContent
                     .transition(.opacity)
@@ -20,14 +20,14 @@ struct RecoveryGuidePanel: View {
                     .transition(.opacity)
             }
         }
-        .padding(12)
+        .padding(10)
         .animation(.easeInOut(duration: 0.3), value: isRecovered)
         .onAppear { startPolling() }
         .onDisappear { stopPolling() }
     }
 
     private var recoveryGuideContent: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             HealthStatusPanel(status: appState.extensionStatus)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
@@ -56,6 +56,15 @@ struct RecoveryGuidePanel: View {
             }
             .buttonStyle(.bordered)
             .accessibilityLabel("稍后修复")
+
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                Text("退出")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("退出 rcmm")
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("扩展需要修复")
