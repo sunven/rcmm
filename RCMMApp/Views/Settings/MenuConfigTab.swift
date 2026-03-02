@@ -44,9 +44,6 @@ struct MenuConfigTab: View {
                     .onMove { source, destination in
                         appState.moveMenuItem(from: source, to: destination)
                     }
-                    .onDelete { offsets in
-                        appState.removeMenuItem(at: offsets)
-                    }
                 }
             }
 
