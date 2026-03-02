@@ -8,6 +8,7 @@ struct AppListRow: View {
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
     var onDelete: (() -> Void)?
+    var onToggle: ((Bool) -> Void)?
     var position: Int?
     var total: Int?
 
@@ -22,10 +23,11 @@ struct AppListRow: View {
             Image(nsImage: NSWorkspace.shared.icon(forFile: menuItem.appPath))
                 .resizable()
                 .frame(width: 32, height: 32)
-                .saturation(appExists ? 1 : 0)
-                .opacity(appExists ? 1 : 0.4)
+                .saturation(appExists ? (menuItem.isEnabled ? 1 : 0.3) : 0)
+                .opacity(appExists ? (menuItem.isEnabled ? 1 : 0.5) : 0.4)
             Text(menuItem.appName)
                 .font(.body)
+                .foregroundStyle(menuItem.isEnabled ? .primary : .secondary)
             if isDefault {
                 Image(systemName: "star.fill")
                     .foregroundStyle(.yellow)
@@ -35,9 +37,26 @@ struct AppListRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(appExists ? "就绪" : "未找到")
-                .font(.caption)
-                .foregroundStyle(appExists ? Color.secondary : Color.red)
+
+            if !menuItem.isEnabled {
+                Text("已停用")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            } else {
+                Text(appExists ? "就绪" : "未找到")
+                    .font(.caption)
+                    .foregroundStyle(appExists ? Color.secondary : Color.red)
+            }
+
+            if let onToggle = onToggle {
+                Toggle("", isOn: Binding(
+                    get: { menuItem.isEnabled },
+                    set: { onToggle($0) }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .help(menuItem.isEnabled ? "停用此菜单项" : "启用此菜单项")
+            }
 
             if let onDelete = onDelete {
                 Button(action: onDelete) {
@@ -76,16 +95,33 @@ struct AppListRow: View {
     }
 }
 
-#Preview("应用存在") {
+#Preview("启用状态") {
     AppListRow(
         menuItem: MenuItemConfig(
             appName: "Terminal",
             bundleId: "com.apple.Terminal",
             appPath: "/System/Applications/Utilities/Terminal.app",
-            sortOrder: 0
+            sortOrder: 0,
+            isEnabled: true
         ),
         isDefault: true,
+        onToggle: { _ in },
         position: 1,
+        total: 3
+    )
+    .padding()
+}
+
+#Preview("禁用状态") {
+    AppListRow(
+        menuItem: MenuItemConfig(
+            appName: "iTerm",
+            appPath: "/Applications/iTerm.app",
+            sortOrder: 1,
+            isEnabled: false
+        ),
+        onToggle: { _ in },
+        position: 2,
         total: 3
     )
     .padding()
@@ -96,9 +132,11 @@ struct AppListRow: View {
         menuItem: MenuItemConfig(
             appName: "不存在的应用",
             appPath: "/Applications/NonExistent.app",
-            sortOrder: 1
+            sortOrder: 2,
+            isEnabled: true
         ),
-        position: 2,
+        onToggle: { _ in },
+        position: 3,
         total: 3
     )
     .padding()
