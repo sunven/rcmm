@@ -29,7 +29,9 @@ class FinderSync: FIFinderSync {
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
         let menu = NSMenu(title: "")
-        let items = configService.load().sorted(by: { $0.sortOrder < $1.sortOrder })
+        let items = configService.load()
+            .filter { $0.isEnabled }
+            .sorted(by: { $0.sortOrder < $1.sortOrder })
 
         guard !items.isEmpty else {
             logger.warning("无菜单配置项")
