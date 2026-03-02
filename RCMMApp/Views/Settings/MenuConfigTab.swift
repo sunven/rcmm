@@ -35,6 +35,7 @@ struct MenuConfigTab: View {
                                 isDefault: index == 0,
                                 onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
                                 onMoveDown: index < appState.menuItems.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                                onDelete: { appState.removeMenuItem(at: IndexSet(integer: index)) },
                                 position: index + 1,
                                 total: appState.menuItems.count
                             )
