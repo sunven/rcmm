@@ -11,6 +11,8 @@ struct AppListRow: View {
     var position: Int?
     var total: Int?
 
+    @State private var isHovered = false
+
     private var appExists: Bool {
         FileManager.default.fileExists(atPath: menuItem.appPath)
     }
@@ -45,6 +47,16 @@ struct AppListRow: View {
                 .buttonStyle(.plain)
                 .help("删除此菜单项")
             }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(isDefault ? "\(menuItem.appName)，默认项" : menuItem.appName)
