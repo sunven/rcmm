@@ -120,7 +120,7 @@ struct ErrorBannerView: View {
     ]
     return ErrorBannerView()
         .environment(state)
-        .frame(width: 280)
+        .frame(width: 196)
         .padding()
 }
 
@@ -132,7 +132,7 @@ struct ErrorBannerView: View {
     state.autoRepairMessage = "已自动修复脚本文件"
     return ErrorBannerView()
         .environment(state)
-        .frame(width: 280)
+        .frame(width: 196)
         .padding()
 }
 
@@ -140,6 +140,6 @@ struct ErrorBannerView: View {
     let state = AppState(forPreview: true)
     return ErrorBannerView()
         .environment(state)
-        .frame(width: 280)
+        .frame(width: 196)
         .padding()
 }
