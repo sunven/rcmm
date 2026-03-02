@@ -43,6 +43,7 @@ class FinderSync: FIFinderSync {
                 keyEquivalent: ""
             )
             menuItem.representedObject = item.id.uuidString
+            menuItem.target = self
 
             // 设置应用图标
             let icon = NSWorkspace.shared.icon(forFile: item.appPath)
@@ -56,14 +57,19 @@ class FinderSync: FIFinderSync {
     }
 
     @objc func openWithApp(_ sender: NSMenuItem) {
-        guard let itemId = sender.representedObject as? String else {
-            logger.error("无效的菜单项: 缺少 representedObject")
+        // 从菜单标题提取应用名称（格式："用 {appName} 打开"）
+        let title = sender.title
+        let prefix = "用 "
+        let suffix = " 打开"
+        guard title.hasPrefix(prefix) && title.hasSuffix(suffix) else {
+            logger.error("无效的菜单标题格式: \(title)")
             return
         }
+        let appName = String(title.dropFirst(prefix.count).dropLast(suffix.count))
 
         let items = configService.load()
-        guard let item = items.first(where: { $0.id.uuidString == itemId }) else {
-            logger.error("找不到菜单项配置: \(itemId)")
+        guard let item = items.first(where: { $0.appName == appName }) else {
+            logger.error("找不到菜单项配置: \(appName)")
             return
         }
 
