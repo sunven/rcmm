@@ -16,7 +16,7 @@ struct PopoverContainerView: View {
                 NormalPopoverView()
             }
         }
-        .frame(width: 300)
+        .frame(width: 220)
         .onAppear {
             appState.checkExtensionStatus()
             appState.loadErrors()
