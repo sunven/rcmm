@@ -20,10 +20,10 @@ final class ScriptExecutor {
         )
     }
 
-    /// 执行指定脚本，传入目录路径
+    /// 执行指定脚本，传入目标路径（文件或目录）
     func execute(
         scriptId: String,
-        directoryPath: String,
+        targetPath: String,
         menuItemName: String,
         completion: (@Sendable (Error?) -> Void)? = nil
     ) {
@@ -47,10 +47,10 @@ final class ScriptExecutor {
             // 每次执行创建新的 NSUserAppleScriptTask 实例（单次使用限制）
             let task = try NSUserAppleScriptTask(url: scriptURL)
 
-            // 构建 Apple Event，传递目录路径作为参数
+            // 构建 Apple Event，传递目标路径作为参数
             let event = Self.buildAppleEvent(
                 handlerName: "openApp",
-                parameter: directoryPath
+                parameter: targetPath
             )
 
             task.execute(withAppleEvent: event) { [weak self] _, error in
@@ -61,7 +61,7 @@ final class ScriptExecutor {
                         context: menuItemName
                     )
                 } else {
-                    self?.logger.info("脚本执行成功: \(scriptId) → \(directoryPath)")
+                    self?.logger.info("脚本执行成功: \(scriptId) → \(targetPath)")
                 }
                 completion?(error)
             }

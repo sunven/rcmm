@@ -73,36 +73,28 @@ class FinderSync: FIFinderSync {
             return
         }
 
-        // 解析目标目录路径
-        guard let directoryPath = resolveDirectoryPath() else {
-            logger.error("无法解析目标目录路径")
+        // 解析目标路径
+        guard let targetPath = resolveTargetPath() else {
+            logger.error("无法解析目标路径")
             return
         }
 
-        logger.info("执行: \(item.appName) → \(directoryPath)")
+        logger.info("执行: \(item.appName) → \(targetPath)")
 
         scriptExecutor.execute(
             scriptId: item.id.uuidString,
-            directoryPath: directoryPath,
+            targetPath: targetPath,
             menuItemName: item.appName
         )
     }
 
-    /// 解析右键点击的目标目录路径
-    private func resolveDirectoryPath() -> String? {
+    /// 解析右键点击的目标路径（文件或目录）
+    private func resolveTargetPath() -> String? {
         let controller = FIFinderSyncController.default()
 
         // 优先使用 selectedItemURLs（右键点击具体项目时）
         if let selectedItems = controller.selectedItemURLs(), !selectedItems.isEmpty {
-            let firstItem = selectedItems[0]
-            var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: firstItem.path, isDirectory: &isDir),
-               isDir.boolValue {
-                return firstItem.path
-            } else {
-                // 文件：使用其父目录
-                return firstItem.deletingLastPathComponent().path
-            }
+            return selectedItems[0].path
         }
 
         // 回退：使用 targetedURL（右键空白背景时）
