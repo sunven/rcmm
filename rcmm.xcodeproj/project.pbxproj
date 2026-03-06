@@ -560,10 +560,12 @@
 		};
 		A1000002 /* RCMMShared */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = A1000005 /* XCLocalSwiftPackageReference "RCMMShared" */;
 			productName = RCMMShared;
 		};
 		A1000004 /* RCMMShared */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = A1000005 /* XCLocalSwiftPackageReference "RCMMShared" */;
 			productName = RCMMShared;
 		};
 /* End XCSwiftPackageProductDependency section */
