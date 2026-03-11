@@ -37,7 +37,7 @@ jobs:
             exit 1
           fi
           VERSION=${GITHUB_REF#refs/tags/v}
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$ ]]; then
             echo "Error: Invalid semver format: $VERSION"
             exit 1
           fi
