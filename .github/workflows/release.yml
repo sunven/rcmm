@@ -102,3 +102,13 @@ jobs:
             rcmm-${{ steps.version.outputs.version }}.dmg \
             --title "rcmm ${{ steps.version.outputs.version }}" \
             --generate-notes
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build/
+            DerivedData/
+          retention-days: 7
