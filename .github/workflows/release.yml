@@ -86,3 +86,10 @@ jobs:
             exit 1
           fi
           echo "✓ App structure verified"
+
+      - name: Create DMG
+        uses: create-dmg/create-dmg@v1
+        with:
+          name: rcmm-${{ steps.version.outputs.version }}.dmg
+          src: build/rcmm.app
+          dmg_name: rcmm-${{ steps.version.outputs.version }}
