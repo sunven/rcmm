@@ -43,3 +43,14 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
+
+      - name: Build archive
+        run: |
+          xcodebuild archive \
+            -project rcmm.xcodeproj \
+            -scheme rcmm \
+            -configuration Release \
+            -archivePath build/rcmm.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
