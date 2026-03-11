@@ -67,11 +67,22 @@ jobs:
 
       - name: Extract .app from archive
         run: |
+          set -e
           cp -R build/rcmm.xcarchive/Products/Applications/rcmm.app build/rcmm.app
+          echo "✓ App extracted successfully"
 
       - name: Verify .app structure
         run: |
-          test -d build/rcmm.app || exit 1
-          test -d build/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex || exit 1
-          test -f build/rcmm.app/Contents/Info.plist || exit 1
+          if [ ! -d "build/rcmm.app" ]; then
+            echo "::error::Main app bundle not found"
+            exit 1
+          fi
+          if [ ! -d "build/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex" ]; then
+            echo "::error::Finder extension not found in app bundle"
+            exit 1
+          fi
+          if [ ! -f "build/rcmm.app/Contents/Info.plist" ]; then
+            echo "::error::Info.plist not found in app bundle"
+            exit 1
+          fi
           echo "✓ App structure verified"
