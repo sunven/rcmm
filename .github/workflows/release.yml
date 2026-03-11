@@ -64,3 +64,14 @@ jobs:
           fi
 
           echo "✓ Archive created successfully at build/rcmm.xcarchive"
+
+      - name: Extract .app from archive
+        run: |
+          cp -R build/rcmm.xcarchive/Products/Applications/rcmm.app build/rcmm.app
+
+      - name: Verify .app structure
+        run: |
+          test -d build/rcmm.app || exit 1
+          test -d build/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex || exit 1
+          test -f build/rcmm.app/Contents/Info.plist || exit 1
+          echo "✓ App structure verified"
