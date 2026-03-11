@@ -46,6 +46,8 @@ jobs:
 
       - name: Build archive
         run: |
+          set -e
+
           xcodebuild archive \
             -project rcmm.xcodeproj \
             -scheme rcmm \
@@ -54,3 +56,11 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
+
+          # Verify archive was created
+          if [ ! -d "build/rcmm.xcarchive" ]; then
+            echo "::error::Archive creation failed - build/rcmm.xcarchive not found"
+            exit 1
+          fi
+
+          echo "✓ Archive created successfully at build/rcmm.xcarchive"
