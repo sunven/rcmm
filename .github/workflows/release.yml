@@ -24,10 +24,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select Xcode version
-        uses: maxim-lobanov/setup-xcode@v1
+      - name: Cache SPM dependencies
+        uses: actions/cache@v4
         with:
-          xcode-version: '15.4'  # Required for Swift 6 support
+          path: |
+            ~/Library/Developer/Xcode/DerivedData
+            .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Select Xcode version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
 
       - name: Extract version from tag
         id: version
@@ -55,11 +66,13 @@ jobs:
             -archivePath build/rcmm.xcarchive \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build/xcodebuild.log
 
           # Verify archive was created
           if [ ! -d "build/rcmm.xcarchive" ]; then
             echo "::error::Archive creation failed - build/rcmm.xcarchive not found"
+            ls -la build/ || echo "build/ directory not found"
             exit 1
           fi
 
@@ -75,33 +88,69 @@ jobs:
         run: |
           if [ ! -d "build/rcmm.app" ]; then
             echo "::error::Main app bundle not found"
+            ls -la build/ || echo "build/ directory not found"
             exit 1
           fi
           if [ ! -d "build/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex" ]; then
             echo "::error::Finder extension not found in app bundle"
+            ls -la build/rcmm.app/Contents/PlugIns/ || echo "PlugIns directory not found"
             exit 1
           fi
           if [ ! -f "build/rcmm.app/Contents/Info.plist" ]; then
             echo "::error::Info.plist not found in app bundle"
+            ls -la build/rcmm.app/Contents/ || echo "Contents directory not found"
             exit 1
           fi
           echo "✓ App structure verified"
 
+      - name: Install create-dmg
+        run: brew install create-dmg
+
       - name: Create DMG
-        uses: create-dmg/create-dmg@v1
-        with:
-          name: rcmm-${{ steps.version.outputs.version }}.dmg
-          src: build/rcmm.app
-          dmg_name: rcmm-${{ steps.version.outputs.version }}
+        run: |
+          set -e
+          create-dmg \
+            --volname "rcmm" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "rcmm.app" 200 190 \
+            --hide-extension "rcmm.app" \
+            --app-drop-link 600 185 \
+            "rcmm-${{ steps.version.outputs.version }}.dmg" \
+            "build/"
+
+          # Verify DMG was created
+          if [ ! -f "rcmm-${{ steps.version.outputs.version }}.dmg" ]; then
+            echo "::error::DMG creation failed"
+            ls -la . || echo "Current directory listing failed"
+            exit 1
+          fi
+          echo "✓ DMG created successfully"
+
+      - name: Generate checksums
+        run: |
+          shasum -a 256 rcmm-${{ steps.version.outputs.version }}.dmg > checksums.txt
+          cat checksums.txt
+          echo "✓ Checksum generated"
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create ${{ github.ref_name }} \
-            rcmm-${{ steps.version.outputs.version }}.dmg \
-            --title "rcmm ${{ steps.version.outputs.version }}" \
-            --generate-notes
+          if gh release view ${{ github.ref_name }} &>/dev/null; then
+            echo "Release already exists, uploading assets..."
+            gh release upload ${{ github.ref_name }} \
+              rcmm-${{ steps.version.outputs.version }}.dmg \
+              checksums.txt \
+              --clobber
+          else
+            gh release create ${{ github.ref_name }} \
+              rcmm-${{ steps.version.outputs.version }}.dmg \
+              checksums.txt \
+              --title "rcmm ${{ steps.version.outputs.version }}" \
+              --generate-notes
+          fi
 
       - name: Upload build logs on failure
         if: failure()
