@@ -59,6 +59,9 @@ jobs:
         run: |
           set -e
 
+          # Create build directory
+          mkdir -p build
+
           xcodebuild archive \
             -project rcmm.xcodeproj \
             -scheme rcmm \
