@@ -1,13 +1,41 @@
+# =============================================================================
+# Release Build Workflow
+# =============================================================================
+# 自动化发布流程：当推送 v* 格式的 tag 时，自动构建 macOS 应用并创建 GitHub Release。
+#
+# 整体流程：
+#   推送 v* tag → 拉取代码 → 构建 .xcarchive → 提取 .app → 验证结构
+#   → 打包 .dmg → 生成校验和 → 创建 GitHub Release 并上传附件
+#
+# 使用方式：
+#   git tag v1.0.0
+#   git push origin v1.0.0
+# =============================================================================
+
 name: Release Build
 
+# ---------------------------------------------------------------------------
+# 触发条件：仅当推送以 'v' 开头的 tag 时触发（如 v1.0.0、v2.1.3-beta）
+# 普通的 commit push 或 PR 不会触发此工作流
+# ---------------------------------------------------------------------------
 on:
   push:
     tags:
       - 'v*'
 
+# ---------------------------------------------------------------------------
+# 权限配置：授予 GITHUB_TOKEN 对仓库内容的写权限
+# 创建 GitHub Release 和上传附件（DMG、checksums）需要写权限
+# ---------------------------------------------------------------------------
 permissions:
   contents: write
 
+# ---------------------------------------------------------------------------
+# 并发控制：
+#   - group: 按 tag 名称分组，同一个 tag 不会并行执行多次
+#   - cancel-in-progress: false — 不取消正在进行的构建
+#     对 release 构建来说至关重要，避免因重复触发而中断正在打包的构建
+# ---------------------------------------------------------------------------
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -15,15 +43,42 @@ concurrency:
 jobs:
   build:
     name: Build and Release
+    # -----------------------------------------------------------------------
+    # 运行环境：GitHub 提供的最新 macOS runner
+    # 必须使用 macOS，因为 xcodebuild 只能在 macOS 上运行
+    # -----------------------------------------------------------------------
     runs-on: macos-latest
+    # -----------------------------------------------------------------------
+    # 超时保护：最多运行 30 分钟，防止构建卡死浪费 CI 资源
+    # -----------------------------------------------------------------------
     timeout-minutes: 30
 
     steps:
+      # =====================================================================
+      # Step 1: 拉取代码
+      # =====================================================================
+      # fetch-depth: 0 拉取完整 git 历史（而非默认的浅克隆）
+      # 需要完整历史是因为后续 gh release create --generate-notes
+      # 会根据上次 release 到当前 tag 之间的 commit 自动生成变更说明
+      # =====================================================================
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # =====================================================================
+      # Step 2: 缓存 SPM（Swift Package Manager）依赖
+      # =====================================================================
+      # 缓存路径：
+      #   - ~/Library/Developer/Xcode/DerivedData — Xcode 编译缓存
+      #   - .build — SPM 本地构建缓存
+      #
+      # 缓存策略：
+      #   - key: 基于 Package.resolved 文件的哈希值生成
+      #          依赖版本不变 → 哈希不变 → 命中精确缓存
+      #   - restore-keys: 模糊匹配的 fallback
+      #          即使 Package.resolved 变了，也尽量复用旧缓存加速构建
+      # =====================================================================
       - name: Cache SPM dependencies
         uses: actions/cache@v4
         with:
@@ -34,12 +89,35 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
+      # =====================================================================
+      # Step 3: 选择 Xcode 版本
+      # =====================================================================
+      # 优先选择 Xcode 15.4（与本地开发环境一致），找不到则 fallback 到默认 Xcode
+      # || 确保即使第一个路径不存在也不会导致步骤失败
+      # 最后打印 xcodebuild 版本号，方便在日志中确认实际使用的版本
+      # =====================================================================
       - name: Select Xcode version
         run: |
           sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || \
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           xcodebuild -version
 
+      # =====================================================================
+      # Step 4: 从 git tag 中提取版本号
+      # =====================================================================
+      # id: version — 给这个步骤命名，后续步骤通过
+      #   ${{ steps.version.outputs.version }} 引用提取的版本号
+      #
+      # 双重验证：
+      #   1. 检查 GITHUB_REF 是否以 refs/tags/v 开头（确保是 tag 触发）
+      #   2. 用正则验证去掉 v 后的部分是否符合 semver 格式
+      #      合法示例：1.0.0、1.2.3-beta.1、1.0.0+build.123
+      #
+      # ${GITHUB_REF#refs/tags/v} — shell 参数扩展，去掉 "refs/tags/v" 前缀
+      #   例如 refs/tags/v1.0.0 → 1.0.0
+      #
+      # echo "version=$VERSION" >> $GITHUB_OUTPUT — 将版本号写入步骤输出
+      # =====================================================================
       - name: Extract version from tag
         id: version
         run: |
@@ -55,6 +133,27 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Extracted version: $VERSION"
 
+      # =====================================================================
+      # Step 5: 构建 Xcode Archive
+      # =====================================================================
+      # set -e — 任何命令失败立即退出，不继续执行后续命令
+      #
+      # xcodebuild archive 参数说明：
+      #   -project rcmm.xcodeproj    — 指定 Xcode 工程文件
+      #   -scheme rcmm               — 指定构建 scheme
+      #   -configuration Release     — 使用 Release 配置（优化编译、去除调试信息）
+      #   -archivePath               — Archive 输出路径
+      #   CODE_SIGN_IDENTITY=""      — 清空签名身份
+      #   CODE_SIGNING_REQUIRED=NO   — 不要求代码签名
+      #   CODE_SIGNING_ALLOWED=NO    — 禁止代码签名
+      #   以上三个参数一起作用：CI 环境没有 Apple 开发者证书，生成未签名的构建
+      #
+      # | tee build/xcodebuild.log — 同时输出到终端（CI 日志）和文件
+      #   失败时日志文件会被上传为 artifact，方便离线排查
+      #
+      # 构建后验证 .xcarchive 目录是否存在
+      # ::error:: 是 GitHub Actions 的注解语法，会在 UI 中高亮显示错误
+      # =====================================================================
       - name: Build archive
         run: |
           set -e
@@ -81,14 +180,32 @@ jobs:
 
           echo "✓ Archive created successfully at build/rcmm.xcarchive"
 
-      - name: Extract .app from archive
+      # =====================================================================
+      # Step 6: 从 Archive 中提取 .app 并验证结构完整性
+      # =====================================================================
+      # .xcarchive 是 Xcode 的标准归档格式，内部目录结构为：
+      #   rcmm.xcarchive/
+      #     Products/
+      #       Applications/
+      #         rcmm.app          ← 提取这个
+      #     dSYMs/                ← 调试符号（本步骤未使用）
+      #     Info.plist
+      #
+      # cp -R 递归复制整个 .app 目录到 build/ 下，供后续 create-dmg 打包
+      #
+      # 提取后验证三项关键内容，确保不会发布残缺的应用：
+      #   1. build/rcmm.app — 主应用包是否存在
+      #   2. Contents/PlugIns/RCMMFinderExtension.appex
+      #      — Finder 右键菜单扩展是否被正确嵌入（本项目核心功能）
+      #   3. Contents/Info.plist — 应用元数据文件（Bundle ID、版本号等）
+      #
+      # 任一项缺失都会输出 ::error:: 注解并终止流程，防止发布不完整的产物
+      # =====================================================================
+      - name: Extract and verify .app
         run: |
           set -e
           cp -R build/rcmm.xcarchive/Products/Applications/rcmm.app build/rcmm.app
-          echo "✓ App extracted successfully"
 
-      - name: Verify .app structure
-        run: |
           if [ ! -d "build/rcmm.app" ]; then
             echo "::error::Main app bundle not found"
             ls -la build/ || echo "build/ directory not found"
@@ -104,11 +221,42 @@ jobs:
             ls -la build/rcmm.app/Contents/ || echo "Contents directory not found"
             exit 1
           fi
-          echo "✓ App structure verified"
+          echo "✓ App extracted and verified"
 
+      # =====================================================================
+      # Step 8: 安装 create-dmg 工具
+      # =====================================================================
+      # create-dmg 是一个命令行工具，用于创建带有自定义外观的 .dmg 磁盘映像
+      # macOS runner 预装了 Homebrew，可以直接使用 brew install
+      # GitHub: https://github.com/create-dmg/create-dmg
+      # =====================================================================
       - name: Install create-dmg
         run: brew install create-dmg
 
+      # =====================================================================
+      # Step 9: 创建 DMG 磁盘映像
+      # =====================================================================
+      # .dmg 是 macOS 标准的应用分发格式，用户双击挂载后看到的界面由以下参数控制：
+      #
+      #   --volname "rcmm"           — 挂载后 Finder 中显示的卷名
+      #   --window-pos 200 120       — DMG 窗口在屏幕上的位置 (x=200, y=120)
+      #   --window-size 800 400      — DMG 窗口的尺寸 (宽800 × 高400)
+      #   --icon-size 100            — 图标显示大小 100×100 像素
+      #   --icon "rcmm.app" 200 190  — 应用图标在窗口中的位置（左侧 x=200）
+      #   --hide-extension "rcmm.app"— 隐藏 .app 扩展名，显示更简洁
+      #   --app-drop-link 600 185    — "Applications" 文件夹快捷方式位置（右侧 x=600）
+      #                                用户将 app 拖拽到这里即完成安装
+      #
+      # 最终布局示意：
+      #   +------------------------------------------+
+      #   |                                          |
+      #   |    [rcmm]          →    [Applications]   |
+      #   |   (x=200)               (x=600)          |
+      #   +------------------------------------------+
+      #
+      # 输出文件名包含版本号，如 rcmm-1.0.0.dmg
+      # build/ 目录下的 rcmm.app 会被自动包含进 DMG
+      # =====================================================================
       - name: Create DMG
         run: |
           set -e
@@ -131,12 +279,43 @@ jobs:
           fi
           echo "✓ DMG created successfully"
 
+      # =====================================================================
+      # Step 10: 生成 SHA-256 校验和
+      # =====================================================================
+      # 生成 DMG 文件的 SHA-256 哈希值，保存到 checksums.txt
+      # 用户下载 DMG 后可通过以下命令验证文件完整性，防止传输中被篡改：
+      #   shasum -a 256 -c checksums.txt
+      #
+      # checksums.txt 会作为 Release 附件一同上传
+      # =====================================================================
       - name: Generate checksums
         run: |
           shasum -a 256 rcmm-${{ steps.version.outputs.version }}.dmg > checksums.txt
           cat checksums.txt
           echo "✓ Checksum generated"
 
+      # =====================================================================
+      # Step 11: 创建 GitHub Release
+      # =====================================================================
+      # 使用 gh CLI（GitHub 官方命令行工具）创建 Release
+      #
+      # GH_TOKEN: gh CLI 认证所需的 token，使用 Actions 自动提供的 github.token
+      #
+      # 两种场景：
+      #   1. Release 已存在（比如手动创建过或重新运行 workflow）：
+      #      → gh release upload --clobber 上传/覆盖附件
+      #        --clobber 表示如果同名附件已存在则覆盖
+      #
+      #   2. Release 不存在（首次发布）：
+      #      → gh release create 创建新 Release
+      #        --title  "rcmm 1.0.0" — Release 标题
+      #        --generate-notes — 自动根据上次 Release 到当前 tag
+      #          之间的 commit 生成变更说明（这也是 Step 1 需要完整历史的原因）
+      #
+      # 上传的附件：
+      #   - rcmm-{version}.dmg — 应用安装包
+      #   - checksums.txt      — SHA-256 校验和
+      # =====================================================================
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -155,6 +334,20 @@ jobs:
               --generate-notes
           fi
 
+      # =====================================================================
+      # Step 12: 失败时上传构建日志（仅在前面任何步骤失败时执行）
+      # =====================================================================
+      # if: failure() — GitHub Actions 条件表达式，仅当前面步骤失败时才运行
+      #
+      # 上传以下目录作为 artifact：
+      #   - build/       — 包含 xcodebuild.log 和中间构建产物
+      #   - DerivedData/ — Xcode 编译缓存，可能包含详细的编译错误信息
+      #
+      # retention-days: 7 — 保留 7 天后自动删除，避免占用存储空间
+      #
+      # 用途：构建失败后，开发者可以从 GitHub Actions 页面下载这些日志，
+      #       在本地离线分析具体的构建错误原因
+      # =====================================================================
       - name: Upload build logs on failure
         if: failure()
         uses: actions/upload-artifact@v4

@@ -1,0 +1,33 @@
+# =============================================================================
+# GitHub Release Notes 自动生成配置
+# =============================================================================
+# 当使用 gh release create --generate-notes 时，GitHub 会根据此配置
+# 对 commit/PR 进行分类，生成结构化的变更说明。
+#
+# 文档：https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+# =============================================================================
+
+changelog:
+  categories:
+    - title: "✨ 新功能"
+      labels:
+        - "enhancement"
+        - "feature"
+    - title: "🐛 Bug 修复"
+      labels:
+        - "bug"
+        - "fix"
+    - title: "⚡ 性能优化"
+      labels:
+        - "performance"
+    - title: "📖 文档"
+      labels:
+        - "documentation"
+    - title: "🔧 维护"
+      labels:
+        - "chore"
+        - "dependencies"
+        - "ci"
+    - title: "其他变更"
+      labels:
+        - "*"
