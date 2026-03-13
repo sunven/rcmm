@@ -64,6 +64,14 @@ final class AppState {
         }
         if hasScriptFileErrors {
             hasTriggeredAutoRepair = true
+            // 立即清除脚本相关错误（UI + UserDefaults 同步清除）
+            let remainingErrors = errorRecords.filter { record in
+                !record.message.contains("脚本文件不存在") && !record.message.contains("脚本文件无法加载")
+            }
+            errorRecords = remainingErrors
+            errorQueue.replaceAll(with: remainingErrors)
+            autoRepairMessage = "正在自动修复脚本文件…"
+
             let items = menuItems
             Self.syncQueue.async { [weak self] in
                 let installer = ScriptInstallerService()

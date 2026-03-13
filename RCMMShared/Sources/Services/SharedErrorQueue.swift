@@ -34,4 +34,17 @@ public final class SharedErrorQueue: @unchecked Sendable {
     public func removeAll() {
         defaults.removeObject(forKey: SharedKeys.errorQueue)
     }
+
+    /// 用新的记录列表替换队列中的全部内容；传入空数组等同于 removeAll()
+    public func replaceAll(with records: [ErrorRecord]) {
+        if records.isEmpty {
+            removeAll()
+            return
+        }
+        let trimmed = records.count > SharedErrorQueue.maxRecords
+            ? Array(records.suffix(SharedErrorQueue.maxRecords))
+            : records
+        guard let data = try? JSONEncoder().encode(trimmed) else { return }
+        defaults.set(data, forKey: SharedKeys.errorQueue)
+    }
 }
