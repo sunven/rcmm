@@ -43,4 +43,20 @@ struct SharedConfigServiceTests {
         #expect(loaded.first?.appName == "New")
         cleanup()
     }
+
+    @Test("copyPathEnabled 默认返回 false")
+    func copyPathEnabledDefaultFalse() {
+        let loaded = service.loadCopyPathEnabled()
+        #expect(loaded == false)
+        cleanup()
+    }
+
+    @Test("保存 copyPathEnabled 后可正确读取")
+    func saveCopyPathEnabled() {
+        service.saveCopyPathEnabled(true)
+        #expect(service.loadCopyPathEnabled() == true)
+        service.saveCopyPathEnabled(false)
+        #expect(service.loadCopyPathEnabled() == false)
+        cleanup()
+    }
 }

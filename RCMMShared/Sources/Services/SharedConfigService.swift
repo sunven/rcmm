@@ -21,4 +21,12 @@ public final class SharedConfigService: @unchecked Sendable {
         }
         return (try? JSONDecoder().decode([MenuItemConfig].self, from: data)) ?? []
     }
+
+    public func saveCopyPathEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: SharedKeys.copyPathEnabled)
+    }
+
+    public func loadCopyPathEnabled() -> Bool {
+        defaults.bool(forKey: SharedKeys.copyPathEnabled)
+    }
 }
