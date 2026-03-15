@@ -33,7 +33,9 @@ class FinderSync: FIFinderSync {
             .filter { $0.isEnabled }
             .sorted(by: { $0.sortOrder < $1.sortOrder })
 
-        guard !items.isEmpty else {
+        let copyPathEnabled = configService.loadCopyPathEnabled()
+
+        guard !items.isEmpty || copyPathEnabled else {
             logger.warning("无菜单配置项")
             return menu
         }
@@ -53,6 +55,19 @@ class FinderSync: FIFinderSync {
             menuItem.image = icon
 
             menu.addItem(menuItem)
+        }
+
+        if copyPathEnabled {
+            if !items.isEmpty {
+                menu.addItem(NSMenuItem.separator())
+            }
+            let copyPathItem = NSMenuItem(
+                title: "拷贝路径",
+                action: #selector(copyPath(_:)),
+                keyEquivalent: ""
+            )
+            copyPathItem.target = self
+            menu.addItem(copyPathItem)
         }
 
         return menu
@@ -88,6 +103,19 @@ class FinderSync: FIFinderSync {
             targetPath: targetPath,
             menuItemName: item.appName
         )
+    }
+
+    @objc func copyPath(_ sender: NSMenuItem) {
+        guard let targetPath = resolveTargetPath() else {
+            logger.error("拷贝路径: 无法解析目标路径")
+            return
+        }
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(targetPath, forType: .string)
+
+        logger.info("已拷贝路径: \(targetPath)")
     }
 
     /// 解析右键点击的目标路径（文件或目录）
