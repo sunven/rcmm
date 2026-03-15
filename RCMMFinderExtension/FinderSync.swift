@@ -58,9 +58,6 @@ class FinderSync: FIFinderSync {
         }
 
         if copyPathEnabled {
-            if !items.isEmpty {
-                menu.addItem(NSMenuItem.separator())
-            }
             let copyPathItem = NSMenuItem(
                 title: "拷贝路径",
                 action: #selector(copyPath(_:)),
