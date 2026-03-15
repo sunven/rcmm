@@ -12,7 +12,7 @@ final class AppState {
     var extensionStatus: ExtensionStatus = .unknown
     var errorRecords: [ErrorRecord] = []
     var autoRepairMessage: String? = nil
-    var copyPathEnabled: Bool = false {
+    var copyPathEnabled: Bool {
         didSet {
             configService.saveCopyPathEnabled(copyPathEnabled)
             DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
@@ -43,11 +43,11 @@ final class AppState {
     init(forPreview: Bool = false) {
         let defaults = UserDefaults(suiteName: AppGroupConstants.appGroupID)
         isOnboardingCompleted = defaults?.bool(forKey: SharedKeys.onboardingCompleted) ?? false
+        copyPathEnabled = forPreview ? false : configService.loadCopyPathEnabled()
 
         guard !forPreview else { return }
 
         loadMenuItems()
-        copyPathEnabled = configService.loadCopyPathEnabled()
         checkExtensionStatus()
         startHealthMonitoring()
 
