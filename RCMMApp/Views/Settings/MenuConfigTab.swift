@@ -9,6 +9,23 @@ struct MenuConfigTab: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // 拷贝路径开关
+            HStack {
+                Toggle("拷贝路径", isOn: Binding(
+                    get: { appState.copyPathEnabled },
+                    set: { appState.copyPathEnabled = $0 }
+                ))
+                .toggleStyle(.switch)
+                Text("在右键菜单中显示「拷贝路径」选项")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
+            Divider()
+
             if appState.menuItems.isEmpty {
                 Spacer()
                 Text("暂无菜单项")
