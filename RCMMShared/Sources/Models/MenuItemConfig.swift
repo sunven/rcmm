@@ -6,11 +6,10 @@ public struct MenuItemConfig: Codable, Identifiable, Hashable, Sendable {
     public var bundleId: String?
     public var appPath: String
     public var customCommand: String?
-    public var sortOrder: Int
     public var isEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
-        case id, appName, bundleId, appPath, customCommand, sortOrder, isEnabled
+        case id, appName, bundleId, appPath, customCommand, isEnabled
     }
 
     public init(
@@ -19,7 +18,6 @@ public struct MenuItemConfig: Codable, Identifiable, Hashable, Sendable {
         bundleId: String? = nil,
         appPath: String,
         customCommand: String? = nil,
-        sortOrder: Int = 0,
         isEnabled: Bool = true
     ) {
         self.id = id
@@ -27,7 +25,6 @@ public struct MenuItemConfig: Codable, Identifiable, Hashable, Sendable {
         self.bundleId = bundleId
         self.appPath = appPath
         self.customCommand = customCommand
-        self.sortOrder = sortOrder
         self.isEnabled = isEnabled
     }
 
@@ -38,7 +35,6 @@ public struct MenuItemConfig: Codable, Identifiable, Hashable, Sendable {
         bundleId = try container.decodeIfPresent(String.self, forKey: .bundleId)
         appPath = try container.decode(String.self, forKey: .appPath)
         customCommand = try container.decodeIfPresent(String.self, forKey: .customCommand)
-        sortOrder = try container.decode(Int.self, forKey: .sortOrder)
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
     }
 }

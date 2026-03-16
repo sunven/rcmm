@@ -18,45 +18,49 @@ struct SharedConfigServiceTests {
         UserDefaults.standard.removePersistentDomain(forName: suiteName)
     }
 
-    @Test("保存后可正确读取")
-    func saveAndLoad() throws {
-        let items = [MenuItemConfig(appName: "Terminal", appPath: "/Applications/Utilities/Terminal.app", sortOrder: 0)]
-        service.save(items)
-        let loaded = service.load()
-        #expect(loaded == items)
+    @Test("保存后可正确读取 entries")
+    func saveAndLoadEntries() throws {
+        let entries: [MenuEntry] = [
+            .custom(MenuItemConfig(appName: "Terminal", appPath: "/Applications/Utilities/Terminal.app")),
+            .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
+        ]
+        service.saveEntries(entries)
+        let loaded = service.loadEntries()
+        #expect(loaded.count == 2)
+        #expect(loaded[0].displayName == "Terminal")
+        #expect(loaded[1].displayName == "拷贝路径")
         cleanup()
     }
 
     @Test("无数据时返回空数组")
     func emptyDefaults() {
-        let loaded = service.load()
+        let loaded = service.loadEntries()
         #expect(loaded.isEmpty)
         cleanup()
     }
 
     @Test("覆盖写入替换旧数据")
     func overwrite() {
-        service.save([MenuItemConfig(appName: "Old", appPath: "/old", sortOrder: 0)])
-        service.save([MenuItemConfig(appName: "New", appPath: "/new", sortOrder: 0)])
-        let loaded = service.load()
+        service.saveEntries([.custom(MenuItemConfig(appName: "Old", appPath: "/old"))])
+        service.saveEntries([.custom(MenuItemConfig(appName: "New", appPath: "/new"))])
+        let loaded = service.loadEntries()
         #expect(loaded.count == 1)
-        #expect(loaded.first?.appName == "New")
+        #expect(loaded[0].displayName == "New")
         cleanup()
     }
 
-    @Test("copyPathEnabled 默认返回 false")
-    func copyPathEnabledDefaultFalse() {
-        let loaded = service.loadCopyPathEnabled()
-        #expect(loaded == false)
-        cleanup()
-    }
-
-    @Test("保存 copyPathEnabled 后可正确读取")
-    func saveCopyPathEnabled() {
-        service.saveCopyPathEnabled(true)
-        #expect(service.loadCopyPathEnabled() == true)
-        service.saveCopyPathEnabled(false)
-        #expect(service.loadCopyPathEnabled() == false)
+    @Test("混合数组保持顺序")
+    func mixedOrderPreserved() {
+        let entries: [MenuEntry] = [
+            .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
+            .custom(MenuItemConfig(appName: "Terminal", appPath: "/t")),
+            .custom(MenuItemConfig(appName: "iTerm", appPath: "/i")),
+        ]
+        service.saveEntries(entries)
+        let loaded = service.loadEntries()
+        #expect(loaded[0].id == "builtIn.copyPath")
+        #expect(loaded[1].displayName == "Terminal")
+        #expect(loaded[2].displayName == "iTerm")
         cleanup()
     }
 }

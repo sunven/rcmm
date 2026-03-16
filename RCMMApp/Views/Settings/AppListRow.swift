@@ -4,7 +4,6 @@ import SwiftUI
 
 struct AppListRow: View {
     let menuItem: MenuItemConfig
-    var isDefault: Bool = false
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
     var onDelete: (() -> Void)?
@@ -28,14 +27,6 @@ struct AppListRow: View {
             Text(menuItem.appName)
                 .font(.body)
                 .foregroundStyle(menuItem.isEnabled ? .primary : .secondary)
-            if isDefault {
-                Image(systemName: "star.fill")
-                    .foregroundStyle(.yellow)
-                    .font(.caption)
-                Text("默认")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
             Spacer()
 
             if !menuItem.isEnabled {
@@ -78,7 +69,7 @@ struct AppListRow: View {
             isHovered = hovering
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(isDefault ? "\(menuItem.appName)，默认项" : menuItem.appName)
+        .accessibilityLabel(menuItem.appName)
         .ifLet(position) { view, pos in
             view.accessibilityValue("第 \(pos) 项，共 \(total ?? 1) 项")
         }
@@ -101,10 +92,8 @@ struct AppListRow: View {
             appName: "Terminal",
             bundleId: "com.apple.Terminal",
             appPath: "/System/Applications/Utilities/Terminal.app",
-            sortOrder: 0,
             isEnabled: true
         ),
-        isDefault: true,
         onToggle: { _ in },
         position: 1,
         total: 3
@@ -117,7 +106,6 @@ struct AppListRow: View {
         menuItem: MenuItemConfig(
             appName: "iTerm",
             appPath: "/Applications/iTerm.app",
-            sortOrder: 1,
             isEnabled: false
         ),
         onToggle: { _ in },
@@ -132,7 +120,6 @@ struct AppListRow: View {
         menuItem: MenuItemConfig(
             appName: "不存在的应用",
             appPath: "/Applications/NonExistent.app",
-            sortOrder: 2,
             isEnabled: true
         ),
         onToggle: { _ in },

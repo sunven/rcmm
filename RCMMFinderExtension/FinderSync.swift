@@ -29,49 +29,48 @@ class FinderSync: FIFinderSync {
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
         let menu = NSMenu(title: "")
-        let items = configService.load()
+        let entries = configService.loadEntries()
             .filter { $0.isEnabled }
-            .sorted(by: { $0.sortOrder < $1.sortOrder })
 
-        let copyPathEnabled = configService.loadCopyPathEnabled()
-
-        guard !items.isEmpty || copyPathEnabled else {
+        guard !entries.isEmpty else {
             logger.warning("无菜单配置项")
             return menu
         }
 
-        for item in items {
-            let menuItem = NSMenuItem(
-                title: "用 \(item.appName) 打开",
-                action: #selector(openWithApp(_:)),
-                keyEquivalent: ""
-            )
-            menuItem.representedObject = item.id.uuidString
-            menuItem.target = self
+        for entry in entries {
+            switch entry {
+            case .builtIn(let item):
+                switch item.type {
+                case .copyPath:
+                    let copyPathItem = NSMenuItem(
+                        title: "拷贝路径",
+                        action: #selector(copyPath(_:)),
+                        keyEquivalent: ""
+                    )
+                    copyPathItem.target = self
+                    menu.addItem(copyPathItem)
+                }
+            case .custom(let config):
+                let menuItem = NSMenuItem(
+                    title: "用 \(config.appName) 打开",
+                    action: #selector(openWithApp(_:)),
+                    keyEquivalent: ""
+                )
+                menuItem.representedObject = config.id.uuidString
+                menuItem.target = self
 
-            // 设置应用图标
-            let icon = NSWorkspace.shared.icon(forFile: item.appPath)
-            icon.size = NSSize(width: 16, height: 16)
-            menuItem.image = icon
+                let icon = NSWorkspace.shared.icon(forFile: config.appPath)
+                icon.size = NSSize(width: 16, height: 16)
+                menuItem.image = icon
 
-            menu.addItem(menuItem)
-        }
-
-        if copyPathEnabled {
-            let copyPathItem = NSMenuItem(
-                title: "拷贝路径",
-                action: #selector(copyPath(_:)),
-                keyEquivalent: ""
-            )
-            copyPathItem.target = self
-            menu.addItem(copyPathItem)
+                menu.addItem(menuItem)
+            }
         }
 
         return menu
     }
 
     @objc func openWithApp(_ sender: NSMenuItem) {
-        // 从菜单标题提取应用名称（格式："用 {appName} 打开"）
         let title = sender.title
         let prefix = "用 "
         let suffix = " 打开"
@@ -81,13 +80,15 @@ class FinderSync: FIFinderSync {
         }
         let appName = String(title.dropFirst(prefix.count).dropLast(suffix.count))
 
-        let items = configService.load()
-        guard let item = items.first(where: { $0.appName == appName }) else {
+        let customItems = configService.loadEntries().compactMap { entry -> MenuItemConfig? in
+            if case .custom(let config) = entry { return config }
+            return nil
+        }
+        guard let item = customItems.first(where: { $0.appName == appName }) else {
             logger.error("找不到菜单项配置: \(appName)")
             return
         }
 
-        // 解析目标路径
         guard let targetPath = resolveTargetPath() else {
             logger.error("无法解析目标路径")
             return

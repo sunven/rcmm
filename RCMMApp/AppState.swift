@@ -6,18 +6,12 @@ import SwiftUI
 @Observable
 @MainActor
 final class AppState {
-    var menuItems: [MenuItemConfig] = []
+    var menuEntries: [MenuEntry] = []
     var discoveredApps: [AppInfo] = []
     var popoverState: PopoverState = .normal
     var extensionStatus: ExtensionStatus = .unknown
     var errorRecords: [ErrorRecord] = []
     var autoRepairMessage: String? = nil
-    var copyPathEnabled: Bool {
-        didSet {
-            configService.saveCopyPathEnabled(copyPathEnabled)
-            DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
-        }
-    }
 
     var isOnboardingCompleted: Bool {
         didSet {
@@ -43,11 +37,10 @@ final class AppState {
     init(forPreview: Bool = false) {
         let defaults = UserDefaults(suiteName: AppGroupConstants.appGroupID)
         isOnboardingCompleted = defaults?.bool(forKey: SharedKeys.onboardingCompleted) ?? false
-        copyPathEnabled = forPreview ? false : configService.loadCopyPathEnabled()
 
         guard !forPreview else { return }
 
-        loadMenuItems()
+        loadMenuEntries()
         checkExtensionStatus()
         startHealthMonitoring()
 
@@ -79,7 +72,10 @@ final class AppState {
             errorQueue.replaceAll(with: remainingErrors)
             autoRepairMessage = "正在自动修复脚本文件…"
 
-            let items = menuItems
+            let items = menuEntries.compactMap { entry -> MenuItemConfig? in
+                if case .custom(let config) = entry { return config }
+                return nil
+            }
             Self.syncQueue.async { [weak self] in
                 let installer = ScriptInstallerService()
                 installer.syncScripts(with: items)
@@ -197,21 +193,23 @@ final class AppState {
     /// 注意: 每次启动都调用 syncScriptsInBackground() 是有意为之，确保脚本文件
     /// 与配置保持一致（防止脚本被手动删除或损坏的情况）。
     /// 优化建议: 未来可改为仅校验脚本文件是否存在，而非每次都重新编译。
-    func loadMenuItems() {
-        let existingItems = configService.load()
+    func loadMenuEntries() {
+        let existing = configService.loadEntries()
 
-        if existingItems.isEmpty {
+        if existing.isEmpty {
             let terminalConfig = MenuItemConfig(
                 appName: "Terminal",
                 bundleId: "com.apple.Terminal",
-                appPath: "/System/Applications/Utilities/Terminal.app",
-                sortOrder: 0
+                appPath: "/System/Applications/Utilities/Terminal.app"
             )
-            menuItems = [terminalConfig]
-            configService.save(menuItems)
+            menuEntries = [
+                .custom(terminalConfig),
+                .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
+            ]
+            configService.saveEntries(menuEntries)
             syncScriptsInBackground()
         } else {
-            menuItems = existingItems
+            menuEntries = existing
             syncScriptsInBackground()
         }
     }
@@ -221,10 +219,9 @@ final class AppState {
         let newItem = MenuItemConfig(
             appName: appInfo.name,
             bundleId: appInfo.bundleId,
-            appPath: appInfo.path,
-            sortOrder: menuItems.count
+            appPath: appInfo.path
         )
-        menuItems.append(newItem)
+        menuEntries.append(.custom(newItem))
         saveAndSync()
     }
 
@@ -234,10 +231,9 @@ final class AppState {
             let newItem = MenuItemConfig(
                 appName: appInfo.name,
                 bundleId: appInfo.bundleId,
-                appPath: appInfo.path,
-                sortOrder: menuItems.count
+                appPath: appInfo.path
             )
-            menuItems.append(newItem)
+            menuEntries.append(.custom(newItem))
         }
         if !appInfos.isEmpty {
             saveAndSync()
@@ -246,55 +242,65 @@ final class AppState {
 
     /// 检查菜单中是否已包含指定应用（按 bundleId 或 appPath 匹配）
     func containsApp(bundleId: String?, appPath: String) -> Bool {
-        for item in menuItems {
-            if let bundleId = bundleId, item.bundleId == bundleId {
-                return true
-            }
-            if item.appPath == appPath {
-                return true
+        for entry in menuEntries {
+            if case .custom(let item) = entry {
+                if let bundleId = bundleId, item.bundleId == bundleId {
+                    return true
+                }
+                if item.appPath == appPath {
+                    return true
+                }
             }
         }
         return false
     }
 
     /// 移动菜单项到新位置（拖拽排序）
-    func moveMenuItem(from source: IndexSet, to destination: Int) {
-        menuItems.move(fromOffsets: source, toOffset: destination)
-        recalculateSortOrders()
+    func moveEntry(from source: IndexSet, to destination: Int) {
+        menuEntries.move(fromOffsets: source, toOffset: destination)
         saveAndSync()
     }
 
     /// 删除指定位置的菜单项
-    func removeMenuItem(at offsets: IndexSet) {
-        menuItems.remove(atOffsets: offsets)
-        recalculateSortOrders()
+    func removeEntry(at offsets: IndexSet) {
+        let onlyCustomOffsets = offsets.filter { index in
+            if case .custom = menuEntries[index] { return true }
+            return false
+        }
+        menuEntries.remove(atOffsets: IndexSet(onlyCustomOffsets))
         saveAndSync()
     }
 
     /// 更新指定菜单项的自定义命令
     func updateCustomCommand(for itemId: UUID, command: String?) {
-        guard let index = menuItems.firstIndex(where: { $0.id == itemId }) else { return }
-        menuItems[index].customCommand = command
+        guard let index = menuEntries.firstIndex(where: {
+            if case .custom(let config) = $0 { return config.id == itemId }
+            return false
+        }) else { return }
+        if case .custom(var config) = menuEntries[index] {
+            config.customCommand = command
+            menuEntries[index] = .custom(config)
+        }
         saveAndSync()
     }
 
     /// 切换菜单项的启用/禁用状态
-    func toggleMenuItem(for itemId: UUID, isEnabled: Bool) {
-        guard let index = menuItems.firstIndex(where: { $0.id == itemId }) else { return }
-        menuItems[index].isEnabled = isEnabled
-        saveAndSync()
-    }
-
-    /// 重新计算所有菜单项的 sortOrder（索引即排序值）
-    private func recalculateSortOrders() {
-        for (index, _) in menuItems.enumerated() {
-            menuItems[index].sortOrder = index
+    func toggleEntry(for entryId: String, isEnabled: Bool) {
+        guard let index = menuEntries.firstIndex(where: { $0.id == entryId }) else { return }
+        switch menuEntries[index] {
+        case .builtIn(var item):
+            item.isEnabled = isEnabled
+            menuEntries[index] = .builtIn(item)
+        case .custom(var config):
+            config.isEnabled = isEnabled
+            menuEntries[index] = .custom(config)
         }
+        saveAndSync()
     }
 
     /// 保存配置 + 同步脚本 + 发送 Darwin Notification
     func saveAndSync() {
-        configService.save(menuItems)
+        configService.saveEntries(menuEntries)
         syncScriptsInBackground()
     }
 
@@ -302,7 +308,10 @@ final class AppState {
     private static let syncQueue = DispatchQueue(label: "com.sunven.rcmm.scriptSync", qos: .userInitiated)
 
     private func syncScriptsInBackground() {
-        let items = menuItems
+        let items = menuEntries.compactMap { entry -> MenuItemConfig? in
+            if case .custom(let config) = entry { return config }
+            return nil
+        }
         Self.syncQueue.async {
             let installer = ScriptInstallerService()
             installer.syncScripts(with: items)

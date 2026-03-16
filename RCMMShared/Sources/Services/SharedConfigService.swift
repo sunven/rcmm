@@ -8,25 +8,17 @@ public final class SharedConfigService: @unchecked Sendable {
             ?? UserDefaults(suiteName: AppGroupConstants.appGroupID)!
     }
 
-    public func save(_ items: [MenuItemConfig]) {
-        guard let data = try? JSONEncoder().encode(items) else {
+    public func saveEntries(_ entries: [MenuEntry]) {
+        guard let data = try? JSONEncoder().encode(entries) else {
             return
         }
-        defaults.set(data, forKey: SharedKeys.menuItems)
+        defaults.set(data, forKey: SharedKeys.menuEntries)
     }
 
-    public func load() -> [MenuItemConfig] {
-        guard let data = defaults.data(forKey: SharedKeys.menuItems) else {
+    public func loadEntries() -> [MenuEntry] {
+        guard let data = defaults.data(forKey: SharedKeys.menuEntries) else {
             return []
         }
-        return (try? JSONDecoder().decode([MenuItemConfig].self, from: data)) ?? []
-    }
-
-    public func saveCopyPathEnabled(_ enabled: Bool) {
-        defaults.set(enabled, forKey: SharedKeys.copyPathEnabled)
-    }
-
-    public func loadCopyPathEnabled() -> Bool {
-        defaults.bool(forKey: SharedKeys.copyPathEnabled)
+        return (try? JSONDecoder().decode([MenuEntry].self, from: data)) ?? []
     }
 }

@@ -10,7 +10,6 @@ struct MenuItemConfigTests {
         let item = MenuItemConfig(
             appName: "Terminal",
             appPath: "/Applications/Utilities/Terminal.app",
-            sortOrder: 0,
             isEnabled: true
         )
         let data = try JSONEncoder().encode(item)
@@ -24,7 +23,6 @@ struct MenuItemConfigTests {
         let item = MenuItemConfig(
             appName: "Disabled App",
             appPath: "/Applications/Disabled.app",
-            sortOrder: 5,
             isEnabled: false
         )
         let data = try JSONEncoder().encode(item)
@@ -35,7 +33,7 @@ struct MenuItemConfigTests {
     @Test("解码时缺失 isEnabled 默认为 true")
     func missingIsEnabledField() throws {
         let json = """
-        {"id":"550E8400-E29B-41D4-A716-446655440000","appName":"Test","appPath":"/test","sortOrder":0}
+        {"id":"550E8400-E29B-41D4-A716-446655440000","appName":"Test","appPath":"/test"}
         """
         let item = try JSONDecoder().decode(MenuItemConfig.self, from: Data(json.utf8))
         #expect(item.isEnabled == true)
@@ -44,7 +42,7 @@ struct MenuItemConfigTests {
     @Test("解码时缺失可选字段使用 nil")
     func missingOptionalFields() throws {
         let json = """
-        {"id":"550E8400-E29B-41D4-A716-446655440000","appName":"Test","appPath":"/test","sortOrder":0}
+        {"id":"550E8400-E29B-41D4-A716-446655440000","appName":"Test","appPath":"/test"}
         """
         let item = try JSONDecoder().decode(MenuItemConfig.self, from: Data(json.utf8))
         #expect(item.bundleId == nil)
@@ -54,8 +52,8 @@ struct MenuItemConfigTests {
     @Test("多实例编解码保持一致")
     func multipleItems() throws {
         let items = [
-            MenuItemConfig(appName: "Terminal", appPath: "/Applications/Utilities/Terminal.app", sortOrder: 0),
-            MenuItemConfig(appName: "iTerm", bundleId: "com.googlecode.iterm2", appPath: "/Applications/iTerm.app", customCommand: "open -a iTerm", sortOrder: 1),
+            MenuItemConfig(appName: "Terminal", appPath: "/Applications/Utilities/Terminal.app"),
+            MenuItemConfig(appName: "iTerm", bundleId: "com.googlecode.iterm2", appPath: "/Applications/iTerm.app", customCommand: "open -a iTerm"),
         ]
         let data = try JSONEncoder().encode(items)
         let decoded = try JSONDecoder().decode([MenuItemConfig].self, from: data)
@@ -69,7 +67,6 @@ struct MenuItemConfigTests {
             bundleId: "com.microsoft.VSCode",
             appPath: "/Applications/Visual Studio Code.app",
             customCommand: "code",
-            sortOrder: 5,
             isEnabled: false
         )
         let data = try JSONEncoder().encode(item)

@@ -5,28 +5,11 @@ struct MenuConfigTab: View {
     @Environment(AppState.self) private var appState
 
     @State private var showingAppSelection = false
-    @State private var expandedItems: Set<UUID> = []
+    @State private var expandedItems: Set<String> = []
 
     var body: some View {
         VStack(spacing: 0) {
-            // 拷贝路径开关
-            HStack {
-                Toggle("拷贝路径", isOn: Binding(
-                    get: { appState.copyPathEnabled },
-                    set: { appState.copyPathEnabled = $0 }
-                ))
-                .toggleStyle(.switch)
-                Text("在右键菜单中显示「拷贝路径」选项")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-
-            Divider()
-
-            if appState.menuItems.isEmpty {
+            if appState.menuEntries.isEmpty {
                 Spacer()
                 Text("暂无菜单项")
                     .foregroundStyle(.secondary)
@@ -36,33 +19,46 @@ struct MenuConfigTab: View {
                 Spacer()
             } else {
                 List {
-                    ForEach(Array(appState.menuItems.enumerated()), id: \.element.id) { index, item in
-                        DisclosureGroup(isExpanded: expandedBinding(for: item.id)) {
-                            CommandEditor(
-                                editedCommand: item.customCommand ?? "",
-                                defaultCommand: resolveDefaultCommand(for: item),
-                                appPath: item.appPath,
-                                onSave: { command in
-                                    appState.updateCustomCommand(for: item.id, command: command)
-                                }
-                            )
-                        } label: {
-                            AppListRow(
-                                menuItem: item,
-                                isDefault: index == 0,
+                    ForEach(Array(appState.menuEntries.enumerated()), id: \.element.id) { index, entry in
+                        switch entry {
+                        case .builtIn(let item):
+                            BuiltInListRow(
+                                item: item,
                                 onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                                onMoveDown: index < appState.menuItems.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
-                                onDelete: { appState.removeMenuItem(at: IndexSet(integer: index)) },
+                                onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
                                 onToggle: { isEnabled in
-                                    appState.toggleMenuItem(for: item.id, isEnabled: isEnabled)
+                                    appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
                                 },
                                 position: index + 1,
-                                total: appState.menuItems.count
+                                total: appState.menuEntries.count
                             )
+                        case .custom(let config):
+                            DisclosureGroup(isExpanded: expandedBinding(for: entry.id)) {
+                                CommandEditor(
+                                    editedCommand: config.customCommand ?? "",
+                                    defaultCommand: resolveDefaultCommand(for: config),
+                                    appPath: config.appPath,
+                                    onSave: { command in
+                                        appState.updateCustomCommand(for: config.id, command: command)
+                                    }
+                                )
+                            } label: {
+                                AppListRow(
+                                    menuItem: config,
+                                    onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
+                                    onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                                    onDelete: { appState.removeEntry(at: IndexSet(integer: index)) },
+                                    onToggle: { isEnabled in
+                                        appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
+                                    },
+                                    position: index + 1,
+                                    total: appState.menuEntries.count
+                                )
+                            }
                         }
                     }
                     .onMove { source, destination in
-                        appState.moveMenuItem(from: source, to: destination)
+                        appState.moveEntry(from: source, to: destination)
                     }
                 }
             }
@@ -103,14 +99,12 @@ struct MenuConfigTab: View {
         }
     }
 
-    /// VoiceOver 辅助排序：将指定位置的项上移或下移一位
     private func moveItem(at index: Int, direction: Int) {
         let destination = direction < 0 ? index - 1 : index + 2
-        appState.moveMenuItem(from: IndexSet(integer: index), to: destination)
+        appState.moveEntry(from: IndexSet(integer: index), to: destination)
     }
 
-    /// 为指定列表项生成独立的展开状态 binding
-    private func expandedBinding(for id: UUID) -> Binding<Bool> {
+    private func expandedBinding(for id: String) -> Binding<Bool> {
         Binding(
             get: { expandedItems.contains(id) },
             set: { isExpanded in
@@ -123,7 +117,6 @@ struct MenuConfigTab: View {
         )
     }
 
-    /// 解析当前生效的命令（内置映射或默认 open -a），用作 CommandEditor 的 placeholder
     private func resolveDefaultCommand(for item: MenuItemConfig) -> String {
         if let builtIn = CommandMappingService.command(for: item.bundleId) {
             return builtIn

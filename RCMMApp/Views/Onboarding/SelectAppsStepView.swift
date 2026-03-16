@@ -75,11 +75,13 @@ struct SelectAppsStepView: View {
 
     private var existingAppIdentifiers: Set<String> {
         var identifiers = Set<String>()
-        for item in appState.menuItems {
-            if let bundleId = item.bundleId {
-                identifiers.insert(bundleId)
-            } else {
-                identifiers.insert(item.appPath)
+        for entry in appState.menuEntries {
+            if case .custom(let item) = entry {
+                if let bundleId = item.bundleId {
+                    identifiers.insert(bundleId)
+                } else {
+                    identifiers.insert(item.appPath)
+                }
             }
         }
         return identifiers
