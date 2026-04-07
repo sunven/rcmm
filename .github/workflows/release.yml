@@ -1,27 +1,27 @@
 # =============================================================================
-# Release Build Workflow
+# Development Release Workflow
 # =============================================================================
-# 自动化发布流程：当推送 v* 格式的 tag 时，自动构建 macOS 应用并创建 GitHub Release。
+# 自动化发布流程：当推送 v* 格式的 tag 时，自动构建 macOS 开发版应用并创建 GitHub Prerelease。
 #
 # 整体流程：
 #   推送 v* tag → 拉取代码 → 构建 .xcarchive → 提取 .app → 验证结构
-#   → 打包 .dmg → 生成校验和 → 创建 GitHub Release 并上传附件
+#   → ad-hoc 重签名 → 打包 .dmg → 生成校验和 → 创建 GitHub Prerelease 并上传附件
 #
 # 使用方式：
-#   git tag v1.0.0
-#   git push origin v1.0.0
+#   git tag v1.0.0-dev.1
+#   git push origin v1.0.0-dev.1
 # =============================================================================
 
-name: Release Build
+name: Development Release Build
 
 # ---------------------------------------------------------------------------
-# 触发条件：仅当推送以 'v' 开头的 tag 时触发（如 v1.0.0、v2.1.3-beta）
+# 触发条件：仅当推送开发版 tag 时触发（如 v1.0.0-dev.1）
 # 普通的 commit push 或 PR 不会触发此工作流
 # ---------------------------------------------------------------------------
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*-dev*'
 
 # ---------------------------------------------------------------------------
 # 权限配置：授予 GITHUB_TOKEN 对仓库内容的写权限
@@ -37,12 +37,12 @@ permissions:
 #     对 release 构建来说至关重要，避免因重复触发而中断正在打包的构建
 # ---------------------------------------------------------------------------
 concurrency:
-  group: release-${{ github.ref }}
+  group: dev-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
-    name: Build and Release
+    name: Build and Release Development DMG
     # -----------------------------------------------------------------------
     # 运行环境：GitHub 提供的最新 macOS runner
     # 必须使用 macOS，因为 xcodebuild 只能在 macOS 上运行
@@ -110,8 +110,8 @@ jobs:
       #
       # 双重验证：
       #   1. 检查 GITHUB_REF 是否以 refs/tags/v 开头（确保是 tag 触发）
-      #   2. 用正则验证去掉 v 后的部分是否符合 semver 格式
-      #      合法示例：1.0.0、1.2.3-beta.1、1.0.0+build.123
+      #   2. 用正则验证去掉 v 后的部分是否符合开发版 semver 格式
+      #      合法示例：1.0.0-dev.1、1.2.3-dev、1.0.0-dev.2+build.123
       #
       # ${GITHUB_REF#refs/tags/v} — shell 参数扩展，去掉 "refs/tags/v" 前缀
       #   例如 refs/tags/v1.0.0 → 1.0.0
@@ -122,12 +122,12 @@ jobs:
         id: version
         run: |
           if [[ ! "$GITHUB_REF" =~ ^refs/tags/v ]]; then
-            echo "Error: Not a valid version tag (expected refs/tags/v*)"
+            echo "Error: Not a valid version tag (expected refs/tags/v*-dev*)"
             exit 1
           fi
           VERSION=${GITHUB_REF#refs/tags/v}
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$ ]]; then
-            echo "Error: Invalid semver format: $VERSION"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-dev(\.[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$ ]]; then
+            echo "Error: Invalid development semver format: $VERSION"
             exit 1
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -146,7 +146,8 @@ jobs:
       #   CODE_SIGN_IDENTITY=""      — 清空签名身份
       #   CODE_SIGNING_REQUIRED=NO   — 不要求代码签名
       #   CODE_SIGNING_ALLOWED=NO    — 禁止代码签名
-      #   以上三个参数一起作用：CI 环境没有 Apple 开发者证书，生成未签名的构建
+      #   以上三个参数一起作用：CI 环境没有 Apple 开发者证书，先生成未签名的构建
+      #   后续步骤会对提取出来的 .app 做 ad-hoc 重签名，使 bundle 结构校验通过
       #
       # | tee build/xcodebuild.log — 同时输出到终端（CI 日志）和文件
       #   失败时日志文件会被上传为 artifact，方便离线排查
@@ -224,7 +225,42 @@ jobs:
           echo "✓ App extracted and verified"
 
       # =====================================================================
-      # Step 8: 安装 create-dmg 工具
+      # Step 7: 对提取出的 .app 进行 ad-hoc 重签名
+      # =====================================================================
+      # xcodebuild 在禁用正式签名时，只会留下非常弱的 linker-signed / ad-hoc 状态，
+      # bundle 结构校验可能失败。这里显式重签名整个 .app：
+      #
+      #   --force        — 覆盖已有的弱签名
+      #   --deep         — 连同内嵌的 Finder extension 一并签名
+      #   --sign -       — 使用 ad-hoc identity（无需证书）
+      #
+      # 结果：
+      #   - 仍然不是 Developer ID 签名，不能绕过 Gatekeeper
+      #   - 但 bundle 本身会成为结构合法的开发版产物，适合内部测试分发
+      # =====================================================================
+      - name: Ad-hoc sign app bundle
+        run: |
+          set -e
+          codesign --force --deep --sign - build/rcmm.app
+          codesign --verify --deep --strict --verbose=4 build/rcmm.app
+          echo "✓ App bundle ad-hoc signed"
+
+      # =====================================================================
+      # Step 8: 准备 DMG staging 目录
+      # =====================================================================
+      # create-dmg 会把传入目录中的内容全部放进镜像。
+      # 不能直接传 build/，否则会把 xcarchive、日志等调试产物一起打进 DMG。
+      # =====================================================================
+      - name: Prepare DMG staging directory
+        run: |
+          set -e
+          rm -rf build/dmg-root
+          mkdir -p build/dmg-root
+          cp -R build/rcmm.app build/dmg-root/rcmm.app
+          echo "✓ DMG staging directory prepared"
+
+      # =====================================================================
+      # Step 9: 安装 create-dmg 工具
       # =====================================================================
       # create-dmg 是一个命令行工具，用于创建带有自定义外观的 .dmg 磁盘映像
       # macOS runner 预装了 Homebrew，可以直接使用 brew install
@@ -234,7 +270,7 @@ jobs:
         run: brew install create-dmg
 
       # =====================================================================
-      # Step 9: 创建 DMG 磁盘映像
+      # Step 10: 创建 DMG 磁盘映像
       # =====================================================================
       # .dmg 是 macOS 标准的应用分发格式，用户双击挂载后看到的界面由以下参数控制：
       #
@@ -254,8 +290,8 @@ jobs:
       #   |   (x=200)               (x=600)          |
       #   +------------------------------------------+
       #
-      # 输出文件名包含版本号，如 rcmm-1.0.0.dmg
-      # build/ 目录下的 rcmm.app 会被自动包含进 DMG
+      # 输出文件名包含版本号，如 rcmm-dev-1.0.0.dmg
+      # 仅将 build/dmg-root/ 中的 rcmm.app 放进 DMG，避免调试产物泄露给用户
       # =====================================================================
       - name: Create DMG
         run: |
@@ -268,11 +304,11 @@ jobs:
             --icon "rcmm.app" 200 190 \
             --hide-extension "rcmm.app" \
             --app-drop-link 600 185 \
-            "rcmm-${{ steps.version.outputs.version }}.dmg" \
-            "build/"
+            "rcmm-dev-${{ steps.version.outputs.version }}.dmg" \
+            "build/dmg-root/"
 
           # Verify DMG was created
-          if [ ! -f "rcmm-${{ steps.version.outputs.version }}.dmg" ]; then
+          if [ ! -f "rcmm-dev-${{ steps.version.outputs.version }}.dmg" ]; then
             echo "::error::DMG creation failed"
             ls -la . || echo "Current directory listing failed"
             exit 1
@@ -280,7 +316,7 @@ jobs:
           echo "✓ DMG created successfully"
 
       # =====================================================================
-      # Step 10: 生成 SHA-256 校验和
+      # Step 11: 生成 SHA-256 校验和
       # =====================================================================
       # 生成 DMG 文件的 SHA-256 哈希值，保存到 checksums.txt
       # 用户下载 DMG 后可通过以下命令验证文件完整性，防止传输中被篡改：
@@ -290,12 +326,12 @@ jobs:
       # =====================================================================
       - name: Generate checksums
         run: |
-          shasum -a 256 rcmm-${{ steps.version.outputs.version }}.dmg > checksums.txt
+          shasum -a 256 rcmm-dev-${{ steps.version.outputs.version }}.dmg > checksums.txt
           cat checksums.txt
           echo "✓ Checksum generated"
 
       # =====================================================================
-      # Step 11: 创建 GitHub Release
+      # Step 12: 创建 GitHub Development Prerelease
       # =====================================================================
       # 使用 gh CLI（GitHub 官方命令行工具）创建 Release
       #
@@ -308,34 +344,36 @@ jobs:
       #
       #   2. Release 不存在（首次发布）：
       #      → gh release create 创建新 Release
-      #        --title  "rcmm 1.0.0" — Release 标题
+      #        --title  "rcmm dev 1.0.0" — Release 标题
+      #        --prerelease — 标记为开发版预发布
       #        --generate-notes — 自动根据上次 Release 到当前 tag
       #          之间的 commit 生成变更说明（这也是 Step 1 需要完整历史的原因）
       #
       # 上传的附件：
-      #   - rcmm-{version}.dmg — 应用安装包
-      #   - checksums.txt      — SHA-256 校验和
+      #   - rcmm-dev-{version}.dmg — 开发版应用安装包
+      #   - checksums.txt          — SHA-256 校验和
       # =====================================================================
-      - name: Create GitHub Release
+      - name: Create GitHub Prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view ${{ github.ref_name }} &>/dev/null; then
             echo "Release already exists, uploading assets..."
             gh release upload ${{ github.ref_name }} \
-              rcmm-${{ steps.version.outputs.version }}.dmg \
+              rcmm-dev-${{ steps.version.outputs.version }}.dmg \
               checksums.txt \
               --clobber
           else
             gh release create ${{ github.ref_name }} \
-              rcmm-${{ steps.version.outputs.version }}.dmg \
+              rcmm-dev-${{ steps.version.outputs.version }}.dmg \
               checksums.txt \
-              --title "rcmm ${{ steps.version.outputs.version }}" \
+              --title "rcmm dev ${{ steps.version.outputs.version }}" \
+              --prerelease \
               --generate-notes
           fi
 
       # =====================================================================
-      # Step 12: 失败时上传构建日志（仅在前面任何步骤失败时执行）
+      # Step 13: 失败时上传构建日志（仅在前面任何步骤失败时执行）
       # =====================================================================
       # if: failure() — GitHub Actions 条件表达式，仅当前面步骤失败时才运行
       #

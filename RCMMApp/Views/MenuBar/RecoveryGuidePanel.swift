@@ -39,6 +39,17 @@ struct RecoveryGuidePanel: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+            Text("如果系统设置中没有看到 rcmm，可在终端执行：")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("pluginkit -e use -i com.sunven.rcmm.FinderExtension")
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
             Button {
                 PluginKitService.showExtensionManagement()
             } label: {
