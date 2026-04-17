@@ -73,8 +73,8 @@ Out of scope:
 
 After asset generation, verify the icon by building the main app and checking:
 
-- Finder display of `rcmm.app`
-- Dock / app switcher presentation
+- Finder display of the built `rcmm.app` bundle
+- Finder / Applications presentation after copying or packaging the app bundle
 - Small-size readability, especially whether the folder and menu card remain distinct
 
 If the smallest sizes lose clarity, fix the asset artwork rather than changing app structure or metadata.
