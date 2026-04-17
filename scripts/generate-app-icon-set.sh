@@ -18,6 +18,21 @@ require_cmd() {
 require_cmd sips
 require_cmd plutil
 
+validate_contents_json() {
+  local file="$1"
+
+  if plutil -lint "$file" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ "$file" == *.json ]] && plutil -convert xml1 -o /dev/null "$file" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "Error: invalid asset catalog contents file: $file" >&2
+  return 1
+}
+
 if [[ ! -f "$SOURCE" ]]; then
   echo "Error: missing source icon: $SOURCE" >&2
   exit 1
@@ -49,6 +64,6 @@ render "AppIcon-256.png" 256
 render "AppIcon-256@2x.png" 512
 render "AppIcon-512.png" 512
 
-plutil -lint "$ICON_DIR/Contents.json" >/dev/null
+validate_contents_json "$ICON_DIR/Contents.json"
 
 echo "Generated macOS app icon PNGs in $ICON_DIR"
