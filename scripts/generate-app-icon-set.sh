@@ -4,35 +4,20 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ICON_DIR="$ROOT_DIR/RCMMApp/Assets.xcassets/AppIcon.appiconset"
-MASTER_FILENAME="AppIcon-512@2x.png"
+FULL_SOURCE="$ROOT_DIR/logo.svg"
+SMALL_SOURCE="$ROOT_DIR/artwork/app-icon/logo-small.svg"
 ICON_SLOTS=(
-  "AppIcon-16.png|16x16|1x|16"
-  "AppIcon-16@2x.png|16x16|2x|32"
-  "AppIcon-32.png|32x32|1x|32"
-  "AppIcon-32@2x.png|32x32|2x|64"
-  "AppIcon-128.png|128x128|1x|128"
-  "AppIcon-128@2x.png|128x128|2x|256"
-  "AppIcon-256.png|256x256|1x|256"
-  "AppIcon-256@2x.png|256x256|2x|512"
-  "AppIcon-512.png|512x512|1x|512"
-  "AppIcon-512@2x.png|512x512|2x|1024"
+  "AppIcon-16.png|16x16|1x|16|small"
+  "AppIcon-16@2x.png|16x16|2x|32|small"
+  "AppIcon-32.png|32x32|1x|32|small"
+  "AppIcon-32@2x.png|32x32|2x|64|small"
+  "AppIcon-128.png|128x128|1x|128|full"
+  "AppIcon-128@2x.png|128x128|2x|256|full"
+  "AppIcon-256.png|256x256|1x|256|full"
+  "AppIcon-256@2x.png|256x256|2x|512|full"
+  "AppIcon-512.png|512x512|1x|512|full"
+  "AppIcon-512@2x.png|512x512|2x|1024|full"
 )
-MASTER_PIXEL_SIZE=""
-
-for slot in "${ICON_SLOTS[@]}"; do
-  IFS='|' read -r filename _ _ pixel_size <<<"$slot"
-  if [[ "$filename" == "$MASTER_FILENAME" ]]; then
-    MASTER_PIXEL_SIZE="$pixel_size"
-    break
-  fi
-done
-
-if [[ -z "$MASTER_PIXEL_SIZE" ]]; then
-  echo "Error: missing master slot metadata for $MASTER_FILENAME" >&2
-  exit 1
-fi
-
-SOURCE="$ICON_DIR/$MASTER_FILENAME"
 
 require_cmd() {
   local cmd="$1"
@@ -42,9 +27,6 @@ require_cmd() {
     exit 1
   fi
 }
-
-require_cmd sips
-require_cmd plutil
 
 validate_contents_json() {
   local file="$1"
@@ -71,7 +53,7 @@ build_expected_contents_json() {
     printf '  "images" : [\n'
 
     for index in "${!ICON_SLOTS[@]}"; do
-      IFS='|' read -r filename logical_size scale _ <<<"${ICON_SLOTS[$index]}"
+      IFS='|' read -r filename logical_size scale _ _ <<<"${ICON_SLOTS[$index]}"
       printf '    {\n'
       printf '      "filename" : "%s",\n' "$filename"
       printf '      "idiom" : "mac",\n'
@@ -128,36 +110,78 @@ validate_contents_contract() {
   return "$status"
 }
 
-if [[ ! -f "$SOURCE" ]]; then
-  echo "Error: missing source icon: $SOURCE" >&2
-  exit 1
-fi
+source_path_for_slot() {
+  local source_key="$1"
 
-format="$(sips -g format "$SOURCE" | awk '/format/ {print $2}')"
-width="$(sips -g pixelWidth "$SOURCE" | awk '/pixelWidth/ {print $2}')"
-height="$(sips -g pixelHeight "$SOURCE" | awk '/pixelHeight/ {print $2}')"
-
-if [[ "$format" != "png" || "$width" != "$MASTER_PIXEL_SIZE" || "$height" != "$MASTER_PIXEL_SIZE" ]]; then
-  echo "Error: source icon must be a ${MASTER_PIXEL_SIZE}x${MASTER_PIXEL_SIZE} PNG; got ${format} ${width}x${height}" >&2
-  exit 1
-fi
-
-render() {
-  local filename="$1"
-  local size="$2"
-
-  sips -z "$size" "$size" "$SOURCE" --out "$ICON_DIR/$filename" >/dev/null
+  case "$source_key" in
+    full)
+      printf '%s\n' "$FULL_SOURCE"
+      ;;
+    small)
+      printf '%s\n' "$SMALL_SOURCE"
+      ;;
+    *)
+      echo "Error: unknown source key: $source_key" >&2
+      return 1
+      ;;
+  esac
 }
 
-for slot in "${ICON_SLOTS[@]}"; do
-  IFS='|' read -r filename _ _ pixel_size <<<"$slot"
-  if [[ "$filename" == "$MASTER_FILENAME" ]]; then
-    continue
-  fi
-  render "$filename" "$pixel_size"
-done
+validate_svg_source() {
+  local file="$1"
+  local format
 
+  if [[ ! -f "$file" ]]; then
+    echo "Error: missing source svg: $file" >&2
+    return 1
+  fi
+
+  format="$(sips -g format "$file" | awk '/format/ {print $2}')"
+
+  if [[ "$format" != "svg" ]]; then
+    echo "Error: source file must be svg: $file (got ${format:-unknown})" >&2
+    return 1
+  fi
+}
+
+render_slot() {
+  local source="$1"
+  local filename="$2"
+  local pixel_size="$3"
+
+  sips -z "$pixel_size" "$pixel_size" -s format png "$source" --out "$ICON_DIR/$filename" >/dev/null
+}
+
+validate_rendered_png() {
+  local file="$1"
+  local pixel_size="$2"
+  local format
+  local width
+  local height
+
+  format="$(sips -g format "$file" | awk '/format/ {print $2}')"
+  width="$(sips -g pixelWidth "$file" | awk '/pixelWidth/ {print $2}')"
+  height="$(sips -g pixelHeight "$file" | awk '/pixelHeight/ {print $2}')"
+
+  if [[ "$format" != "png" || "$width" != "$pixel_size" || "$height" != "$pixel_size" ]]; then
+    echo "Error: rendered icon has wrong format or dimensions: $file -> ${format:-unknown} ${width:-?}x${height:-?}" >&2
+    return 1
+  fi
+}
+
+require_cmd sips
+require_cmd plutil
+
+validate_svg_source "$FULL_SOURCE"
+validate_svg_source "$SMALL_SOURCE"
 validate_contents_json "$ICON_DIR/Contents.json"
 validate_contents_contract "$ICON_DIR/Contents.json"
+
+for slot in "${ICON_SLOTS[@]}"; do
+  IFS='|' read -r filename _ _ pixel_size source_key <<<"$slot"
+  source_path="$(source_path_for_slot "$source_key")"
+  render_slot "$source_path" "$filename" "$pixel_size"
+  validate_rendered_png "$ICON_DIR/$filename" "$pixel_size"
+done
 
 echo "Generated macOS app icon PNGs in $ICON_DIR"
