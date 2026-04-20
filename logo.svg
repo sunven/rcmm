@@ -1,0 +1,27 @@
+<svg width="256" height="256" viewBox="0 0 256 256"
+  xmlns="http://www.w3.org/2000/svg" style="max-width:266px;display:block;margin-inline:auto">
+  <title>rcmm</title>
+  <defs>
+    <linearGradient id="a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <linearGradient id="b" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="100%" stop-color="#eff4ff"/>
+    </linearGradient>
+    <filter id="c">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#0f172a" flood-opacity=".3"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="url(#a)"/>
+  <path fill="#fff" opacity=".95" d="M26 24v70l17-17 10 23 12-6-11-23h24z"/>
+  <rect x="72" y="70" width="160" height="162" rx="14" fill="url(#b)" filter="url(#c)"/>
+  <rect x="72" y="70" width="160" height="162" rx="14" fill="none" stroke="#cbd5e1"/>
+  <rect x="78" y="77" width="148" height="46" rx="9" fill="#2563eb"/>
+  <text x="92" y="107" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="19" font-weight="700" fill="#fff">Open</text>
+  <path stroke="#dbeafe" stroke-width="1.2" d="M78 131h146"/>
+  <text x="92" y="165" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="19" fill="#1e293b">Copy</text>
+  <path stroke="#dbeafe" stroke-width="1.2" d="M78 183h146"/>
+  <text x="92" y="217" font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-size="19" fill="#dc2626">Move to Trash</text>
+</svg>
