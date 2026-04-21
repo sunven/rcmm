@@ -20,7 +20,7 @@ public enum DevAppcastParser {
 }
 
 private final class ParserDelegate: NSObject, XMLParserDelegate {
-    private var currentReleaseNotesURL: URL?
+    private var currentItem: PendingItem?
     private var currentValue = ""
     private var insideReleaseNotesLink = false
 
@@ -33,12 +33,17 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
         qualifiedName qName: String?,
         attributes attributeDict: [String : String] = [:]
     ) {
+        if elementName == "item" {
+            currentItem = PendingItem()
+        }
+
         if isReleaseNotesLink(elementName: elementName, qualifiedName: qName) {
             insideReleaseNotesLink = true
             currentValue = ""
         }
 
         guard elementName == "enclosure" else { return }
+        guard currentItem != nil else { return }
 
         guard
             let urlString = attributeDict["url"],
@@ -50,15 +55,10 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
             let signature = attributeDict["sparkle:edSignature"]
         else { return }
 
-        items.append(
-            DevAppcastItem(
-                version: version,
-                archiveURL: url,
-                releaseNotesURL: currentReleaseNotesURL,
-                archiveLength: length,
-                signature: signature
-            )
-        )
+        currentItem?.version = version
+        currentItem?.archiveURL = url
+        currentItem?.archiveLength = length
+        currentItem?.signature = signature
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
@@ -72,15 +72,49 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
         namespaceURI: String?,
         qualifiedName qName: String?
     ) {
-        guard isReleaseNotesLink(elementName: elementName, qualifiedName: qName) else { return }
-        insideReleaseNotesLink = false
-        currentReleaseNotesURL = URL(string: currentValue.trimmingCharacters(in: .whitespacesAndNewlines))
-        currentValue = ""
+        if isReleaseNotesLink(elementName: elementName, qualifiedName: qName) {
+            insideReleaseNotesLink = false
+            let releaseNotesValue = currentValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            currentItem?.releaseNotesURL = URL(string: releaseNotesValue)
+            currentValue = ""
+            return
+        }
+
+        guard elementName == "item" else { return }
+        defer { currentItem = nil }
+
+        guard let item = currentItem?.build() else { return }
+        items.append(item)
     }
 
     private func isReleaseNotesLink(elementName: String, qualifiedName: String?) -> Bool {
         qualifiedName == "sparkle:releaseNotesLink"
             || elementName == "releaseNotesLink"
             || elementName == "sparkle:releaseNotesLink"
+    }
+}
+
+private struct PendingItem {
+    var version: DevBuildVersion?
+    var archiveURL: URL?
+    var releaseNotesURL: URL?
+    var archiveLength: Int?
+    var signature: String?
+
+    func build() -> DevAppcastItem? {
+        guard
+            let version,
+            let archiveURL,
+            let archiveLength,
+            let signature
+        else { return nil }
+
+        return DevAppcastItem(
+            version: version,
+            archiveURL: archiveURL,
+            releaseNotesURL: releaseNotesURL,
+            archiveLength: archiveLength,
+            signature: signature
+        )
     }
 }
