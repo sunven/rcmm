@@ -159,7 +159,7 @@ final class AppState {
     var updateStatusText: String {
         switch updateState {
         case .idle:
-            return "启动后会自动检查更新，也可以在这里手动检查。"
+            return "可以在这里手动检查更新。"
         case .checking:
             return "正在检查更新…"
         case .current(let lastCheckedAt):
