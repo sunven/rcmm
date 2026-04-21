@@ -2,7 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>RCMMDisplayVersion</key>
+	<string>$(RCMM_DISPLAY_VERSION)</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>SUFeedURL</key>
+	<string>$(RCMM_SU_FEED_URL)</string>
+	<key>SUPublicEDKey</key>
+	<string>AVNVnTOaWpZRsy+FrC0mPJvcQ8VcY4FL56GWOVCWvxM=</string>
 </dict>
 </plist>

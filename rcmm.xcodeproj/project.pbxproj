@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		84A0A0012F50000100AA0001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 84A0A0022F50000100AA0001 /* Sparkle */; };
 		74DD7C942F46FF96003EE810 /* SettingsAccess in Frameworks */ = {isa = PBXBuildFile; productRef = 74DD7C932F46FF96003EE810 /* SettingsAccess */; };
 		A1000001 /* RCMMShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000002 /* RCMMShared */; };
 		A1000003 /* RCMMShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000004 /* RCMMShared */; };
@@ -39,6 +40,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		84A0A0042F50000100AA0001 /* AutoUpdate.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = RCMMApp/Config/AutoUpdate.xcconfig; sourceTree = SOURCE_ROOT; };
 		A1000200 /* rcmm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = rcmm.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000202 /* RCMMFinderExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RCMMFinderExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000600 /* FinderSync.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FinderSync.framework; path = System/Library/Frameworks/FinderSync.framework; sourceTree = SDKROOT; };
@@ -86,6 +88,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000001 /* RCMMShared in Frameworks */,
+				84A0A0012F50000100AA0001 /* Sparkle in Frameworks */,
 				74DD7C942F46FF96003EE810 /* SettingsAccess in Frameworks */,
 				A1000601 /* FinderSync.framework in Frameworks */,
 			);
@@ -175,6 +178,7 @@
 			name = rcmm;
 			packageProductDependencies = (
 				A1000002 /* RCMMShared */,
+				84A0A0022F50000100AA0001 /* Sparkle */,
 				74DD7C932F46FF96003EE810 /* SettingsAccess */,
 			);
 			productName = rcmm;
@@ -210,6 +214,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A1000005 /* XCLocalSwiftPackageReference "RCMMShared" */,
+				84A0A0032F50000100AA0001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				74DD7C912F46FD15003EE810 /* XCRemoteSwiftPackageReference "SettingsAccess" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -388,6 +393,7 @@
 		};
 		A1000510 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 84A0A0042F50000100AA0001 /* AutoUpdate.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -417,6 +423,7 @@
 		};
 		A1000511 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 84A0A0042F50000100AA0001 /* AutoUpdate.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -542,6 +549,14 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		84A0A0032F50000100AA0001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.0;
+			};
+		};
 		74DD7C912F46FD15003EE810 /* XCRemoteSwiftPackageReference "SettingsAccess" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/orchetect/SettingsAccess";
@@ -553,6 +568,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		84A0A0022F50000100AA0001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 84A0A0032F50000100AA0001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
 		74DD7C932F46FF96003EE810 /* SettingsAccess */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 74DD7C912F46FD15003EE810 /* XCRemoteSwiftPackageReference "SettingsAccess" */;
