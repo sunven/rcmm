@@ -34,7 +34,11 @@ struct AppBundleUpdateInfo: Sendable {
             throw AppBundleUpdateInfoError.missingValue("SUFeedURL")
         }
 
-        guard let releasePageURL = URL(string: "https://github.com/sunven/rcmm/releases") else {
+        guard let releasePageURLString = bundle.object(forInfoDictionaryKey: "RCMMReleasePageURL") as? String else {
+            throw AppBundleUpdateInfoError.missingValue("RCMMReleasePageURL")
+        }
+
+        guard let releasePageURL = URL(string: releasePageURLString) else {
             throw AppBundleUpdateInfoError.invalidValue("releasePageURL")
         }
 
