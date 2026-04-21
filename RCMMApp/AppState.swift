@@ -3,6 +3,15 @@ import os.log
 import RCMMShared
 import SwiftUI
 
+enum AppUpdateState: Equatable {
+    case idle
+    case checking
+    case current(lastCheckedAt: Date)
+    case available(DevAppcastItem, UpdateInstallEligibility)
+    case failed(String)
+    case installing(DevAppcastItem)
+}
+
 @Observable
 @MainActor
 final class AppState {
@@ -12,6 +21,8 @@ final class AppState {
     var extensionStatus: ExtensionStatus = .unknown
     var errorRecords: [ErrorRecord] = []
     var autoRepairMessage: String? = nil
+    var currentDisplayVersion = "未知版本"
+    var updateState: AppUpdateState = .idle
 
     var isOnboardingCompleted: Bool {
         didSet {
@@ -26,6 +37,8 @@ final class AppState {
     private var healthCheckTimer: Timer?
     private let healthCheckInterval: TimeInterval = 1800 // 30 分钟
 
+    @ObservationIgnored private var sparkleUpdater: SparkleUpdaterService?
+    @ObservationIgnored private let updateFeedClient = UpdateFeedClient()
     private let configService = SharedConfigService()
     private let errorQueue = SharedErrorQueue()
     private var hasTriggeredAutoRepair = false
@@ -39,6 +52,11 @@ final class AppState {
         isOnboardingCompleted = defaults?.bool(forKey: SharedKeys.onboardingCompleted) ?? false
 
         guard !forPreview else { return }
+
+        if let bundleInfo = try? AppBundleUpdateInfo.current() {
+            currentDisplayVersion = bundleInfo.displayVersion
+        }
+        sparkleUpdater = SparkleUpdaterService()
 
         loadMenuEntries()
         checkExtensionStatus()
@@ -134,6 +152,93 @@ final class AppState {
     private func stopHealthMonitoring() {
         healthCheckTimer?.invalidate()
         healthCheckTimer = nil
+    }
+
+    // MARK: - Updates
+
+    var updateStatusText: String {
+        switch updateState {
+        case .idle:
+            return "启动后会自动检查更新，也可以在这里手动检查。"
+        case .checking:
+            return "正在检查更新…"
+        case .current(let lastCheckedAt):
+            return "当前已是最新版本，上次检查时间：\(lastCheckedAt.formatted(date: .numeric, time: .shortened))"
+        case .available(let item, let eligibility):
+            switch eligibility {
+            case .inPlaceInstall:
+                return "发现新版本 \(item.version.displayVersion)，可以直接安装。"
+            case .manualInstall(let reason, _):
+                return "发现新版本 \(item.version.displayVersion)。\(reason)"
+            }
+        case .failed(let message):
+            return message
+        case .installing(let item):
+            return "正在准备安装 \(item.version.displayVersion)…"
+        }
+    }
+
+    var canPerformUpdatePrimaryAction: Bool {
+        if case .available = updateState {
+            return true
+        }
+        return false
+    }
+
+    var updatePrimaryActionTitle: String {
+        guard case .available(_, let eligibility) = updateState else {
+            return "检查更新"
+        }
+
+        switch eligibility {
+        case .inPlaceInstall:
+            return "立即更新"
+        case .manualInstall:
+            return "打开下载页"
+        }
+    }
+
+    func checkForUpdatesManually() {
+        Task {
+            await performUpdateCheck(silent: false)
+        }
+    }
+
+    func performUpdatePrimaryAction() {
+        guard case .available(let item, let eligibility) = updateState else { return }
+
+        switch eligibility {
+        case .inPlaceInstall:
+            updateState = .installing(item)
+            sparkleUpdater?.beginInteractiveUpdate()
+        case .manualInstall(_, let fallbackURL):
+            NSWorkspace.shared.open(fallbackURL)
+        }
+    }
+
+    private func performUpdateCheck(silent: Bool) async {
+        updateState = .checking
+
+        do {
+            let bundleInfo = try AppBundleUpdateInfo.current()
+            currentDisplayVersion = bundleInfo.displayVersion
+
+            let latestItem = try await updateFeedClient.fetchLatestItem(feedURL: bundleInfo.feedURL)
+            let eligibility = UpdatePolicy.installEligibility(
+                bundlePath: bundleInfo.bundlePath,
+                releasePageURL: bundleInfo.releasePageURL
+            )
+
+            if latestItem.version > bundleInfo.currentVersion {
+                updateState = .available(latestItem, eligibility)
+            } else if !silent {
+                updateState = .current(lastCheckedAt: Date())
+            } else {
+                updateState = .idle
+            }
+        } catch {
+            updateState = .failed("检查更新失败：\(error.localizedDescription)")
+        }
     }
 
     // MARK: - Onboarding Window
