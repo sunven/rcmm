@@ -17,27 +17,44 @@ struct AppListRow: View {
         FileManager.default.fileExists(atPath: menuItem.appPath)
     }
 
+    private var statusText: String {
+        if !menuItem.isEnabled {
+            return "已停用"
+        }
+        return appExists ? "就绪" : "未找到"
+    }
+
+    private var statusColor: Color {
+        if !menuItem.isEnabled {
+            return .orange
+        }
+        return appExists ? .secondary : .red
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(nsImage: NSWorkspace.shared.icon(forFile: menuItem.appPath))
                 .resizable()
-                .frame(width: 32, height: 32)
+                .frame(width: 28, height: 28)
                 .saturation(appExists ? (menuItem.isEnabled ? 1 : 0.3) : 0)
                 .opacity(appExists ? (menuItem.isEnabled ? 1 : 0.5) : 0.4)
-            Text(menuItem.appName)
-                .font(.body)
-                .foregroundStyle(menuItem.isEnabled ? .primary : .secondary)
-            Spacer()
 
-            if !menuItem.isEnabled {
-                Text("已停用")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            } else {
-                Text(appExists ? "就绪" : "未找到")
-                    .font(.caption)
-                    .foregroundStyle(appExists ? Color.secondary : Color.red)
-            }
+            Text(menuItem.appName)
+                .font(.callout)
+                .foregroundStyle(menuItem.isEnabled ? .primary : .secondary)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Text(statusText)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(statusColor)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule()
+                        .fill(statusColor.opacity(0.12))
+                )
 
             if let onToggle = onToggle {
                 Toggle("", isOn: Binding(
@@ -45,6 +62,7 @@ struct AppListRow: View {
                     set: { onToggle($0) }
                 ))
                 .toggleStyle(.switch)
+                .controlSize(.small)
                 .labelsHidden()
                 .help(menuItem.isEnabled ? "停用此菜单项" : "启用此菜单项")
             }
@@ -52,18 +70,21 @@ struct AppListRow: View {
             if let onDelete = onDelete {
                 Button(action: onDelete) {
                     Image(systemName: "trash")
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
                 }
                 .buttonStyle(.plain)
                 .help("删除此菜单项")
             }
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .padding(.horizontal, 6)
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
         )
+        .controlSize(.small)
         .contentShape(Rectangle())
         .onHover { hovering in
             isHovered = hovering

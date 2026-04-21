@@ -12,20 +12,21 @@ struct BuiltInListRow: View {
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: item.iconName)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 20, height: 20)
+                .frame(width: 16, height: 16)
                 .foregroundStyle(item.isEnabled ? .primary : .secondary)
-                .frame(width: 32, height: 32)
+                .frame(width: 28, height: 28)
 
             Text(item.displayName)
-                .font(.body)
+                .font(.callout)
                 .foregroundStyle(item.isEnabled ? .primary : .secondary)
+                .lineLimit(1)
 
             Text("系统")
-                .font(.caption)
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(.blue)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
@@ -34,12 +35,18 @@ struct BuiltInListRow: View {
                         .fill(Color.blue.opacity(0.1))
                 )
 
-            Spacer()
+            Spacer(minLength: 8)
 
             if !item.isEnabled {
                 Text("已停用")
-                    .font(.caption)
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(.orange)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(Color.orange.opacity(0.12))
+                    )
             }
 
             if let onToggle = onToggle {
@@ -48,16 +55,18 @@ struct BuiltInListRow: View {
                     set: { onToggle($0) }
                 ))
                 .toggleStyle(.switch)
+                .controlSize(.small)
                 .labelsHidden()
                 .help(item.isEnabled ? "停用此菜单项" : "启用此菜单项")
             }
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .padding(.horizontal, 6)
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
         )
+        .controlSize(.small)
         .contentShape(Rectangle())
         .onHover { hovering in
             isHovered = hovering

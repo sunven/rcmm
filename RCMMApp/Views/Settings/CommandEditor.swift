@@ -47,27 +47,28 @@ struct CommandEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("自定义命令：")
-                .font(.caption)
+                .font(.caption2)
                 .foregroundStyle(.secondary)
 
             TextField(defaultCommand, text: $editedCommand)
-                .font(.system(.body, design: .monospaced))
+                .font(.system(.callout, design: .monospaced))
                 .textFieldStyle(.roundedBorder)
+                .controlSize(.small)
                 .autocorrectionDisabled()
 
             Text("{app} = 应用路径，{path} = 目标目录")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(isUsingDefault ? "当前生效命令：" : "预览：")
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
 
                 Text(previewCommand)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(.callout, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
@@ -77,10 +78,10 @@ struct CommandEditor: View {
             if isMissingPathPlaceholder {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.orange)
                     Text("命令中未包含 {path}，目标目录可能不会被传递")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.orange)
                 }
                 .accessibilityElement(children: .combine)
@@ -97,7 +98,8 @@ struct CommandEditor: View {
                 .controlSize(.small)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.top, 2)
+        .padding(.bottom, 4)
         .accessibilityLabel("自定义命令编辑器")
         .accessibilityHint("输入命令模板，支持 {app} 和 {path} 占位符")
         .onDisappear {

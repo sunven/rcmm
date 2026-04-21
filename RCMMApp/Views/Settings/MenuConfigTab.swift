@@ -7,16 +7,22 @@ struct MenuConfigTab: View {
     @State private var showingAppSelection = false
     @State private var expandedItems: Set<String> = []
 
+    private enum Layout {
+        static let rowInsets = EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10)
+        static let footerPadding = EdgeInsets(top: 10, leading: 12, bottom: 12, trailing: 12)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if appState.menuEntries.isEmpty {
-                Spacer()
-                Text("暂无菜单项")
-                    .foregroundStyle(.secondary)
-                Text("点击下方按钮添加应用")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                Spacer()
+                VStack(spacing: 4) {
+                    Text("暂无菜单项")
+                        .foregroundStyle(.secondary)
+                    Text("点击下方按钮添加应用")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List {
                     ForEach(Array(appState.menuEntries.enumerated()), id: \.element.id) { index, entry in
@@ -32,6 +38,8 @@ struct MenuConfigTab: View {
                                 position: index + 1,
                                 total: appState.menuEntries.count
                             )
+                            .listRowInsets(Layout.rowInsets)
+                            .listRowSeparator(.hidden)
                         case .custom(let config):
                             DisclosureGroup(isExpanded: expandedBinding(for: entry.id)) {
                                 CommandEditor(
@@ -42,6 +50,7 @@ struct MenuConfigTab: View {
                                         appState.updateCustomCommand(for: config.id, command: command)
                                     }
                                 )
+                                .padding(.top, 4)
                             } label: {
                                 AppListRow(
                                     menuItem: config,
@@ -55,6 +64,8 @@ struct MenuConfigTab: View {
                                     total: appState.menuEntries.count
                                 )
                             }
+                            .listRowInsets(Layout.rowInsets)
+                            .listRowSeparator(.hidden)
                         }
                     }
                     .onMove { source, destination in
@@ -65,22 +76,24 @@ struct MenuConfigTab: View {
 
             Divider()
 
-            HStack {
+            HStack(spacing: 8) {
                 Button("添加应用") {
                     showingAppSelection = true
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.small)
                 .accessibilityLabel("添加应用到右键菜单")
 
                 Button("手动添加") {
                     selectManually()
                 }
                 .buttonStyle(.bordered)
+                .controlSize(.small)
                 .accessibilityLabel("手动选择应用文件")
 
                 Spacer()
             }
-            .padding()
+            .padding(Layout.footerPadding)
         }
         .sheet(isPresented: $showingAppSelection) {
             AppSelectionSheet()
