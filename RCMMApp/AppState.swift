@@ -38,8 +38,10 @@ final class AppState {
     private let healthCheckInterval: TimeInterval = 1800 // 30 分钟
 
     @ObservationIgnored private var updatePromptWindow: NSWindow?
+    @ObservationIgnored private var updatePromptCloseObserver: Any?
     @ObservationIgnored private var dismissedUpdateDisplayVersion: String?
     @ObservationIgnored private var hasScheduledStartupUpdateCheck = false
+    @ObservationIgnored private var shouldHideToMenuBarAfterUpdatePromptCloses = true
     @ObservationIgnored private var sparkleUpdater: SparkleUpdaterService?
     @ObservationIgnored private let updateFeedClient = UpdateFeedClient()
     private let configService = SharedConfigService()
@@ -211,15 +213,15 @@ final class AppState {
 
     func performUpdatePrimaryAction() {
         guard case .available(let item, let eligibility) = updateState else { return }
-
-        updatePromptWindow?.close()
-        updatePromptWindow = nil
-
         switch eligibility {
         case .inPlaceInstall:
+            shouldHideToMenuBarAfterUpdatePromptCloses = false
+            closeUpdatePromptWindow()
             updateState = .installing(item)
             sparkleUpdater?.beginInteractiveUpdate()
         case .manualInstall(_, let fallbackURL):
+            shouldHideToMenuBarAfterUpdatePromptCloses = true
+            closeUpdatePromptWindow()
             NSWorkspace.shared.open(fallbackURL)
         }
     }
@@ -284,6 +286,10 @@ final class AppState {
     }
 
     private func showUpdatePrompt(for item: DevAppcastItem, eligibility: UpdateInstallEligibility) {
+        replaceExistingUpdatePromptWindow()
+        ActivationPolicyManager.activateAsRegularApp()
+        shouldHideToMenuBarAfterUpdatePromptCloses = true
+
         let primaryButtonTitle: String
         switch eligibility {
         case .inPlaceInstall:
@@ -310,10 +316,22 @@ final class AppState {
             backing: .buffered,
             defer: false
         )
+        window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: contentView)
         window.center()
         window.title = "发现新版本"
+        updatePromptCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self, weak window] _ in
+            Task { @MainActor in
+                guard let self, let window else { return }
+                self.handleUpdatePromptWindowClosed(window)
+            }
+        }
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         updatePromptWindow = window
     }
 
@@ -321,8 +339,45 @@ final class AppState {
         if case .available(let item, _) = updateState {
             dismissedUpdateDisplayVersion = item.version.displayVersion
         }
-        updatePromptWindow?.close()
+        shouldHideToMenuBarAfterUpdatePromptCloses = true
+        closeUpdatePromptWindow()
+    }
+
+    private func replaceExistingUpdatePromptWindow() {
+        guard let window = updatePromptWindow else { return }
+        if let observer = updatePromptCloseObserver {
+            NotificationCenter.default.removeObserver(observer)
+            updatePromptCloseObserver = nil
+        }
         updatePromptWindow = nil
+        window.close()
+    }
+
+    private func closeUpdatePromptWindow() {
+        updatePromptWindow?.close()
+    }
+
+    private func handleUpdatePromptWindowClosed(_ window: NSWindow) {
+        if let observer = updatePromptCloseObserver {
+            NotificationCenter.default.removeObserver(observer)
+            updatePromptCloseObserver = nil
+        }
+        if updatePromptWindow === window {
+            updatePromptWindow = nil
+        }
+
+        let shouldHideToMenuBar = shouldHideToMenuBarAfterUpdatePromptCloses
+        shouldHideToMenuBarAfterUpdatePromptCloses = true
+
+        guard shouldHideToMenuBar else { return }
+        guard !hasVisibleWindow(excluding: window) else { return }
+        ActivationPolicyManager.hideToMenuBar()
+    }
+
+    private func hasVisibleWindow(excluding excludedWindow: NSWindow) -> Bool {
+        NSApp.windows.contains { window in
+            window !== excludedWindow && window.isVisible
+        }
     }
 
     // MARK: - Onboarding Window
