@@ -1,7 +1,10 @@
 import AppKit
 import SwiftUI
+import RCMMShared
 
 struct AboutTab: View {
+    @Environment(AppState.self) private var appState
+
     private var appIcon: NSImage {
         NSApp.applicationIconImage
     }
@@ -25,6 +28,30 @@ struct AboutTab: View {
                 Text("Right Click Menu Manager")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+
+                Text("版本 \(appState.currentDisplayVersion)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 10) {
+                Text(appState.updateStatusText)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                HStack(spacing: 10) {
+                    Button("检查更新") {
+                        appState.checkForUpdatesManually()
+                    }
+
+                    if appState.canPerformUpdatePrimaryAction {
+                        Button(appState.updatePrimaryActionTitle) {
+                            appState.performUpdatePrimaryAction()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
             }
 
             Spacer()

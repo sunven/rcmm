@@ -3,6 +3,15 @@ import os.log
 import RCMMShared
 import SwiftUI
 
+enum AppUpdateState: Equatable {
+    case idle
+    case checking
+    case current(lastCheckedAt: Date)
+    case available(DevAppcastItem, UpdateInstallEligibility)
+    case failed(String)
+    case installing(DevAppcastItem)
+}
+
 @Observable
 @MainActor
 final class AppState {
@@ -12,6 +21,8 @@ final class AppState {
     var extensionStatus: ExtensionStatus = .unknown
     var errorRecords: [ErrorRecord] = []
     var autoRepairMessage: String? = nil
+    var currentDisplayVersion = "未知版本"
+    var updateState: AppUpdateState = .idle
 
     var isOnboardingCompleted: Bool {
         didSet {
@@ -26,6 +37,13 @@ final class AppState {
     private var healthCheckTimer: Timer?
     private let healthCheckInterval: TimeInterval = 1800 // 30 分钟
 
+    @ObservationIgnored private var updatePromptWindow: NSWindow?
+    @ObservationIgnored private var updatePromptCloseObserver: Any?
+    @ObservationIgnored private var dismissedUpdateDisplayVersion: String?
+    @ObservationIgnored private var hasScheduledStartupUpdateCheck = false
+    @ObservationIgnored private var shouldHideToMenuBarAfterUpdatePromptCloses = true
+    @ObservationIgnored private var sparkleUpdater: SparkleUpdaterService?
+    @ObservationIgnored private let updateFeedClient = UpdateFeedClient()
     private let configService = SharedConfigService()
     private let errorQueue = SharedErrorQueue()
     private var hasTriggeredAutoRepair = false
@@ -40,6 +58,11 @@ final class AppState {
 
         guard !forPreview else { return }
 
+        if let bundleInfo = try? AppBundleUpdateInfo.current() {
+            currentDisplayVersion = bundleInfo.displayVersion
+        }
+        sparkleUpdater = SparkleUpdaterService()
+
         loadMenuEntries()
         checkExtensionStatus()
         startHealthMonitoring()
@@ -49,6 +72,8 @@ final class AppState {
                 try? await Task.sleep(for: .milliseconds(300))
                 self.showOnboardingIfNeeded()
             }
+        } else {
+            scheduleStartupUpdateCheckIfNeeded()
         }
     }
 
@@ -136,6 +161,225 @@ final class AppState {
         healthCheckTimer = nil
     }
 
+    // MARK: - Updates
+
+    var updateStatusText: String {
+        switch updateState {
+        case .idle:
+            return "可以在这里手动检查更新。"
+        case .checking:
+            return "正在检查更新…"
+        case .current(let lastCheckedAt):
+            return "当前已是最新版本，上次检查时间：\(lastCheckedAt.formatted(date: .numeric, time: .shortened))"
+        case .available(let item, let eligibility):
+            switch eligibility {
+            case .inPlaceInstall:
+                return "发现新版本 \(item.version.displayVersion)，可以直接安装。"
+            case .manualInstall(let reason, _):
+                return "发现新版本 \(item.version.displayVersion)。\(reason)"
+            }
+        case .failed(let message):
+            return message
+        case .installing(let item):
+            return "正在准备安装 \(item.version.displayVersion)…"
+        }
+    }
+
+    var canPerformUpdatePrimaryAction: Bool {
+        if case .available = updateState {
+            return true
+        }
+        return false
+    }
+
+    var updatePrimaryActionTitle: String {
+        guard case .available(_, let eligibility) = updateState else {
+            return "检查更新"
+        }
+
+        switch eligibility {
+        case .inPlaceInstall:
+            return "立即更新"
+        case .manualInstall:
+            return "打开下载页"
+        }
+    }
+
+    func checkForUpdatesManually() {
+        Task {
+            await performUpdateCheck(silent: false)
+        }
+    }
+
+    func performUpdatePrimaryAction() {
+        guard case .available(let item, let eligibility) = updateState else { return }
+        switch eligibility {
+        case .inPlaceInstall:
+            shouldHideToMenuBarAfterUpdatePromptCloses = false
+            closeUpdatePromptWindow()
+            updateState = .installing(item)
+            sparkleUpdater?.beginInteractiveUpdate()
+        case .manualInstall(_, let fallbackURL):
+            shouldHideToMenuBarAfterUpdatePromptCloses = true
+            closeUpdatePromptWindow()
+            NSWorkspace.shared.open(fallbackURL)
+        }
+    }
+
+    private func performUpdateCheck(silent: Bool) async {
+        updateState = .checking
+
+        do {
+            let bundleInfo = try AppBundleUpdateInfo.current()
+            currentDisplayVersion = bundleInfo.displayVersion
+
+            let latestItem = try await updateFeedClient.fetchLatestItem(feedURL: bundleInfo.feedURL)
+            let eligibility = UpdatePolicy.installEligibility(
+                bundlePath: bundleInfo.bundlePath,
+                releasePageURL: bundleInfo.releasePageURL
+            )
+
+            if latestItem.version > bundleInfo.currentVersion {
+                updateState = .available(latestItem, eligibility)
+            } else if !silent {
+                updateState = .current(lastCheckedAt: Date())
+            } else {
+                updateState = .idle
+            }
+        } catch {
+            updateState = .failed("检查更新失败：\(error.localizedDescription)")
+        }
+    }
+
+    private func scheduleStartupUpdateCheckIfNeeded() {
+        guard !hasScheduledStartupUpdateCheck, isOnboardingCompleted else { return }
+        hasScheduledStartupUpdateCheck = true
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            await performStartupUpdateCheck()
+        }
+    }
+
+    private func performStartupUpdateCheck() async {
+        do {
+            let bundleInfo = try AppBundleUpdateInfo.current()
+            let latestItem = try await updateFeedClient.fetchLatestItem(feedURL: bundleInfo.feedURL)
+            let decision = UpdatePolicy.startupDecision(
+                latestItem: latestItem,
+                currentVersion: bundleInfo.currentVersion,
+                bundlePath: bundleInfo.bundlePath,
+                dismissedDisplayVersion: dismissedUpdateDisplayVersion,
+                releasePageURL: bundleInfo.releasePageURL
+            )
+
+            switch decision {
+            case .none:
+                updateState = .idle
+            case .present(let item, let eligibility):
+                updateState = .available(item, eligibility)
+                showUpdatePrompt(for: item, eligibility: eligibility)
+            }
+        } catch {
+            updateState = .failed("检查更新失败：\(error.localizedDescription)")
+        }
+    }
+
+    private func showUpdatePrompt(for item: DevAppcastItem, eligibility: UpdateInstallEligibility) {
+        replaceExistingUpdatePromptWindow()
+        ActivationPolicyManager.activateAsRegularApp()
+        shouldHideToMenuBarAfterUpdatePromptCloses = true
+
+        let primaryButtonTitle: String
+        switch eligibility {
+        case .inPlaceInstall:
+            primaryButtonTitle = "立即更新"
+        case .manualInstall:
+            primaryButtonTitle = "打开下载页"
+        }
+
+        let contentView = UpdatePromptView(
+            version: item.version.displayVersion,
+            releaseNotesURL: item.releaseNotesURL,
+            primaryButtonTitle: primaryButtonTitle,
+            onPrimaryAction: { [weak self] in
+                self?.performUpdatePrimaryAction()
+            },
+            onLater: { [weak self] in
+                self?.dismissAvailableUpdateForSession()
+            }
+        )
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 220),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: contentView)
+        window.center()
+        window.title = "发现新版本"
+        updatePromptCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self, weak window] _ in
+            Task { @MainActor in
+                guard let self, let window else { return }
+                self.handleUpdatePromptWindowClosed(window)
+            }
+        }
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        updatePromptWindow = window
+    }
+
+    func dismissAvailableUpdateForSession() {
+        if case .available(let item, _) = updateState {
+            dismissedUpdateDisplayVersion = item.version.displayVersion
+        }
+        shouldHideToMenuBarAfterUpdatePromptCloses = true
+        closeUpdatePromptWindow()
+    }
+
+    private func replaceExistingUpdatePromptWindow() {
+        guard let window = updatePromptWindow else { return }
+        if let observer = updatePromptCloseObserver {
+            NotificationCenter.default.removeObserver(observer)
+            updatePromptCloseObserver = nil
+        }
+        updatePromptWindow = nil
+        window.close()
+    }
+
+    private func closeUpdatePromptWindow() {
+        updatePromptWindow?.close()
+    }
+
+    private func handleUpdatePromptWindowClosed(_ window: NSWindow) {
+        if let observer = updatePromptCloseObserver {
+            NotificationCenter.default.removeObserver(observer)
+            updatePromptCloseObserver = nil
+        }
+        if updatePromptWindow === window {
+            updatePromptWindow = nil
+        }
+
+        let shouldHideToMenuBar = shouldHideToMenuBarAfterUpdatePromptCloses
+        shouldHideToMenuBarAfterUpdatePromptCloses = true
+
+        guard shouldHideToMenuBar else { return }
+        guard !hasVisibleWindow(excluding: window) else { return }
+        ActivationPolicyManager.hideToMenuBar()
+    }
+
+    private func hasVisibleWindow(excluding excludedWindow: NSWindow) -> Bool {
+        NSApp.windows.contains { window in
+            window !== excludedWindow && window.isVisible
+        }
+    }
+
     // MARK: - Onboarding Window
 
     func showOnboardingIfNeeded() {
@@ -184,6 +428,7 @@ final class AppState {
         onboardingWindow?.close()
         onboardingWindow = nil
         ActivationPolicyManager.hideToMenuBar()
+        scheduleStartupUpdateCheckIfNeeded()
     }
 
     // MARK: - Menu Items

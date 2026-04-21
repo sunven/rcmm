@@ -14,7 +14,7 @@ enum ActivationPolicyManager {
     @MainActor
     static func activateAsRegularApp() {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
+        NSApp.activate(ignoringOtherApps: true)
         logger.debug("ActivationPolicy → .regular")
     }
 

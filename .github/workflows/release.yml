@@ -29,6 +29,8 @@ on:
 # ---------------------------------------------------------------------------
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 # ---------------------------------------------------------------------------
 # 并发控制：
@@ -42,7 +44,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build and Release Development DMG
+    name: Build and Release Development Assets
     # -----------------------------------------------------------------------
     # 运行环境：GitHub 提供的最新 macOS runner
     # 必须使用 macOS，因为 xcodebuild 只能在 macOS 上运行
@@ -65,6 +67,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
 
       # =====================================================================
       # Step 2: 缓存 SPM（Swift Package Manager）依赖
@@ -118,20 +123,30 @@ jobs:
       #
       # echo "version=$VERSION" >> $GITHUB_OUTPUT — 将版本号写入步骤输出
       # =====================================================================
-      - name: Extract version from tag
-        id: version
+      - name: Normalize version strings
+        id: normalized
         run: |
-          if [[ ! "$GITHUB_REF" =~ ^refs/tags/v ]]; then
-            echo "Error: Not a valid version tag (expected refs/tags/v*-dev*)"
-            exit 1
-          fi
-          VERSION=${GITHUB_REF#refs/tags/v}
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-dev(\.[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$ ]]; then
-            echo "Error: Invalid development semver format: $VERSION"
-            exit 1
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION"
+          eval "$(bash scripts/normalize-dev-version.sh "${GITHUB_REF#refs/tags/}")"
+          echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_version=$SHORT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "bundle_version=$BUNDLE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Normalized version: $DISPLAY_VERSION ($BUNDLE_VERSION)"
+
+      - name: Resolve package dependencies
+        run: |
+          mkdir -p build
+          xcodebuild -resolvePackageDependencies \
+            -project rcmm.xcodeproj \
+            -scheme rcmm \
+            -clonedSourcePackagesDirPath build/SourcePackages
+
+      - name: Import Sparkle private key
+        env:
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        run: |
+          mkdir -p build/sparkle
+          printf '%s' "$SPARKLE_PRIVATE_ED_KEY" > build/sparkle/private_key.pem
+          build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys -f build/sparkle/private_key.pem
 
       # =====================================================================
       # Step 5: 构建 Xcode Archive
@@ -167,6 +182,10 @@ jobs:
             -scheme rcmm \
             -configuration Release \
             -archivePath build/rcmm.xcarchive \
+            -clonedSourcePackagesDirPath build/SourcePackages \
+            MARKETING_VERSION=${{ steps.normalized.outputs.short_version }} \
+            CURRENT_PROJECT_VERSION=${{ steps.normalized.outputs.bundle_version }} \
+            RCMM_DISPLAY_VERSION=${{ steps.normalized.outputs.display_version }} \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -304,31 +323,59 @@ jobs:
             --icon "rcmm.app" 200 190 \
             --hide-extension "rcmm.app" \
             --app-drop-link 600 185 \
-            "rcmm-dev-${{ steps.version.outputs.version }}.dmg" \
+            "rcmm-dev-${{ steps.normalized.outputs.display_version }}.dmg" \
             "build/dmg-root/"
 
           # Verify DMG was created
-          if [ ! -f "rcmm-dev-${{ steps.version.outputs.version }}.dmg" ]; then
+          if [ ! -f "rcmm-dev-${{ steps.normalized.outputs.display_version }}.dmg" ]; then
             echo "::error::DMG creation failed"
             ls -la . || echo "Current directory listing failed"
             exit 1
           fi
           echo "✓ DMG created successfully"
 
-      # =====================================================================
-      # Step 11: 生成 SHA-256 校验和
-      # =====================================================================
-      # 生成 DMG 文件的 SHA-256 哈希值，保存到 checksums.txt
-      # 用户下载 DMG 后可通过以下命令验证文件完整性，防止传输中被篡改：
-      #   shasum -a 256 -c checksums.txt
-      #
-      # checksums.txt 会作为 Release 附件一同上传
-      # =====================================================================
+      - name: Create ZIP update archive
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            build/rcmm.app \
+            rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip
+
+      - name: Sign ZIP update archive
+        id: sparkle_signature
+        run: |
+          signature="$(
+            build/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update \
+              --ed-key-file build/sparkle/private_key.pem \
+              -p \
+              rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip
+          )"
+          echo "signature=$signature" >> "$GITHUB_OUTPUT"
+
       - name: Generate checksums
         run: |
-          shasum -a 256 rcmm-dev-${{ steps.version.outputs.version }}.dmg > checksums.txt
+          shasum -a 256 rcmm-dev-${{ steps.normalized.outputs.display_version }}.dmg > checksums.txt
+          shasum -a 256 rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip >> checksums.txt
           cat checksums.txt
           echo "✓ Checksum generated"
+
+      - name: Build appcast payload
+        run: |
+          mkdir -p build/pages/appcasts
+          archive_url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip"
+          notes_url="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          archive_length="$(stat -f%z "rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip")"
+          bash scripts/render-dev-appcast.sh \
+            "${{ steps.normalized.outputs.display_version }}" \
+            "${{ steps.normalized.outputs.bundle_version }}" \
+            "$archive_url" \
+            "$archive_length" \
+            "${{ steps.sparkle_signature.outputs.signature }}" \
+            "$notes_url" > build/pages/appcasts/dev.xml
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/pages
 
       # =====================================================================
       # Step 12: 创建 GitHub Development Prerelease
@@ -360,14 +407,16 @@ jobs:
           if gh release view ${{ github.ref_name }} &>/dev/null; then
             echo "Release already exists, uploading assets..."
             gh release upload ${{ github.ref_name }} \
-              rcmm-dev-${{ steps.version.outputs.version }}.dmg \
+              rcmm-dev-${{ steps.normalized.outputs.display_version }}.dmg \
+              rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip \
               checksums.txt \
               --clobber
           else
             gh release create ${{ github.ref_name }} \
-              rcmm-dev-${{ steps.version.outputs.version }}.dmg \
+              rcmm-dev-${{ steps.normalized.outputs.display_version }}.dmg \
+              rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip \
               checksums.txt \
-              --title "rcmm dev ${{ steps.version.outputs.version }}" \
+              --title "rcmm dev ${{ steps.normalized.outputs.display_version }}" \
               --prerelease \
               --generate-notes
           fi
@@ -395,3 +444,15 @@ jobs:
             build/
             DerivedData/
           retention-days: 7
+
+  deploy_pages:
+    name: Deploy Appcast to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
