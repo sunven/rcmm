@@ -11,11 +11,11 @@ A macOS Finder context menu manager that allows users to open any directory dire
 
 ## Development Release Process
 
-This project uses GitHub Actions to produce internal development DMG builds.
+This project uses GitHub Actions to produce internal development DMG + ZIP builds and a Sparkle appcast feed.
 
 ### Creating a New Development Version
 
-1. Ensure all changes are committed to the main branch
+1. Ensure all changes are committed to the branch you want to tag
 2. Create and push a version tag:
    ```bash
    git tag v1.0.0-dev.1
@@ -25,8 +25,23 @@ This project uses GitHub Actions to produce internal development DMG builds.
    - Build a development version
    - Ad-hoc sign the extracted `.app` bundle
    - Generate a development `.dmg` installer
+   - Generate a development `.zip` update archive
+   - Sign the ZIP for Sparkle
+   - Publish `dev.xml` to GitHub Pages
    - Create a GitHub prerelease
-   - Upload the DMG as a release asset
+
+### Development Auto-Update
+
+- Feed URL: `https://sunven.github.io/rcmm/appcasts/dev.xml`
+- Manual install artifact: DMG
+- In-app update artifact: ZIP
+
+### Testing the Updater
+
+1. Install an older development build into `/Applications`
+2. Push a newer `v*-dev*` tag
+3. Open rcmm > Settings > 关于 > 检查更新
+4. Confirm `立即更新` downloads and relaunches the app
 
 ### Download
 
@@ -89,7 +104,7 @@ xcodebuild -project rcmm.xcodeproj -scheme RCMMApp -configuration Debug build
 xcodebuild -project rcmm.xcodeproj -scheme RCMMFinderExtension -configuration Debug build
 
 # Run tests (using Swift Testing framework, not XCTest)
-xcodebuild -project rcmm.xcodeproj -scheme RCMMSharedTests test
+xcodebuild -project rcmm.xcodeproj -scheme RCMMShared test
 ```
 
 ### Testing the Finder Extension
