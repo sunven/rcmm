@@ -37,6 +37,9 @@ final class AppState {
     private var healthCheckTimer: Timer?
     private let healthCheckInterval: TimeInterval = 1800 // 30 分钟
 
+    @ObservationIgnored private var updatePromptWindow: NSWindow?
+    @ObservationIgnored private var dismissedUpdateDisplayVersion: String?
+    @ObservationIgnored private var hasScheduledStartupUpdateCheck = false
     @ObservationIgnored private var sparkleUpdater: SparkleUpdaterService?
     @ObservationIgnored private let updateFeedClient = UpdateFeedClient()
     private let configService = SharedConfigService()
@@ -67,6 +70,8 @@ final class AppState {
                 try? await Task.sleep(for: .milliseconds(300))
                 self.showOnboardingIfNeeded()
             }
+        } else {
+            scheduleStartupUpdateCheckIfNeeded()
         }
     }
 
@@ -207,6 +212,9 @@ final class AppState {
     func performUpdatePrimaryAction() {
         guard case .available(let item, let eligibility) = updateState else { return }
 
+        updatePromptWindow?.close()
+        updatePromptWindow = nil
+
         switch eligibility {
         case .inPlaceInstall:
             updateState = .installing(item)
@@ -239,6 +247,82 @@ final class AppState {
         } catch {
             updateState = .failed("检查更新失败：\(error.localizedDescription)")
         }
+    }
+
+    private func scheduleStartupUpdateCheckIfNeeded() {
+        guard !hasScheduledStartupUpdateCheck, isOnboardingCompleted else { return }
+        hasScheduledStartupUpdateCheck = true
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            await performStartupUpdateCheck()
+        }
+    }
+
+    private func performStartupUpdateCheck() async {
+        do {
+            let bundleInfo = try AppBundleUpdateInfo.current()
+            let latestItem = try await updateFeedClient.fetchLatestItem(feedURL: bundleInfo.feedURL)
+            let decision = UpdatePolicy.startupDecision(
+                latestItem: latestItem,
+                currentVersion: bundleInfo.currentVersion,
+                bundlePath: bundleInfo.bundlePath,
+                dismissedDisplayVersion: dismissedUpdateDisplayVersion,
+                releasePageURL: bundleInfo.releasePageURL
+            )
+
+            switch decision {
+            case .none:
+                updateState = .idle
+            case .present(let item, let eligibility):
+                updateState = .available(item, eligibility)
+                showUpdatePrompt(for: item, eligibility: eligibility)
+            }
+        } catch {
+            updateState = .failed("检查更新失败：\(error.localizedDescription)")
+        }
+    }
+
+    private func showUpdatePrompt(for item: DevAppcastItem, eligibility: UpdateInstallEligibility) {
+        let primaryButtonTitle: String
+        switch eligibility {
+        case .inPlaceInstall:
+            primaryButtonTitle = "立即更新"
+        case .manualInstall:
+            primaryButtonTitle = "打开下载页"
+        }
+
+        let contentView = UpdatePromptView(
+            version: item.version.displayVersion,
+            releaseNotesURL: item.releaseNotesURL,
+            primaryButtonTitle: primaryButtonTitle,
+            onPrimaryAction: { [weak self] in
+                self?.performUpdatePrimaryAction()
+            },
+            onLater: { [weak self] in
+                self?.dismissAvailableUpdateForSession()
+            }
+        )
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 220),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = NSHostingView(rootView: contentView)
+        window.center()
+        window.title = "发现新版本"
+        window.makeKeyAndOrderFront(nil)
+        updatePromptWindow = window
+    }
+
+    func dismissAvailableUpdateForSession() {
+        if case .available(let item, _) = updateState {
+            dismissedUpdateDisplayVersion = item.version.displayVersion
+        }
+        updatePromptWindow?.close()
+        updatePromptWindow = nil
     }
 
     // MARK: - Onboarding Window
@@ -289,6 +373,7 @@ final class AppState {
         onboardingWindow?.close()
         onboardingWindow = nil
         ActivationPolicyManager.hideToMenuBar()
+        scheduleStartupUpdateCheckIfNeeded()
     }
 
     // MARK: - Menu Items
