@@ -256,9 +256,9 @@ jobs:
 
             printf '%s' "$base64_value" | decode_base64 > "$temp_profile"
             security cms -D -i "$temp_profile" > "$profile_plist"
-            uuid="$(plutil -extract UUID raw -o - "$profile_plist")"
-            application_identifier="$(plutil -extract Entitlements.application-identifier raw -o - "$profile_plist")"
-            team_identifier="$(plutil -extract TeamIdentifier.0 raw -o - "$profile_plist")"
+            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$profile_plist")"
+            application_identifier="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$profile_plist")"
+            team_identifier="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.team-identifier' "$profile_plist")"
 
             if [ "$team_identifier" != "K65J6JBW5K" ]; then
               echo "::error::Provisioning profile team mismatch: expected K65J6JBW5K, got $team_identifier"
