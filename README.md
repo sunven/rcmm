@@ -15,7 +15,7 @@ This project uses GitHub Actions to produce internal development DMG + ZIP build
 
 ### Creating a New Development Version
 
-1. Ensure all changes are committed to the branch you want to tag
+1. Ensure all changes are committed to the branch you want to tag, and that this release will point to a new commit SHA
 2. Create and push a version tag:
    ```bash
    git tag v1.0.0-dev.1
@@ -30,6 +30,18 @@ This project uses GitHub Actions to produce internal development DMG + ZIP build
    - Publish `dev.xml` to GitHub Pages
    - Create a GitHub prerelease
 
+### 开发版发布操作规约
+
+- 当前 GitHub Pages 的 workflow 发布模式下，如果两个 `v*-dev*` tag 指向同一个提交，公开 `dev.xml` 可能继续返回上一个版本。
+- 当前操作规约：每个开发版 tag 都必须对应一个新的 commit。不要对同一提交连续发布多个开发版 tag，并期待 appcast 自动前进。
+- 如果只是重发或补发、没有代码变化，先创建空提交，再创建新的 tag：
+  ```bash
+  git commit --allow-empty -m "chore(release): prepare next dev tag"
+  git tag v1.0.0-dev.2
+  git push origin main
+  git push origin v1.0.0-dev.2
+  ```
+
 ### Development Auto-Update
 
 - Feed URL: `https://sunven.github.io/rcmm/appcasts/dev.xml`
@@ -39,7 +51,7 @@ This project uses GitHub Actions to produce internal development DMG + ZIP build
 ### Testing the Updater
 
 1. Install an older development build into `/Applications`
-2. Push a newer `v*-dev*` tag
+2. Push a newer `v*-dev*` tag from a newer commit
 3. Open rcmm > Settings > 关于 > 检查更新
 4. Confirm `立即更新` downloads and relaunches the app
 
