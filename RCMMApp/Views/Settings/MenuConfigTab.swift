@@ -84,31 +84,12 @@ struct MenuConfigTab: View {
                 .controlSize(.small)
                 .accessibilityLabel("添加应用到右键菜单")
 
-                Button("手动添加") {
-                    selectManually()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .accessibilityLabel("手动选择应用文件")
-
                 Spacer()
             }
             .padding(Layout.footerPadding)
         }
         .sheet(isPresented: $showingAppSelection) {
             AppSelectionSheet()
-        }
-    }
-
-    private func selectManually() {
-        Task { @MainActor in
-            let discoveryService = AppDiscoveryService()
-            if let appInfo = await discoveryService.selectApplicationManually() {
-                guard !appState.containsApp(bundleId: appInfo.bundleId, appPath: appInfo.path) else {
-                    return
-                }
-                appState.addMenuItem(from: appInfo)
-            }
         }
     }
 
