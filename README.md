@@ -9,26 +9,61 @@ A macOS Finder context menu manager that allows users to open any directory dire
 - Support for custom launch commands
 - Menu bar application for easy configuration
 
-## Development Release Process
+## 开发版发布
 
-This project uses GitHub Actions to produce internal development DMG + ZIP builds and a Sparkle appcast feed.
+项目通过 GitHub Actions 生成内部开发版 DMG、ZIP 更新包，以及 Sparkle appcast。
 
-### Creating a New Development Version
+### 创建新的开发版
 
-1. Ensure all changes are committed to the branch you want to tag, and that this release will point to a new commit SHA
-2. Create and push a version tag:
+1. 确保要发布的改动已经提交到目标分支，并且这次发布对应的是一个新的 commit SHA
+2. 创建并推送版本 tag：
    ```bash
    git tag v1.0.0-dev.1
    git push origin v1.0.0-dev.1
    ```
-3. GitHub Actions will automatically:
-   - Build a development version
-   - Ad-hoc sign the extracted `.app` bundle
-   - Generate a development `.dmg` installer
-   - Generate a development `.zip` update archive
-   - Sign the ZIP for Sparkle
-   - Publish `dev.xml` to GitHub Pages
-   - Create a GitHub prerelease
+3. GitHub Actions 会自动：
+   - 构建保留 Finder Sync entitlements 的开发签名版本
+   - 生成开发版 `.dmg` 安装包
+   - 生成开发版 `.zip` 更新包
+   - 为 ZIP 生成 Sparkle 签名
+   - 将 `dev.xml` 发布到 GitHub Pages
+   - 创建 GitHub prerelease
+
+### 准备签名 secrets
+
+GitHub Actions 需要下面 5 个 secrets 才能产出可继续使用 Finder 扩展的开发版包：
+
+- `APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64`
+- `APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD`
+- `RCMM_APP_PROVISION_PROFILE_BASE64`
+- `RCMM_EXTENSION_PROVISION_PROFILE_BASE64`
+- `KEYCHAIN_PASSWORD`
+
+缺少这些 secrets 时，workflow 会直接失败，而不是退回 ad-hoc 签名。因为 ad-hoc 包会让自动更新后的 Finder 扩展失效。
+
+建议按下面方式准备：
+
+1. `APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64`
+   从“钥匙串访问”导出 `Apple Development` 证书为 `.p12`，再执行：
+   ```bash
+   base64 -i rcmm-dev-cert.p12 | tr -d '\n'
+   ```
+2. `APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD`
+   导出 `.p12` 时设置的密码。
+3. `RCMM_APP_PROVISION_PROFILE_BASE64`
+   主应用 `com.sunven.rcmm` 对应的 provisioning profile 做 base64：
+   ```bash
+   base64 -i rcmm-app.provisionprofile | tr -d '\n'
+   ```
+4. `RCMM_EXTENSION_PROVISION_PROFILE_BASE64`
+   Finder 扩展 `com.sunven.rcmm.FinderExtension` 对应的 provisioning profile 做 base64：
+   ```bash
+   base64 -i rcmm-extension.provisionprofile | tr -d '\n'
+   ```
+5. `KEYCHAIN_PASSWORD`
+   workflow 里临时 keychain 使用的任意强密码即可。
+
+证书和两个 provisioning profile 都必须属于 Team ID `K65J6JBW5K`，并且 bundle identifier 要分别匹配主应用和 Finder 扩展。
 
 ### 开发版发布操作规约
 
@@ -42,61 +77,61 @@ This project uses GitHub Actions to produce internal development DMG + ZIP build
   git push origin v1.0.0-dev.2
   ```
 
-### Development Auto-Update
+### 开发版自动更新
 
 - Feed URL: `https://sunven.github.io/rcmm/appcasts/dev.xml`
-- Manual install artifact: DMG
-- In-app update artifact: ZIP
+- 手动安装包：DMG
+- 应用内更新包：ZIP
 
-### Testing the Updater
+### 验证更新流程
 
-1. Install an older development build into `/Applications`
-2. Push a newer `v*-dev*` tag from a newer commit
-3. Open rcmm > Settings > 关于 > 检查更新
-4. Confirm `立即更新` downloads and relaunches the app
+1. 先把一个较旧的开发版安装到 `/Applications`
+2. 基于更新后的 commit 推送一个新的 `v*-dev*` tag
+3. 打开 rcmm > 设置 > 关于 > 检查更新
+4. 确认 `立即更新` 能正常下载、安装并重启应用
 
-### Download
+### 下载
 
-Visit the [Releases page](https://github.com/sunven/rcmm/releases) to download the latest development DMG file.
+可以在 [Releases 页面](https://github.com/sunven/rcmm/releases) 下载最新的开发版 DMG。
 
-### Installation
+### 安装
 
-1. Download `rcmm-dev-x.x.x.dmg`
-2. Open the DMG file
-3. Drag rcmm.app to the Applications folder
-4. On first run, right-click the app and select "Open" because this is an ad-hoc signed development build, not a notarized public release
-5. If macOS still blocks launch for your local test machine, run:
+1. 下载 `rcmm-dev-x.x.x.dmg`
+2. 打开 DMG
+3. 把 `rcmm.app` 拖到 `Applications` 目录
+4. 首次运行时，如果系统拦截，请右键应用后选择“打开”；这是内部开发签名包，不是已 notarize 的公开发布版
+5. 如果当前测试机仍然阻止启动，可执行：
    ```bash
    xattr -dr com.apple.quarantine /Applications/rcmm.app
    ```
 
-### Build a Local Development DMG
+### 本地构建开发版 DMG
 
-Prerequisite:
+前置依赖：
 
 ```bash
 brew install create-dmg
 ```
 
-Run:
+直接执行：
 
 ```bash
 bash scripts/build-dev-dmg.sh
 ```
 
-Or specify a version explicitly:
+也可以显式指定版本号：
 
 ```bash
 bash scripts/build-dev-dmg.sh 1.0.0-dev.1
 ```
 
-Fallback to the old ad-hoc mode only when you specifically need it:
+只有在你明确需要回退时，才使用旧的 ad-hoc 模式：
 
 ```bash
 bash scripts/build-dev-dmg.sh --unsigned 1.0.0-dev.1
 ```
 
-Output files are written to `dist/`.
+输出文件会写到 `dist/` 目录。
 
 ## Development
 

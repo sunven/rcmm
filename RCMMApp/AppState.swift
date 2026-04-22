@@ -19,6 +19,7 @@ final class AppState {
     var discoveredApps: [AppInfo] = []
     var popoverState: PopoverState = .normal
     var extensionStatus: ExtensionStatus = .unknown
+    var extensionStatusDetail: String? = nil
     var errorRecords: [ErrorRecord] = []
     var autoRepairMessage: String? = nil
     var currentDisplayVersion = "未知版本"
@@ -123,16 +124,21 @@ final class AppState {
 
     /// 检测 Finder 扩展状态，仅在状态变化时更新 extensionStatus 和 popoverState
     func checkExtensionStatus() {
-        let newStatus = PluginKitService.checkHealth()
+        let report = PluginKitService.healthReport()
+        let newStatus = report.status
+        let newDetail = PluginKitService.detailMessage(for: report)
         let oldStatus = extensionStatus
 
-        guard oldStatus != newStatus else { return }
+        guard oldStatus != newStatus || extensionStatusDetail != newDetail else { return }
 
         extensionStatus = newStatus
+        extensionStatusDetail = newDetail
 
         switch newStatus {
         case .enabled:
             popoverState = .normal
+        case .otherInstallationEnabled:
+            popoverState = .healthWarning
         case .disabled:
             popoverState = .healthWarning
         case .unknown:

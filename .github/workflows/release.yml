@@ -4,8 +4,9 @@
 # 自动化发布流程：当推送 v* 格式的 tag 时，自动构建 macOS 开发版应用并创建 GitHub Prerelease。
 #
 # 整体流程：
-#   推送 v* tag → 拉取代码 → 构建 .xcarchive → 提取 .app → 验证结构
-#   → ad-hoc 重签名 → 打包 .dmg → 生成校验和 → 创建 GitHub Prerelease 并上传附件
+#   推送 v* tag → 拉取代码 → 导入开发签名资产 → 构建已签名 .xcarchive
+#   → 提取 .app → 校验主应用和 Finder Extension 的签名/entitlements
+#   → 打包 .dmg/.zip → 生成校验和 → 创建 GitHub Prerelease 并上传附件
 #
 # 使用方式：
 #   git tag v1.0.0-dev.1
@@ -149,30 +150,144 @@ jobs:
           build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys -f build/sparkle/private_key.pem
 
       # =====================================================================
-      # Step 5: 构建 Xcode Archive
+      # Step 5: 校验并导入 CI 签名资产
       # =====================================================================
-      # set -e — 任何命令失败立即退出，不继续执行后续命令
+      # 自动更新后的 Finder 扩展能否继续工作，取决于发布产物是否保留
+      # Apple Development 签名，以及 team/application identifier +
+      # App Group / sandbox 这一整组 entitlements。
       #
-      # xcodebuild archive 参数说明：
-      #   -project rcmm.xcodeproj    — 指定 Xcode 工程文件
-      #   -scheme rcmm               — 指定构建 scheme
-      #   -configuration Release     — 使用 Release 配置（优化编译、去除调试信息）
-      #   -archivePath               — Archive 输出路径
-      #   CODE_SIGN_IDENTITY=""      — 清空签名身份
-      #   CODE_SIGNING_REQUIRED=NO   — 不要求代码签名
-      #   CODE_SIGNING_ALLOWED=NO    — 禁止代码签名
-      #   以上三个参数一起作用：CI 环境没有 Apple 开发者证书，先生成未签名的构建
-      #   后续步骤会对提取出来的 .app 做 ad-hoc 重签名，使 bundle 结构校验通过
+      # 这里显式要求 5 个 secrets：
+      #   - APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64
+      #   - APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD
+      #   - RCMM_APP_PROVISION_PROFILE_BASE64
+      #   - RCMM_EXTENSION_PROVISION_PROFILE_BASE64
+      #   - KEYCHAIN_PASSWORD
       #
-      # | tee build/xcodebuild.log — 同时输出到终端（CI 日志）和文件
-      #   失败时日志文件会被上传为 artifact，方便离线排查
-      #
-      # 构建后验证 .xcarchive 目录是否存在
-      # ::error:: 是 GitHub Actions 的注解语法，会在 UI 中高亮显示错误
+      # 证书导入到临时 keychain，描述文件写入 Xcode 的 Provisioning Profiles 目录。
       # =====================================================================
-      - name: Build archive
+      - name: Validate signing secrets
+        env:
+          APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64 }}
+          APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD }}
+          RCMM_APP_PROVISION_PROFILE_BASE64: ${{ secrets.RCMM_APP_PROVISION_PROFILE_BASE64 }}
+          RCMM_EXTENSION_PROVISION_PROFILE_BASE64: ${{ secrets.RCMM_EXTENSION_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          set -e
+          set -euo pipefail
+          missing=()
+          for name in \
+            APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64 \
+            APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD \
+            RCMM_APP_PROVISION_PROFILE_BASE64 \
+            RCMM_EXTENSION_PROVISION_PROFILE_BASE64 \
+            KEYCHAIN_PASSWORD
+          do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing required signing secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Install signing assets
+        env:
+          APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64 }}
+          APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD }}
+          RCMM_APP_PROVISION_PROFILE_BASE64: ${{ secrets.RCMM_APP_PROVISION_PROFILE_BASE64 }}
+          RCMM_EXTENSION_PROVISION_PROFILE_BASE64: ${{ secrets.RCMM_EXTENSION_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          keychain_path="$RUNNER_TEMP/rcmm-signing.keychain-db"
+          profiles_dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          cert_path="$RUNNER_TEMP/rcmm-dev-cert.p12"
+
+          decode_base64() {
+            if base64 --help 2>&1 | grep -q -- '--decode'; then
+              base64 --decode
+            else
+              base64 -D
+            fi
+          }
+
+          mkdir -p "$profiles_dir"
+          printf '%s' "$APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64" | decode_base64 > "$cert_path"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
+          security import "$cert_path" \
+            -k "$keychain_path" \
+            -P "$APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security \
+            -T /usr/bin/xcodebuild
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+          security default-keychain -d user -s "$keychain_path"
+
+          if ! identity_output="$(security find-identity -v -p codesigning "$keychain_path" 2>&1)"; then
+            printf '%s\n' "$identity_output"
+            echo "::error::Failed to inspect imported signing identities"
+            exit 1
+          fi
+          printf '%s\n' "$identity_output"
+          if ! printf '%s\n' "$identity_output" | grep -q 'Apple Development:'; then
+            echo "::error::Imported keychain does not contain an Apple Development signing identity"
+            exit 1
+          fi
+
+          install_profile() {
+            local base64_value="$1"
+            local expected_identifier="$2"
+            local temp_profile="$RUNNER_TEMP/$(uuidgen).provisionprofile"
+            local profile_plist="$RUNNER_TEMP/$(uuidgen).plist"
+            local uuid
+            local application_identifier
+            local team_identifier
+
+            printf '%s' "$base64_value" | decode_base64 > "$temp_profile"
+            security cms -D -i "$temp_profile" > "$profile_plist"
+            uuid="$(plutil -extract UUID raw -o - "$profile_plist")"
+            application_identifier="$(plutil -extract Entitlements.application-identifier raw -o - "$profile_plist")"
+            team_identifier="$(plutil -extract TeamIdentifier.0 raw -o - "$profile_plist")"
+
+            if [ "$team_identifier" != "K65J6JBW5K" ]; then
+              echo "::error::Provisioning profile team mismatch: expected K65J6JBW5K, got $team_identifier"
+              exit 1
+            fi
+            if [ "$application_identifier" != "$expected_identifier" ]; then
+              echo "::error::Provisioning profile bundle mismatch: expected $expected_identifier, got $application_identifier"
+              exit 1
+            fi
+
+            cp "$temp_profile" "$profiles_dir/$uuid.provisionprofile"
+            echo "Installed provisioning profile $uuid for $application_identifier"
+          }
+
+          install_profile "$RCMM_APP_PROVISION_PROFILE_BASE64" "K65J6JBW5K.com.sunven.rcmm"
+          install_profile "$RCMM_EXTENSION_PROVISION_PROFILE_BASE64" "K65J6JBW5K.com.sunven.rcmm.FinderExtension"
+
+          ls -la "$profiles_dir"
+
+      # =====================================================================
+      # Step 6: 构建已签名 Xcode Archive
+      # =====================================================================
+      # 这里不再禁用签名，也不再走 ad-hoc deep re-sign。
+      # 目标是让 archive 产出的主 app 和 Finder extension 从一开始就保留
+      # 正常的 Apple Development 签名和 entitlements。
+      # =====================================================================
+      - name: Build signed archive
+        run: |
+          set -euo pipefail
 
           # Create build directory
           mkdir -p build
@@ -186,9 +301,7 @@ jobs:
             MARKETING_VERSION=${{ steps.normalized.outputs.short_version }} \
             CURRENT_PROJECT_VERSION=${{ steps.normalized.outputs.bundle_version }} \
             RCMM_DISPLAY_VERSION=${{ steps.normalized.outputs.display_version }} \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
+            -allowProvisioningUpdates \
             | tee build/xcodebuild.log
 
           # Verify archive was created
@@ -201,29 +314,19 @@ jobs:
           echo "✓ Archive created successfully at build/rcmm.xcarchive"
 
       # =====================================================================
-      # Step 6: 从 Archive 中提取 .app 并验证结构完整性
+      # Step 7: 从 Archive 中提取 .app 并验证签名完整性
       # =====================================================================
-      # .xcarchive 是 Xcode 的标准归档格式，内部目录结构为：
-      #   rcmm.xcarchive/
-      #     Products/
-      #       Applications/
-      #         rcmm.app          ← 提取这个
-      #     dSYMs/                ← 调试符号（本步骤未使用）
-      #     Info.plist
+      # 这个步骤会验证两层条件：
+      #   1. 主应用和 Finder Extension 都是非 ad-hoc 的 Apple Development 签名
+      #   2. Finder Extension 的签名 entitlements 里仍然保留
+      #      team/application identifier + sandbox + app group
       #
-      # cp -R 递归复制整个 .app 目录到 build/ 下，供后续 create-dmg 打包
-      #
-      # 提取后验证三项关键内容，确保不会发布残缺的应用：
-      #   1. build/rcmm.app — 主应用包是否存在
-      #   2. Contents/PlugIns/RCMMFinderExtension.appex
-      #      — Finder 右键菜单扩展是否被正确嵌入（本项目核心功能）
-      #   3. Contents/Info.plist — 应用元数据文件（Bundle ID、版本号等）
-      #
-      # 任一项缺失都会输出 ::error:: 注解并终止流程，防止发布不完整的产物
+      # 这条护栏是本次修复的关键：之前 ad-hoc deep re-sign 会让 appex 丢掉
+      # entitlements，导致自动更新后的 Finder 右键菜单消失。
       # =====================================================================
-      - name: Extract and verify .app
+      - name: Extract and verify signed .app
         run: |
-          set -e
+          set -euo pipefail
           cp -R build/rcmm.xcarchive/Products/Applications/rcmm.app build/rcmm.app
 
           if [ ! -d "build/rcmm.app" ]; then
@@ -241,28 +344,35 @@ jobs:
             ls -la build/rcmm.app/Contents/ || echo "Contents directory not found"
             exit 1
           fi
-          echo "✓ App extracted and verified"
 
-      # =====================================================================
-      # Step 7: 对提取出的 .app 进行 ad-hoc 重签名
-      # =====================================================================
-      # xcodebuild 在禁用正式签名时，只会留下非常弱的 linker-signed / ad-hoc 状态，
-      # bundle 结构校验可能失败。这里显式重签名整个 .app：
-      #
-      #   --force        — 覆盖已有的弱签名
-      #   --deep         — 连同内嵌的 Finder extension 一并签名
-      #   --sign -       — 使用 ad-hoc identity（无需证书）
-      #
-      # 结果：
-      #   - 仍然不是 Developer ID 签名，不能绕过 Gatekeeper
-      #   - 但 bundle 本身会成为结构合法的开发版产物，适合内部测试分发
-      # =====================================================================
-      - name: Ad-hoc sign app bundle
-        run: |
-          set -e
-          codesign --force --deep --sign - build/rcmm.app
           codesign --verify --deep --strict --verbose=4 build/rcmm.app
-          echo "✓ App bundle ad-hoc signed"
+
+          app_sign="$(codesign -dvvv build/rcmm.app 2>&1)"
+          appex_sign="$(codesign -dvvv build/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex 2>&1)"
+          appex_entitlements="$(codesign -d --entitlements :- build/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex 2>/dev/null)"
+
+          printf '%s\n' "$app_sign" | grep -q 'Authority=Apple Development:'
+          printf '%s\n' "$app_sign" | grep -q 'TeamIdentifier=K65J6JBW5K'
+          if printf '%s\n' "$app_sign" | grep -q 'Signature=adhoc'; then
+            echo "::error::Main app unexpectedly fell back to ad-hoc signing"
+            exit 1
+          fi
+
+          printf '%s\n' "$appex_sign" | grep -q 'Authority=Apple Development:'
+          printf '%s\n' "$appex_sign" | grep -q 'TeamIdentifier=K65J6JBW5K'
+          if printf '%s\n' "$appex_sign" | grep -q 'Signature=adhoc'; then
+            echo "::error::Finder extension unexpectedly fell back to ad-hoc signing"
+            exit 1
+          fi
+
+          printf '%s\n' "$appex_entitlements" | grep -q 'com.apple.application-identifier'
+          printf '%s\n' "$appex_entitlements" | grep -q 'K65J6JBW5K.com.sunven.rcmm.FinderExtension'
+          printf '%s\n' "$appex_entitlements" | grep -q 'com.apple.developer.team-identifier'
+          printf '%s\n' "$appex_entitlements" | grep -q 'K65J6JBW5K'
+          printf '%s\n' "$appex_entitlements" | grep -q 'com.apple.security.app-sandbox'
+          printf '%s\n' "$appex_entitlements" | grep -q 'group.com.sunven.rcmm'
+
+          echo "✓ Signed app and Finder extension verified"
 
       # =====================================================================
       # Step 8: 准备 DMG staging 目录

@@ -34,12 +34,20 @@ struct RecoveryGuidePanel: View {
 
             Divider()
 
-            Text("Finder 扩展未启用，右键菜单功能不可用。\n请前往系统设置启用扩展。")
+            Text(primaryRecoveryText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text("如果系统设置中没有看到 rcmm，可在终端执行：")
+            if let detail = appState.extensionStatusDetail {
+                Text(detail)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Text(recoveryCommandHint)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -48,6 +56,11 @@ struct RecoveryGuidePanel: View {
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text("必要时请关闭旧的 rcmm 调试/测试版本，并重新启动 Finder。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
@@ -119,6 +132,28 @@ struct RecoveryGuidePanel: View {
         pollTimer = nil
         transitionTask?.cancel()
         transitionTask = nil
+    }
+
+    private var primaryRecoveryText: String {
+        switch appState.extensionStatus {
+        case .otherInstallationEnabled:
+            return "系统当前没有使用这份安装版 rcmm 的 Finder 扩展，因此右键菜单不会出现。请切回当前安装版扩展后再试。"
+        case .disabled:
+            return "Finder 扩展未启用，右键菜单功能不可用。\n请前往系统设置启用扩展。"
+        case .unknown:
+            return "扩展状态暂时无法确认。请重新检测，或前往系统设置检查扩展是否启用。"
+        case .enabled:
+            return "Finder 扩展已启用。"
+        }
+    }
+
+    private var recoveryCommandHint: String {
+        switch appState.extensionStatus {
+        case .otherInstallationEnabled:
+            return "如果系统设置里没有切回当前安装版，可先执行："
+        default:
+            return "如果系统设置中没有看到 rcmm，可在终端执行："
+        }
     }
 }
 

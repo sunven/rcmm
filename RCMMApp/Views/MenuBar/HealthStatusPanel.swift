@@ -3,14 +3,15 @@ import SwiftUI
 
 /// 扩展健康状态面板，展示 Finder 扩展当前状态
 ///
-/// 根据 `ExtensionStatus` 显示三种状态：正常（绿色）/ 未知（黄色）/ 异常（红色），
-/// 同时使用图标变体和颜色传达状态信息（色盲友好）。
+/// 根据 `ExtensionStatus` 显示四种状态：正常（绿色）/ 其他安装占用（橙色）/
+/// 未知（黄色）/ 异常（红色），同时使用图标变体和颜色传达状态信息（色盲友好）。
 struct HealthStatusPanel: View {
     let status: ExtensionStatus
 
     private var statusIcon: String {
         switch status {
         case .enabled: "checkmark.circle.fill"
+        case .otherInstallationEnabled: "exclamationmark.circle.fill"
         case .unknown: "exclamationmark.triangle.fill"
         case .disabled: "xmark.circle.fill"
         }
@@ -19,6 +20,7 @@ struct HealthStatusPanel: View {
     private var statusColor: Color {
         switch status {
         case .enabled: .green
+        case .otherInstallationEnabled: .orange
         case .unknown: .yellow
         case .disabled: .red
         }
@@ -45,6 +47,11 @@ struct HealthStatusPanel: View {
 
 #Preview("未知") {
     HealthStatusPanel(status: .unknown)
+        .padding()
+}
+
+#Preview("另一份安装已启用") {
+    HealthStatusPanel(status: .otherInstallationEnabled)
         .padding()
 }
 

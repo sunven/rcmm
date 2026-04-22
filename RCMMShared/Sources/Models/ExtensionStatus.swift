@@ -2,6 +2,7 @@ import Foundation
 
 public enum ExtensionStatus: String, Codable, Sendable {
     case enabled
+    case otherInstallationEnabled
     case disabled
     case unknown
 
@@ -9,6 +10,7 @@ public enum ExtensionStatus: String, Codable, Sendable {
     public var statusDescription: String {
         switch self {
         case .enabled: "Finder 扩展已启用"
+        case .otherInstallationEnabled: "系统当前使用的是另一份 rcmm 扩展"
         case .unknown: "扩展状态未知"
         case .disabled: "Finder 扩展未启用"
         }
