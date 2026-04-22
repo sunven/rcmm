@@ -43,8 +43,9 @@ struct MenuEntryTests {
 
     @Test("builtIn systemSymbolName 使用共享图标元数据")
     func builtInSystemSymbolName() {
-        let entry = MenuEntry.builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true))
-        #expect(entry.systemSymbolName == "doc.on.clipboard")
+        let item = BuiltInMenuItem(type: .copyPath, isEnabled: true)
+        let entry = MenuEntry.builtIn(item)
+        #expect(entry.systemSymbolName == item.iconName)
     }
 
     @Test("custom entry 没有 systemSymbolName")
