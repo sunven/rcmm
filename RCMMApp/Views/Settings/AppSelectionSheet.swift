@@ -11,9 +11,14 @@ struct AppSelectionSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("选择应用")
-                .font(.headline)
-                .padding()
+            VStack(spacing: 4) {
+                Text("选择应用")
+                    .font(.headline)
+                Text("仅显示 /Applications 和 ~/Applications 中的应用")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
 
             if isLoading {
                 Spacer()
@@ -21,8 +26,13 @@ struct AppSelectionSheet: View {
                 Spacer()
             } else if appState.discoveredApps.isEmpty {
                 Spacer()
-                Text("未发现可用应用")
-                    .foregroundStyle(.secondary)
+                VStack(spacing: 6) {
+                    Text("未发现可添加应用")
+                        .font(.body)
+                    Text("仅支持从 /Applications 和 ~/Applications 添加应用")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
             } else {
                 List {
