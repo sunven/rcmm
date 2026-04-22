@@ -39,8 +39,8 @@ class FinderSync: FIFinderSync {
 
         for entry in entries {
             switch entry {
-            case .builtIn:
-                menu.addItem(makeBuiltInMenuItem(from: entry))
+            case .builtIn(let item):
+                menu.addItem(makeBuiltInMenuItem(from: item))
             case .custom(let config):
                 menu.addItem(makeCustomMenuItem(config))
             }
@@ -49,10 +49,11 @@ class FinderSync: FIFinderSync {
         return menu
     }
 
-    private func makeBuiltInMenuItem(from entry: MenuEntry) -> NSMenuItem {
+    private func makeBuiltInMenuItem(from item: BuiltInMenuItem) -> NSMenuItem {
+        let entry = MenuEntry.builtIn(item)
         let menuItem = NSMenuItem(
-            title: entry.displayName,
-            action: #selector(copyPath(_:)),
+            title: item.displayName,
+            action: action(for: item.type),
             keyEquivalent: ""
         )
         menuItem.target = self
@@ -66,6 +67,13 @@ class FinderSync: FIFinderSync {
         }
 
         return menuItem
+    }
+
+    private func action(for builtInType: BuiltInType) -> Selector {
+        switch builtInType {
+        case .copyPath:
+            return #selector(copyPath(_:))
+        }
     }
 
     private func makeCustomMenuItem(_ config: MenuItemConfig) -> NSMenuItem {
