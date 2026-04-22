@@ -52,7 +52,7 @@ class FinderSync: FIFinderSync {
     private func makeBuiltInMenuItem(from item: BuiltInMenuItem) -> NSMenuItem {
         let entry = MenuEntry.builtIn(item)
         let menuItem = NSMenuItem(
-            title: item.displayName,
+            title: entry.displayName,
             action: action(for: item.type),
             keyEquivalent: ""
         )

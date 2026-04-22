@@ -46,6 +46,7 @@ struct MenuEntryTests {
         let item = BuiltInMenuItem(type: .copyPath, isEnabled: true)
         let entry = MenuEntry.builtIn(item)
         #expect(entry.systemSymbolName == item.iconName)
+        #expect(entry.systemSymbolName == "doc.on.clipboard")
     }
 
     @Test("custom entry 没有 systemSymbolName")
