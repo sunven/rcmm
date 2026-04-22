@@ -6,6 +6,7 @@ struct AppSelectionSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
+    @State private var discoveredApps: [AppInfo] = []
     @State private var selectedAppIds: Set<UUID> = []
     @State private var isLoading = false
 
@@ -24,7 +25,7 @@ struct AppSelectionSheet: View {
                 Spacer()
                 ProgressView("正在扫描应用…")
                 Spacer()
-            } else if appState.discoveredApps.isEmpty {
+            } else if discoveredApps.isEmpty {
                 Spacer()
                 VStack(spacing: 6) {
                     Text("未发现可添加应用")
@@ -94,7 +95,7 @@ struct AppSelectionSheet: View {
     }
 
     private var groupedApps: [AppGroup] {
-        let grouped = Dictionary(grouping: appState.discoveredApps) { app in
+        let grouped = Dictionary(grouping: discoveredApps) { app in
             app.category ?? .other
         }
         return grouped
@@ -144,12 +145,12 @@ struct AppSelectionSheet: View {
         let apps = await Task.detached {
             discoveryService.scanApplications()
         }.value
-        appState.discoveredApps = apps
+        discoveredApps = apps
         isLoading = false
     }
 
     private func addSelectedApps() {
-        let appsToAdd = appState.discoveredApps.filter { selectedAppIds.contains($0.id) }
+        let appsToAdd = discoveredApps.filter { selectedAppIds.contains($0.id) }
         appState.addMenuItems(from: appsToAdd)
     }
 }

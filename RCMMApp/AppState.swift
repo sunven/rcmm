@@ -491,21 +491,6 @@ final class AppState {
         }
     }
 
-    /// 检查菜单中是否已包含指定应用（按 bundleId 或 appPath 匹配）
-    func containsApp(bundleId: String?, appPath: String) -> Bool {
-        for entry in menuEntries {
-            if case .custom(let item) = entry {
-                if let bundleId = bundleId, item.bundleId == bundleId {
-                    return true
-                }
-                if item.appPath == appPath {
-                    return true
-                }
-            }
-        }
-        return false
-    }
-
     /// 移动菜单项到新位置（拖拽排序）
     func moveEntry(from source: IndexSet, to destination: Int) {
         menuEntries.move(fromOffsets: source, toOffset: destination)
