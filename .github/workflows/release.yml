@@ -296,6 +296,7 @@ jobs:
             -project rcmm.xcodeproj \
             -scheme rcmm \
             -configuration Release \
+            -destination 'generic/platform=macOS' \
             -archivePath build/rcmm.xcarchive \
             -clonedSourcePackagesDirPath build/SourcePackages \
             MARKETING_VERSION=${{ steps.normalized.outputs.short_version }} \
