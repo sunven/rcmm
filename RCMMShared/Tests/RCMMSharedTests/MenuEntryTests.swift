@@ -41,6 +41,18 @@ struct MenuEntryTests {
         #expect(entry.displayName == "拷贝路径")
     }
 
+    @Test("builtIn systemSymbolName 使用共享图标元数据")
+    func builtInSystemSymbolName() {
+        let entry = MenuEntry.builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true))
+        #expect(entry.systemSymbolName == "doc.on.clipboard")
+    }
+
+    @Test("custom entry 没有 systemSymbolName")
+    func customSystemSymbolName() {
+        let entry = MenuEntry.custom(MenuItemConfig(appName: "Terminal", appPath: "/t"))
+        #expect(entry.systemSymbolName == nil)
+    }
+
     @Test("custom displayName 使用 appName")
     func customDisplayName() {
         let entry = MenuEntry.custom(MenuItemConfig(appName: "Terminal", appPath: "/t"))

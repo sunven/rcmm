@@ -27,6 +27,13 @@ public enum MenuEntry: Codable, Identifiable, Hashable, Sendable {
         }
     }
 
+    public var systemSymbolName: String? {
+        switch self {
+        case .builtIn(let item): return item.iconName
+        case .custom: return nil
+        }
+    }
+
     public var isBuiltIn: Bool {
         if case .builtIn = self { return true }
         return false
