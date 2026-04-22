@@ -39,35 +39,66 @@ class FinderSync: FIFinderSync {
 
         for entry in entries {
             switch entry {
-            case .builtIn(let item):
-                switch item.type {
-                case .copyPath:
-                    let copyPathItem = NSMenuItem(
-                        title: "拷贝路径",
-                        action: #selector(copyPath(_:)),
-                        keyEquivalent: ""
-                    )
-                    copyPathItem.target = self
-                    menu.addItem(copyPathItem)
-                }
+            case .builtIn:
+                menu.addItem(makeBuiltInMenuItem(from: entry))
             case .custom(let config):
-                let menuItem = NSMenuItem(
-                    title: "用 \(config.appName) 打开",
-                    action: #selector(openWithApp(_:)),
-                    keyEquivalent: ""
-                )
-                menuItem.representedObject = config.id.uuidString
-                menuItem.target = self
-
-                let icon = NSWorkspace.shared.icon(forFile: config.appPath)
-                icon.size = NSSize(width: 16, height: 16)
-                menuItem.image = icon
-
-                menu.addItem(menuItem)
+                menu.addItem(makeCustomMenuItem(config))
             }
         }
 
         return menu
+    }
+
+    private func makeBuiltInMenuItem(from entry: MenuEntry) -> NSMenuItem {
+        let menuItem = NSMenuItem(
+            title: entry.displayName,
+            action: #selector(copyPath(_:)),
+            keyEquivalent: ""
+        )
+        menuItem.target = self
+
+        if let symbolName = entry.systemSymbolName,
+           let image = makeMenuSymbolImage(
+               named: symbolName,
+               accessibilityDescription: entry.displayName
+           ) {
+            menuItem.image = image
+        }
+
+        return menuItem
+    }
+
+    private func makeCustomMenuItem(_ config: MenuItemConfig) -> NSMenuItem {
+        let menuItem = NSMenuItem(
+            title: "用 \(config.appName) 打开",
+            action: #selector(openWithApp(_:)),
+            keyEquivalent: ""
+        )
+        menuItem.representedObject = config.id.uuidString
+        menuItem.target = self
+
+        let icon = NSWorkspace.shared.icon(forFile: config.appPath)
+        icon.size = NSSize(width: 16, height: 16)
+        menuItem.image = icon
+
+        return menuItem
+    }
+
+    private func makeMenuSymbolImage(
+        named symbolName: String,
+        accessibilityDescription: String
+    ) -> NSImage? {
+        guard let image = NSImage(
+            systemSymbolName: symbolName,
+            accessibilityDescription: accessibilityDescription
+        ) else {
+            logger.error("无法创建系统图标: \(symbolName)")
+            return nil
+        }
+
+        image.size = NSSize(width: 16, height: 16)
+        image.isTemplate = true
+        return image
     }
 
     @objc func openWithApp(_ sender: NSMenuItem) {
