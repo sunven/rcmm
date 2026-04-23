@@ -10,6 +10,8 @@
 	<string>$(RCMM_DISPLAY_VERSION)</string>
 	<key>RCMMReleasePageURL</key>
 	<string>$(RCMM_RELEASE_PAGE_URL)</string>
+	<key>RCMMRepositoryRoot</key>
+	<string>$(SRCROOT)</string>
 	<key>LSUIElement</key>
 	<true/>
 	<key>SUFeedURL</key>
