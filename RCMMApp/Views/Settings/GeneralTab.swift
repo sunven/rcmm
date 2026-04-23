@@ -44,6 +44,7 @@ struct GeneralTab: View {
             appState.handleExtensionCleanupHostDisappear(.settings)
         }
         .onAppear {
+            adoptExtensionCleanupPresentationIfNeeded()
             isUpdating = true
             isLoginItemEnabled = SMAppService.mainApp.status == .enabled
             errorMessage = nil
@@ -76,6 +77,9 @@ struct GeneralTab: View {
                 logger.error("开机自启操作失败: \(error.localizedDescription)")
             }
         }
+        .onChange(of: appState.extensionCleanupPresentationHost) { _, _ in
+            adoptExtensionCleanupPresentationIfNeeded()
+        }
     }
 
     private var extensionCleanupSheetPresentedBinding: Binding<Bool> {
@@ -90,6 +94,12 @@ struct GeneralTab: View {
                 }
             }
         )
+    }
+
+    private func adoptExtensionCleanupPresentationIfNeeded() {
+        guard appState.isShowingExtensionCleanupSheet else { return }
+        guard appState.extensionCleanupPresentationHost == nil else { return }
+        appState.adoptExtensionCleanupPresentationHost(.settings)
     }
 }
 

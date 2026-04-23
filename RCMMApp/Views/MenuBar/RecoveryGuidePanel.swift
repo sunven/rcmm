@@ -22,10 +22,16 @@ struct RecoveryGuidePanel: View {
         }
         .padding(10)
         .animation(.easeInOut(duration: 0.3), value: isRecovered)
-        .onAppear { startPolling() }
+        .onAppear {
+            adoptExtensionCleanupPresentationIfNeeded()
+            startPolling()
+        }
         .onDisappear {
             stopPolling()
             appState.handleExtensionCleanupHostDisappear(.recoveryPanel)
+        }
+        .onChange(of: appState.extensionCleanupPresentationHost) { _, _ in
+            adoptExtensionCleanupPresentationIfNeeded()
         }
         .sheet(isPresented: extensionCleanupSheetPresentedBinding) {
             ExtensionCleanupSheet()
@@ -186,6 +192,12 @@ struct RecoveryGuidePanel: View {
         default:
             return "如果系统设置中没有看到 rcmm，可在终端执行："
         }
+    }
+
+    private func adoptExtensionCleanupPresentationIfNeeded() {
+        guard appState.isShowingExtensionCleanupSheet else { return }
+        guard appState.extensionCleanupPresentationHost == nil else { return }
+        appState.adoptExtensionCleanupPresentationHost(.recoveryPanel)
     }
 }
 

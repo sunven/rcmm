@@ -227,13 +227,20 @@ final class AppState {
         }
     }
 
+    func adoptExtensionCleanupPresentationHost(_ host: ExtensionCleanupPresentationHost) {
+        guard isShowingExtensionCleanupSheet else { return }
+        guard extensionCleanupPresentationHost == nil else { return }
+        extensionCleanupPresentationHost = host
+    }
+
     func handleExtensionCleanupHostDisappear(_ host: ExtensionCleanupPresentationHost) {
         guard extensionCleanupPresentationHost == host else { return }
         guard isShowingExtensionCleanupSheet else { return }
-        guard case .running = extensionCleanupFlowState else {
-            dismissExtensionCleanupSheet()
+        if case .running = extensionCleanupFlowState {
+            extensionCleanupPresentationHost = nil
             return
         }
+        dismissExtensionCleanupSheet()
     }
 
     func dismissExtensionCleanupSheet() {
