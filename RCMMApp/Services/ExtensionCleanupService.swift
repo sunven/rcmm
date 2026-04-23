@@ -46,7 +46,8 @@ final class ExtensionCleanupService {
         progress: @escaping @Sendable (ExtensionCleanupStep) -> Void
     ) -> ExtensionCleanupResult {
         guard plan.hasWork else {
-            if let result = ExtensionCleanupResult(
+            // `noOp` invariants are fixed here: no failedStep, no completed steps, no side effects.
+            return ExtensionCleanupResult(
                 outcome: .noOp,
                 completedSteps: [],
                 failedStep: nil,
@@ -54,20 +55,7 @@ final class ExtensionCleanupService {
                 terminatedProcessIDs: [],
                 message: "未发现可自动清理的旧副本。",
                 followUpAdvice: ["当前目录不在自动清理白名单内。"]
-            ) {
-                return result
-            }
-
-            logger.error("构建 noOp 清理结果失败，回退为保守 partialSuccess 结果。")
-            return makeResult(
-                outcome: .partialSuccess,
-                completedSteps: [],
-                failedStep: .recheckHealth,
-                deletedAppPaths: [],
-                terminatedProcessIDs: [],
-                message: "未发现可自动清理的旧副本。",
-                followUpAdvice: ["当前目录不在自动清理白名单内。"]
-            )
+            )!
         }
 
         var completedSteps: [ExtensionCleanupStep] = []
