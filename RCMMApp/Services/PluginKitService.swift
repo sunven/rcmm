@@ -89,11 +89,14 @@ enum PluginKitService {
     }
 
     static func currentExtensionPath() -> String? {
-        let path = Bundle.main.builtInPlugInsURL?
+        let appPath = AppInstallContext.current().currentAppPath
+        let path = URL(fileURLWithPath: appPath, isDirectory: true)
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("PlugIns", isDirectory: true)
             .appendingPathComponent("RCMMFinderExtension.appex")
             .path
 
-        guard let path, FileManager.default.fileExists(atPath: path) else {
+        guard FileManager.default.fileExists(atPath: path) else {
             return nil
         }
 
