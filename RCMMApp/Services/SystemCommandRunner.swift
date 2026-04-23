@@ -6,7 +6,7 @@ struct SystemCommandResult: Sendable {
     let terminationStatus: Int32
 }
 
-protocol SystemCommandRunning {
+protocol SystemCommandRunning: Sendable {
     func run(executable: URL, arguments: [String]) throws -> SystemCommandResult
 }
 

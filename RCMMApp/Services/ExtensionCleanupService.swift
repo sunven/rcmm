@@ -30,7 +30,7 @@ final class ExtensionCleanupService {
         let installContext = AppInstallContext.current(bundle: bundle)
         let discoveredApps = discoverDerivedDataApps()
             + discoverDevReleaseApps(repositoryRoot: installContext.repositoryRoot)
-        let runningProcesses = discoverRunningProcesses()
+        let runningProcesses = discoverRunningProcesses(currentAppPath: installContext.currentAppPath)
 
         return ExtensionCleanupPlanner.buildPlan(
             currentAppPath: installContext.currentAppPath,
@@ -46,7 +46,25 @@ final class ExtensionCleanupService {
         progress: @escaping @Sendable (ExtensionCleanupStep) -> Void
     ) -> ExtensionCleanupResult {
         guard plan.hasWork else {
-            return makeNoOpResult(
+            if let result = ExtensionCleanupResult(
+                outcome: .noOp,
+                completedSteps: [],
+                failedStep: nil,
+                deletedAppPaths: [],
+                terminatedProcessIDs: [],
+                message: "未发现可自动清理的旧副本。",
+                followUpAdvice: ["当前目录不在自动清理白名单内。"]
+            ) {
+                return result
+            }
+
+            logger.error("构建 noOp 清理结果失败，回退为保守 partialSuccess 结果。")
+            return makeResult(
+                outcome: .partialSuccess,
+                completedSteps: [],
+                failedStep: .recheckHealth,
+                deletedAppPaths: [],
+                terminatedProcessIDs: [],
                 message: "未发现可自动清理的旧副本。",
                 followUpAdvice: ["当前目录不在自动清理白名单内。"]
             )
@@ -188,7 +206,8 @@ final class ExtensionCleanupService {
         return paths.sorted()
     }
 
-    private func discoverRunningProcesses() -> [ExtensionCleanupProcess] {
+    private func discoverRunningProcesses(currentAppPath: String) -> [ExtensionCleanupProcess] {
+        let normalizedCurrentAppPath = normalizePath(currentAppPath)
         let result: SystemCommandResult
         do {
             result = try commandRunner.run(
@@ -209,6 +228,7 @@ final class ExtensionCleanupService {
         var processes: [ExtensionCleanupProcess] = []
         for line in result.stdout.split(whereSeparator: \.isNewline) {
             guard let process = parseProcess(line: line) else { continue }
+            guard process.appPath != normalizedCurrentAppPath else { continue }
             let key = "\(process.pid)#\(process.appPath)"
             guard seenKeys.insert(key).inserted else { continue }
             processes.append(process)
@@ -334,21 +354,16 @@ final class ExtensionCleanupService {
             return result
         }
 
-        logger.error("清理结果构建失败，回退为保守 noOp 结果。")
-        while true {
-            if let fallback = ExtensionCleanupResult(
-                outcome: .noOp,
-                completedSteps: [],
-                failedStep: nil,
-                deletedAppPaths: [],
-                terminatedProcessIDs: [],
-                message: "未发现可自动清理的旧副本。",
-                followUpAdvice: ["当前目录不在自动清理白名单内。"]
-            ) {
-                return fallback
-            }
-            Thread.sleep(forTimeInterval: 0.01)
-        }
+        logger.error("构建 noOp 清理结果失败，回退为保守 partialSuccess 结果。")
+        return makeResult(
+            outcome: .partialSuccess,
+            completedSteps: [],
+            failedStep: .recheckHealth,
+            deletedAppPaths: [],
+            terminatedProcessIDs: [],
+            message: message,
+            followUpAdvice: followUpAdvice
+        )
     }
 
     private func makeResult(
@@ -372,10 +387,22 @@ final class ExtensionCleanupService {
             return result
         }
 
-        logger.error("清理结果构建失败，回退为保守 noOp 结果。")
+        logger.error("构建清理结果失败，回退为保守 partialSuccess 结果。")
+        if let fallback = ExtensionCleanupResult(
+            outcome: .partialSuccess,
+            completedSteps: completedSteps,
+            failedStep: failedStep ?? .recheckHealth,
+            deletedAppPaths: deletedAppPaths,
+            terminatedProcessIDs: terminatedProcessIDs,
+            message: message,
+            followUpAdvice: followUpAdvice
+        ) {
+            return fallback
+        }
+
         return makeNoOpResult(
-            message: "未发现可自动清理的旧副本。",
-            followUpAdvice: ["当前目录不在自动清理白名单内。"]
+            message: message,
+            followUpAdvice: followUpAdvice
         )
     }
 
