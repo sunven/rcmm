@@ -73,8 +73,11 @@ final class ExtensionCleanupService {
         var completedSteps: [ExtensionCleanupStep] = []
         var deletedPaths: [String] = []
         var terminatedPIDs: [Int32] = []
+        var currentStep: ExtensionCleanupStep?
+        let runtimeContext = AppInstallContext.current()
 
         do {
+            currentStep = .terminateProcesses
             progress(.terminateProcesses)
             for process in plan.processesToTerminate {
                 try terminate(process: process)
@@ -82,8 +85,15 @@ final class ExtensionCleanupService {
             }
             completedSteps.append(.terminateProcesses)
 
+            currentStep = .deleteApps
             progress(.deleteApps)
             for candidate in plan.deleteCandidates {
+                guard isDeletePathAllowed(candidate.appPath, installContext: runtimeContext) else {
+                    throw ExtensionCleanupServiceError.deleteFailed(
+                        candidate.appPath,
+                        "路径不在自动清理白名单内。"
+                    )
+                }
                 guard fileManager.fileExists(atPath: candidate.appPath) else { continue }
                 do {
                     try fileManager.removeItem(atPath: candidate.appPath)
@@ -94,6 +104,7 @@ final class ExtensionCleanupService {
             }
             completedSteps.append(.deleteApps)
 
+            currentStep = .switchExtension
             progress(.switchExtension)
             try run(
                 step: .switchExtension,
@@ -102,6 +113,7 @@ final class ExtensionCleanupService {
             )
             completedSteps.append(.switchExtension)
 
+            currentStep = .restartFinder
             progress(.restartFinder)
             try run(
                 step: .restartFinder,
@@ -110,8 +122,10 @@ final class ExtensionCleanupService {
             )
             completedSteps.append(.restartFinder)
 
+            currentStep = .recheckHealth
             progress(.recheckHealth)
             completedSteps.append(.recheckHealth)
+            currentStep = nil
 
             return makeResult(
                 outcome: .success,
@@ -131,7 +145,7 @@ final class ExtensionCleanupService {
                 )
             }
 
-            let failedStep = failedStep(for: serviceError) ?? completedSteps.last ?? .recheckHealth
+            let failedStep = failedStep(for: serviceError) ?? currentStep ?? .recheckHealth
             return makeResult(
                 outcome: .partialSuccess,
                 completedSteps: completedSteps,
@@ -150,7 +164,7 @@ final class ExtensionCleanupService {
                 )
             }
 
-            let failedStep = completedSteps.last ?? .recheckHealth
+            let failedStep = currentStep ?? .recheckHealth
             return makeResult(
                 outcome: .partialSuccess,
                 completedSteps: completedSteps,
@@ -204,6 +218,24 @@ final class ExtensionCleanupService {
         }
 
         return paths.sorted()
+    }
+
+    private func isDeletePathAllowed(
+        _ appPath: String,
+        installContext: AppInstallContext
+    ) -> Bool {
+        let normalizedAppPath = normalizePath(appPath)
+        let validationPlan = ExtensionCleanupPlanner.buildPlan(
+            currentAppPath: installContext.currentAppPath,
+            pluginKitExtensionPaths: [],
+            discoveredAppPaths: [normalizedAppPath],
+            runningProcesses: [],
+            repositoryRoot: installContext.repositoryRoot
+        )
+
+        return validationPlan.deleteCandidates.contains { candidate in
+            candidate.appPath == normalizedAppPath
+        }
     }
 
     private func discoverRunningProcesses(currentAppPath: String) -> [ExtensionCleanupProcess] {
