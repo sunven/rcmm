@@ -68,27 +68,12 @@ public enum ExtensionCleanupPlanner {
                 return lhs.pid < rhs.pid
             }
 
-        if let plan = ExtensionCleanupPlan(
+        return makePlanOrSafeFallback(
             currentAppPath: currentAppPath,
             deleteCandidates: deleteCandidates,
             skippedCandidates: skippedCandidates,
-            processesToTerminate: processesToTerminate,
-            postCleanupCommands: postCleanupCommands
-        ) {
-            return plan
-        }
-
-        if let fallback = ExtensionCleanupPlan(
-            currentAppPath: currentAppPath,
-            deleteCandidates: [],
-            skippedCandidates: [],
-            processesToTerminate: [],
-            postCleanupCommands: postCleanupCommands
-        ) {
-            return fallback
-        }
-
-        fatalError("Failed to build ExtensionCleanupPlan with validated buckets.")
+            processesToTerminate: processesToTerminate
+        )
     }
 
     private static let postCleanupCommands: [String] = [
@@ -146,5 +131,58 @@ public enum ExtensionCleanupPlanner {
             disposition: disposition,
             skipReason: skipReason
         )
+    }
+
+    private static func makePlanOrSafeFallback(
+        currentAppPath: String?,
+        deleteCandidates: [ExtensionCleanupCandidate],
+        skippedCandidates: [ExtensionCleanupCandidate],
+        processesToTerminate: [ExtensionCleanupProcess]
+    ) -> ExtensionCleanupPlan {
+        if let plan = ExtensionCleanupPlan(
+            currentAppPath: currentAppPath,
+            deleteCandidates: deleteCandidates,
+            skippedCandidates: skippedCandidates,
+            processesToTerminate: processesToTerminate,
+            postCleanupCommands: postCleanupCommands
+        ) {
+            return plan
+        }
+
+        let sanitizedDelete = deleteCandidates.filter { $0.disposition == .delete }
+        let sanitizedSkipped = skippedCandidates.filter { $0.disposition == .skip }
+        if let sanitizedPlan = ExtensionCleanupPlan(
+            currentAppPath: currentAppPath,
+            deleteCandidates: sanitizedDelete,
+            skippedCandidates: sanitizedSkipped,
+            processesToTerminate: processesToTerminate,
+            postCleanupCommands: postCleanupCommands
+        ) {
+            return sanitizedPlan
+        }
+
+        return ExtensionCleanupPlan(
+            uncheckedCurrentAppPath: currentAppPath,
+            deleteCandidates: [],
+            skippedCandidates: [],
+            processesToTerminate: [],
+            postCleanupCommands: postCleanupCommands
+        )
+    }
+}
+
+private extension ExtensionCleanupPlan {
+    init(
+        uncheckedCurrentAppPath: String?,
+        deleteCandidates: [ExtensionCleanupCandidate],
+        skippedCandidates: [ExtensionCleanupCandidate],
+        processesToTerminate: [ExtensionCleanupProcess],
+        postCleanupCommands: [String]
+    ) {
+        self.currentAppPath = uncheckedCurrentAppPath
+        self.deleteCandidates = deleteCandidates
+        self.skippedCandidates = skippedCandidates
+        self.processesToTerminate = processesToTerminate
+        self.postCleanupCommands = postCleanupCommands
     }
 }

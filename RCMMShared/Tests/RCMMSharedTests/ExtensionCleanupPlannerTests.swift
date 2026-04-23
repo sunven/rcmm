@@ -38,6 +38,10 @@ struct ExtensionCleanupPlannerTests {
         #expect(plan.deleteCandidates.map(\.appPath) == [oldDerivedDataApp, oldDevReleaseApp])
         #expect(plan.skippedCandidates.map(\.appPath) == [installedApp])
         #expect(plan.processesToTerminate.map(\.pid) == [41])
+        #expect(plan.postCleanupCommands == [
+            "pluginkit -e use -i com.sunven.rcmm.FinderExtension",
+            "killall Finder"
+        ])
     }
 
     @Test("仓库根目录缺失时跳过 dev-release 清理")
