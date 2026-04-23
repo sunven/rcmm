@@ -146,4 +146,50 @@ struct ExtensionCleanupPlannerTests {
         #expect(plan.skippedCandidates.map(\.appPath) == [releaseApp])
         #expect(plan.skippedCandidates.map(\.skipReason) == ["该路径不在自动清理白名单内。"])
     }
+
+    @Test("dev-release 目录下非 rcmm.app 目标不会进入删除候选")
+    func doesNotDeleteDevReleaseDescendantsOutsideRCMMApp() {
+        let nonAppPath = "/Users/test/work/rcmm/build/dev-release/dmg-root/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex"
+        let plan = ExtensionCleanupPlanner.buildPlan(
+            currentAppPath: currentApp,
+            pluginKitExtensionPaths: [],
+            discoveredAppPaths: [nonAppPath],
+            runningProcesses: [],
+            repositoryRoot: "/Users/test/work/rcmm"
+        )
+
+        #expect(plan.deleteCandidates.isEmpty)
+        #expect(plan.skippedCandidates.map(\.appPath) == [nonAppPath])
+        #expect(plan.skippedCandidates.map(\.skipReason) == ["该路径不在自动清理白名单内。"])
+    }
+
+    @Test("保守 fallback 不携带后置副作用命令")
+    func conservativeFallbackHasNoPostCleanupCommands() {
+        let misplacedSkip = ExtensionCleanupCandidate(
+            appPath: oldDerivedDataApp,
+            extensionPath: oldDerivedDataApp + "/Contents/PlugIns/RCMMFinderExtension.appex",
+            source: .unsupported,
+            disposition: .skip,
+            skipReason: "skip"
+        )
+        let misplacedDelete = ExtensionCleanupCandidate(
+            appPath: oldDevReleaseApp,
+            extensionPath: oldDevReleaseApp + "/Contents/PlugIns/RCMMFinderExtension.appex",
+            source: .devRelease,
+            disposition: .delete,
+            skipReason: nil
+        )
+        #expect(misplacedSkip != nil)
+        #expect(misplacedDelete != nil)
+        guard let misplacedSkip, let misplacedDelete else { return }
+
+        let plan = ExtensionCleanupPlanner.makePlanOrSafeFallbackForTesting(
+            currentAppPath: currentApp,
+            deleteCandidates: [misplacedSkip],
+            skippedCandidates: [misplacedDelete],
+            processesToTerminate: []
+        )
+
+        #expect(plan.postCleanupCommands.isEmpty)
+    }
 }

@@ -3,6 +3,7 @@ import Foundation
 public enum ExtensionCleanupPlanner {
     private static let finderExtensionSuffix = "/Contents/PlugIns/RCMMFinderExtension.appex"
     private static let devReleaseSegment = "/build/dev-release/"
+    private static let devReleaseComponents = ["build", "dev-release"]
     private static let derivedDataComponents = ["Library", "Developer", "Xcode", "DerivedData"]
     private static let derivedDataDebugTailComponents = ["Build", "Products", "Debug", "rcmm.app"]
     private static let unsupportedReason = "该路径不在自动清理白名单内。"
@@ -112,7 +113,7 @@ public enum ExtensionCleanupPlanner {
         }
 
         if let repositoryRoot,
-           appPath.hasPrefix(repositoryRoot + devReleaseSegment) {
+           isAllowedDevReleaseApp(appPath, repositoryRoot: repositoryRoot) {
             return .devRelease
         }
 
@@ -147,6 +148,22 @@ public enum ExtensionCleanupPlanner {
         skippedCandidates: [ExtensionCleanupCandidate],
         processesToTerminate: [ExtensionCleanupProcess]
     ) -> ExtensionCleanupPlan {
+        makePlanOrSafeFallback(
+            currentAppPath: currentAppPath,
+            deleteCandidates: deleteCandidates,
+            skippedCandidates: skippedCandidates,
+            processesToTerminate: processesToTerminate,
+            emitDebugSignal: true
+        )
+    }
+
+    private static func makePlanOrSafeFallback(
+        currentAppPath: String?,
+        deleteCandidates: [ExtensionCleanupCandidate],
+        skippedCandidates: [ExtensionCleanupCandidate],
+        processesToTerminate: [ExtensionCleanupProcess],
+        emitDebugSignal: Bool
+    ) -> ExtensionCleanupPlan {
         if let plan = ExtensionCleanupPlan(
             currentAppPath: currentAppPath,
             deleteCandidates: deleteCandidates,
@@ -157,6 +174,10 @@ public enum ExtensionCleanupPlanner {
             return plan
         }
 
+        if emitDebugSignal {
+            assertionFailure("Unexpected cleanup plan invariant failure. Returning conservative fallback plan.")
+        }
+
         let sanitizedDelete = deleteCandidates.filter { $0.disposition == .delete }
         let sanitizedSkipped = skippedCandidates.filter { $0.disposition == .skip }
         if let sanitizedPlan = ExtensionCleanupPlan(
@@ -164,19 +185,32 @@ public enum ExtensionCleanupPlanner {
             deleteCandidates: sanitizedDelete,
             skippedCandidates: sanitizedSkipped,
             processesToTerminate: processesToTerminate,
-            postCleanupCommands: postCleanupCommands
+            postCleanupCommands: []
         ) {
             return sanitizedPlan
         }
-
-        assertionFailure("Unexpected cleanup plan invariant failure. Returning conservative fallback plan.")
 
         return ExtensionCleanupPlan(
             uncheckedCurrentAppPath: currentAppPath,
             deleteCandidates: [],
             skippedCandidates: [],
             processesToTerminate: [],
-            postCleanupCommands: postCleanupCommands
+            postCleanupCommands: []
+        )
+    }
+
+    static func makePlanOrSafeFallbackForTesting(
+        currentAppPath: String?,
+        deleteCandidates: [ExtensionCleanupCandidate],
+        skippedCandidates: [ExtensionCleanupCandidate],
+        processesToTerminate: [ExtensionCleanupProcess]
+    ) -> ExtensionCleanupPlan {
+        makePlanOrSafeFallback(
+            currentAppPath: currentAppPath,
+            deleteCandidates: deleteCandidates,
+            skippedCandidates: skippedCandidates,
+            processesToTerminate: processesToTerminate,
+            emitDebugSignal: false
         )
     }
 
@@ -186,21 +220,6 @@ public enum ExtensionCleanupPlanner {
 
     private static func normalizedProcess(_ process: ExtensionCleanupProcess) -> ExtensionCleanupProcess? {
         ExtensionCleanupProcess(pid: process.pid, appPath: normalizePath(process.appPath))
-    }
-
-    private static func containsPathComponentSequence(in path: String, sequence: [String]) -> Bool {
-        let components = path.split(separator: "/").map(String.init)
-        guard components.count >= sequence.count else { return false }
-        let lastStart = components.count - sequence.count
-        guard lastStart >= 0 else { return false }
-
-        for startIndex in 0...lastStart {
-            let endIndex = startIndex + sequence.count
-            if Array(components[startIndex..<endIndex]) == sequence {
-                return true
-            }
-        }
-        return false
     }
 
     private static func isAllowedDerivedDataDebugApp(_ appPath: String) -> Bool {
@@ -226,6 +245,16 @@ public enum ExtensionCleanupPlanner {
         }
 
         return false
+    }
+
+    private static func isAllowedDevReleaseApp(_ appPath: String, repositoryRoot: String) -> Bool {
+        let appComponents = appPath.split(separator: "/").map(String.init)
+        let rootComponents = repositoryRoot.split(separator: "/").map(String.init)
+        let prefix = rootComponents + devReleaseComponents
+        guard appComponents.count >= prefix.count + 2 else { return false }
+        guard Array(appComponents.prefix(prefix.count)) == prefix else { return false }
+        guard appComponents.last == "rcmm.app" else { return false }
+        return true
     }
 }
 
