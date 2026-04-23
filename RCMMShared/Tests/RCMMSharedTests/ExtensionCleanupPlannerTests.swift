@@ -130,4 +130,20 @@ struct ExtensionCleanupPlannerTests {
         #expect(plan.deleteCandidates.isEmpty)
         #expect(plan.skippedCandidates.isEmpty)
     }
+
+    @Test("DerivedData 中非 Debug rcmm.app 路径不会进入删除候选")
+    func doesNotDeleteDerivedDataOutsideDebugRCMMApp() {
+        let releaseApp = "/Users/test/Library/Developer/Xcode/DerivedData/rcmm-old/Build/Products/Release/rcmm.app"
+        let plan = ExtensionCleanupPlanner.buildPlan(
+            currentAppPath: currentApp,
+            pluginKitExtensionPaths: [],
+            discoveredAppPaths: [releaseApp],
+            runningProcesses: [],
+            repositoryRoot: nil
+        )
+
+        #expect(plan.deleteCandidates.isEmpty)
+        #expect(plan.skippedCandidates.map(\.appPath) == [releaseApp])
+        #expect(plan.skippedCandidates.map(\.skipReason) == ["该路径不在自动清理白名单内。"])
+    }
 }

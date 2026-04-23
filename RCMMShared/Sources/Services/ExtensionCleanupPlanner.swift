@@ -4,6 +4,7 @@ public enum ExtensionCleanupPlanner {
     private static let finderExtensionSuffix = "/Contents/PlugIns/RCMMFinderExtension.appex"
     private static let devReleaseSegment = "/build/dev-release/"
     private static let derivedDataComponents = ["Library", "Developer", "Xcode", "DerivedData"]
+    private static let derivedDataDebugTailComponents = ["Build", "Products", "Debug", "rcmm.app"]
     private static let unsupportedReason = "该路径不在自动清理白名单内。"
     private static let missingRepositoryRootReason = "当前运行环境无法可靠识别仓库根目录。"
 
@@ -106,7 +107,7 @@ public enum ExtensionCleanupPlanner {
     }
 
     private static func classify(appPath: String, repositoryRoot: String?) -> AppClassification {
-        if containsPathComponentSequence(in: appPath, sequence: derivedDataComponents) {
+        if isAllowedDerivedDataDebugApp(appPath) {
             return .derivedData
         }
 
@@ -199,6 +200,31 @@ public enum ExtensionCleanupPlanner {
                 return true
             }
         }
+        return false
+    }
+
+    private static func isAllowedDerivedDataDebugApp(_ appPath: String) -> Bool {
+        let components = appPath.split(separator: "/").map(String.init)
+        let prefixCount = derivedDataComponents.count
+        let tailCount = derivedDataDebugTailComponents.count
+        let minimumCount = prefixCount + 1 + tailCount // +1 for DerivedData build folder name
+        guard components.count >= minimumCount else { return false }
+
+        let lastPrefixStart = components.count - (prefixCount + 1 + tailCount)
+        for startIndex in 0...lastPrefixStart {
+            let prefixEnd = startIndex + prefixCount
+            if Array(components[startIndex..<prefixEnd]) != derivedDataComponents {
+                continue
+            }
+
+            let tailStart = prefixEnd + 1
+            let tailEnd = tailStart + tailCount
+            if tailEnd == components.count,
+               Array(components[tailStart..<tailEnd]) == derivedDataDebugTailComponents {
+                return true
+            }
+        }
+
         return false
     }
 }
