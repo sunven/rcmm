@@ -43,6 +43,18 @@ public struct ExtensionCleanupResult: Equatable, Codable, Sendable {
         self.followUpAdvice = followUpAdvice
     }
 
+    public static func noOp(message: String, followUpAdvice: [String]) -> ExtensionCleanupResult {
+        Self(
+            uncheckedOutcome: .noOp,
+            completedSteps: [],
+            failedStep: nil,
+            deletedAppPaths: [],
+            terminatedProcessIDs: [],
+            message: message,
+            followUpAdvice: followUpAdvice
+        )
+    }
+
     enum CodingKeys: String, CodingKey {
         case outcome
         case completedSteps
@@ -81,5 +93,23 @@ public struct ExtensionCleanupResult: Equatable, Codable, Sendable {
         }
 
         self = result
+    }
+
+    private init(
+        uncheckedOutcome: ExtensionCleanupOutcome,
+        completedSteps: [ExtensionCleanupStep],
+        failedStep: ExtensionCleanupStep?,
+        deletedAppPaths: [String],
+        terminatedProcessIDs: [Int32],
+        message: String,
+        followUpAdvice: [String]
+    ) {
+        self.outcome = uncheckedOutcome
+        self.completedSteps = completedSteps
+        self.failedStep = failedStep
+        self.deletedAppPaths = deletedAppPaths
+        self.terminatedProcessIDs = terminatedProcessIDs
+        self.message = message
+        self.followUpAdvice = followUpAdvice
     }
 }

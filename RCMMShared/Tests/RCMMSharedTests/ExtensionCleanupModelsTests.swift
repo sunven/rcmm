@@ -121,6 +121,22 @@ struct ExtensionCleanupModelsTests {
         #expect(result?.followUpAdvice == ["当前目录不在自动清理白名单内。"])
     }
 
+    @Test("noOp 工厂返回稳定的无副作用结果")
+    func noOpFactoryProducesExactShape() {
+        let result = ExtensionCleanupResult.noOp(
+            message: "未发现可自动清理的旧副本。",
+            followUpAdvice: ["当前目录不在自动清理白名单内。"]
+        )
+
+        #expect(result.outcome == .noOp)
+        #expect(result.completedSteps.isEmpty)
+        #expect(result.failedStep == nil)
+        #expect(result.deletedAppPaths.isEmpty)
+        #expect(result.terminatedProcessIDs.isEmpty)
+        #expect(result.message == "未发现可自动清理的旧副本。")
+        #expect(result.followUpAdvice == ["当前目录不在自动清理白名单内。"])
+    }
+
     @Test("清理计划拒绝分组与 disposition 不一致的数据")
     func planRejectsInconsistentDispositionBuckets() {
         let skipCandidate = makeCandidate(
