@@ -24,6 +24,11 @@ struct ExtensionCleanupSheet: View {
                 Spacer(minLength: 20)
                 ProgressView("正在扫描旧扩展副本…")
                 Spacer(minLength: 20)
+
+                Button("取消") {
+                    appState.dismissExtensionCleanupSheet()
+                }
+                .keyboardShortcut(.cancelAction)
             }
             .frame(maxWidth: .infinity, alignment: .center)
 

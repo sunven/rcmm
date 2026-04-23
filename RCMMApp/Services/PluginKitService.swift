@@ -115,26 +115,30 @@ enum PluginKitService {
 
     private static func pluginKitMatchOutput() -> String? {
         let process = Process()
-        let outputPipe = Pipe()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
 
         process.executableURL = pluginKitExecutable
         process.arguments = ["-m", "-ADv", "-i", extensionBundleID]
-        process.standardOutput = outputPipe
-        process.standardError = outputPipe
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             logger.error("执行 pluginkit 查询失败: \(error.localizedDescription)")
             return nil
         }
 
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(decoding: outputData, as: UTF8.self)
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        let output = String(decoding: stdoutData, as: UTF8.self)
+        let stderrOutput = String(decoding: stderrData, as: UTF8.self)
 
         guard process.terminationStatus == 0 else {
-            logger.error("pluginkit 查询失败，退出码: \(process.terminationStatus)")
+            logger.error("pluginkit 查询失败，退出码: \(process.terminationStatus), stderr: \(stderrOutput)")
             return nil
         }
 

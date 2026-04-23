@@ -181,6 +181,7 @@ final class AppState {
         extensionCleanupFlowState = .planning
 
         let cleanupService = extensionCleanupService
+        logger.info("开始扫描旧扩展副本 (requestID=\(requestID))")
         Task { [weak self] in
             guard let self else { return }
 
@@ -188,10 +189,22 @@ final class AppState {
                 cleanupService.preparePlan(bundle: .main)
             }.value
 
-            guard self.extensionCleanupPlanningRequestID == requestID else { return }
-            guard self.isShowingExtensionCleanupSheet else { return }
-            guard case .planning = self.extensionCleanupFlowState else { return }
+            logger.info("扫描完成，准备切换到 review 状态 (requestID=\(requestID), planningID=\(self.extensionCleanupPlanningRequestID), sheet=\(self.isShowingExtensionCleanupSheet), state=\(String(describing: self.extensionCleanupFlowState)))")
+
+            guard self.extensionCleanupPlanningRequestID == requestID else {
+                logger.warning("扫描完成但 requestID 已过期，丢弃结果 (expected=\(requestID), current=\(self.extensionCleanupPlanningRequestID))")
+                return
+            }
+            guard self.isShowingExtensionCleanupSheet else {
+                logger.warning("扫描完成但 sheet 已关闭，丢弃结果")
+                return
+            }
+            guard case .planning = self.extensionCleanupFlowState else {
+                logger.warning("扫描完成但状态已不是 planning，丢弃结果 (state=\(String(describing: self.extensionCleanupFlowState)))")
+                return
+            }
             self.extensionCleanupFlowState = .review(plan)
+            logger.info("已切换到 review 状态")
         }
     }
 
