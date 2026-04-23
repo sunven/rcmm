@@ -1,5 +1,3 @@
-import Foundation
-
 public struct ExtensionCleanupPlan: Equatable, Codable, Sendable {
     public let currentAppPath: String?
     public let deleteCandidates: [ExtensionCleanupCandidate]
@@ -7,13 +5,16 @@ public struct ExtensionCleanupPlan: Equatable, Codable, Sendable {
     public let processesToTerminate: [ExtensionCleanupProcess]
     public let postCleanupCommands: [String]
 
-    public init(
+    public init?(
         currentAppPath: String?,
         deleteCandidates: [ExtensionCleanupCandidate],
         skippedCandidates: [ExtensionCleanupCandidate],
         processesToTerminate: [ExtensionCleanupProcess],
         postCleanupCommands: [String]
     ) {
+        guard deleteCandidates.allSatisfy({ $0.disposition == .delete }) else { return nil }
+        guard skippedCandidates.allSatisfy({ $0.disposition == .skip }) else { return nil }
+
         self.currentAppPath = currentAppPath
         self.deleteCandidates = deleteCandidates
         self.skippedCandidates = skippedCandidates

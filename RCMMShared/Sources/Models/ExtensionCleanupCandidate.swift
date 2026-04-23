@@ -1,5 +1,3 @@
-import Foundation
-
 public enum ExtensionCleanupCandidateSource: String, Codable, Sendable {
     case pluginKit
     case derivedData

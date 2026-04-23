@@ -1,5 +1,3 @@
-import Foundation
-
 public struct ExtensionCleanupProcess: Equatable, Codable, Identifiable, Sendable {
     public let pid: Int32
     public let appPath: String

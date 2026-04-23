@@ -1,5 +1,3 @@
-import Foundation
-
 public enum ExtensionCleanupOutcome: String, Codable, Sendable {
     case success
     case partialSuccess
@@ -15,7 +13,7 @@ public struct ExtensionCleanupResult: Equatable, Codable, Sendable {
     public let message: String
     public let followUpAdvice: [String]
 
-    public init(
+    public init?(
         outcome: ExtensionCleanupOutcome,
         completedSteps: [ExtensionCleanupStep],
         failedStep: ExtensionCleanupStep?,
@@ -24,6 +22,8 @@ public struct ExtensionCleanupResult: Equatable, Codable, Sendable {
         message: String,
         followUpAdvice: [String]
     ) {
+        guard !(failedStep != nil && (outcome == .success || outcome == .noOp)) else { return nil }
+
         self.outcome = outcome
         self.completedSteps = completedSteps
         self.failedStep = failedStep

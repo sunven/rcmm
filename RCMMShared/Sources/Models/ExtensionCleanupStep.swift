@@ -1,5 +1,3 @@
-import Foundation
-
 public enum ExtensionCleanupStep: String, Codable, Sendable, CaseIterable {
     case terminateProcesses
     case deleteApps

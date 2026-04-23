@@ -35,8 +35,9 @@ struct ExtensionCleanupModelsTests {
             ]
         )
 
-        #expect(plan.hasWork == true)
-        #expect(plan.summary == "发现 1 个旧副本，会结束 1 个旧 rcmm 进程，并在清理后自动切回当前扩展、重启 Finder。")
+        #expect(plan != nil)
+        #expect(plan?.hasWork == true)
+        #expect(plan?.summary == "发现 1 个旧副本，会结束 1 个旧 rcmm 进程，并在清理后自动切回当前扩展、重启 Finder。")
     }
 
     @Test("未执行结果保留建议")
@@ -51,7 +52,70 @@ struct ExtensionCleanupModelsTests {
             followUpAdvice: ["当前目录不在自动清理白名单内。"]
         )
 
-        #expect(result.outcome == .noOp)
-        #expect(result.followUpAdvice == ["当前目录不在自动清理白名单内。"])
+        #expect(result != nil)
+        #expect(result?.outcome == .noOp)
+        #expect(result?.followUpAdvice == ["当前目录不在自动清理白名单内。"])
+    }
+
+    @Test("清理计划拒绝分组与 disposition 不一致的数据")
+    func planRejectsInconsistentDispositionBuckets() {
+        let invalidDeleteBucket = ExtensionCleanupPlan(
+            currentAppPath: "/current/rcmm.app",
+            deleteCandidates: [
+                ExtensionCleanupCandidate(
+                    appPath: "/tmp/old-2/rcmm.app",
+                    extensionPath: "/tmp/old-2/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex",
+                    source: .derivedData,
+                    disposition: .skip,
+                    skipReason: "not allowed"
+                )
+            ],
+            skippedCandidates: [],
+            processesToTerminate: [],
+            postCleanupCommands: []
+        )
+        let invalidSkippedBucket = ExtensionCleanupPlan(
+            currentAppPath: "/current/rcmm.app",
+            deleteCandidates: [],
+            skippedCandidates: [
+                ExtensionCleanupCandidate(
+                    appPath: "/tmp/old-3/rcmm.app",
+                    extensionPath: "/tmp/old-3/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex",
+                    source: .derivedData,
+                    disposition: .delete,
+                    skipReason: nil
+                )
+            ],
+            processesToTerminate: [],
+            postCleanupCommands: []
+        )
+
+        #expect(invalidDeleteBucket == nil)
+        #expect(invalidSkippedBucket == nil)
+    }
+
+    @Test("成功和无操作结果不允许携带失败步骤")
+    func resultRejectsFailedStepForSuccessAndNoOp() {
+        let invalidSuccess = ExtensionCleanupResult(
+            outcome: .success,
+            completedSteps: [.terminateProcesses, .deleteApps],
+            failedStep: .restartFinder,
+            deletedAppPaths: ["/tmp/old-1/rcmm.app"],
+            terminatedProcessIDs: [42],
+            message: "清理完成。",
+            followUpAdvice: []
+        )
+        let invalidNoOp = ExtensionCleanupResult(
+            outcome: .noOp,
+            completedSteps: [],
+            failedStep: .recheckHealth,
+            deletedAppPaths: [],
+            terminatedProcessIDs: [],
+            message: "无需清理。",
+            followUpAdvice: []
+        )
+
+        #expect(invalidSuccess == nil)
+        #expect(invalidNoOp == nil)
     }
 }
