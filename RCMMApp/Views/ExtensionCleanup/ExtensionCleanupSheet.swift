@@ -16,7 +16,7 @@ struct ExtensionCleanupSheet: View {
     private var content: some View {
         switch appState.extensionCleanupFlowState {
         case .idle:
-            EmptyView()
+            Text("未开始清理。")
 
         case .planning:
             VStack(spacing: 12) {
@@ -34,6 +34,10 @@ struct ExtensionCleanupSheet: View {
                 Text(plan.summary)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+
+                Text("不会处理 /Applications 中的正式安装版。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
@@ -106,6 +110,7 @@ struct ExtensionCleanupSheet: View {
                         appState.confirmExtensionCleanup(plan: plan)
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(!plan.hasWork)
                     .keyboardShortcut(.defaultAction)
                 }
             }
