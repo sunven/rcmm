@@ -24,6 +24,15 @@ struct RecoveryGuidePanel: View {
         .animation(.easeInOut(duration: 0.3), value: isRecovered)
         .onAppear { startPolling() }
         .onDisappear { stopPolling() }
+        .sheet(
+            isPresented: extensionCleanupSheetPresentedBinding,
+            onDismiss: {
+                appState.dismissExtensionCleanupSheet()
+            }
+        ) {
+            ExtensionCleanupSheet()
+                .environment(appState)
+        }
     }
 
     private var recoveryGuideContent: some View {
@@ -62,6 +71,17 @@ struct RecoveryGuidePanel: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if appState.extensionStatus == .otherInstallationEnabled {
+                Button {
+                    appState.beginExtensionCleanup()
+                } label: {
+                    Text("清理旧扩展副本…")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("清理旧扩展副本")
+            }
 
             Button {
                 PluginKitService.showExtensionManagement()
@@ -132,6 +152,17 @@ struct RecoveryGuidePanel: View {
         pollTimer = nil
         transitionTask?.cancel()
         transitionTask = nil
+    }
+
+    private var extensionCleanupSheetPresentedBinding: Binding<Bool> {
+        Binding(
+            get: { appState.isShowingExtensionCleanupSheet },
+            set: { isPresented in
+                if !isPresented {
+                    appState.dismissExtensionCleanupSheet()
+                }
+            }
+        )
     }
 
     private var primaryRecoveryText: String {

@@ -3,6 +3,7 @@ import ServiceManagement
 import os.log
 
 struct GeneralTab: View {
+    @Environment(AppState.self) private var appState
     @State private var isLoginItemEnabled = false
     @State private var isUpdating = false
     @State private var errorMessage: String? = nil
@@ -26,8 +27,24 @@ struct GeneralTab: View {
                         .foregroundStyle(.red)
                 }
             }
+
+            Section("扩展维护") {
+                Button("清理旧扩展副本…") {
+                    appState.beginExtensionCleanup()
+                }
+                .accessibilityLabel("清理旧扩展副本")
+            }
         }
         .formStyle(.grouped)
+        .sheet(
+            isPresented: extensionCleanupSheetPresentedBinding,
+            onDismiss: {
+                appState.dismissExtensionCleanupSheet()
+            }
+        ) {
+            ExtensionCleanupSheet()
+                .environment(appState)
+        }
         .onAppear {
             isUpdating = true
             isLoginItemEnabled = SMAppService.mainApp.status == .enabled
@@ -56,6 +73,17 @@ struct GeneralTab: View {
                 logger.error("开机自启操作失败: \(error.localizedDescription)")
             }
         }
+    }
+
+    private var extensionCleanupSheetPresentedBinding: Binding<Bool> {
+        Binding(
+            get: { appState.isShowingExtensionCleanupSheet },
+            set: { isPresented in
+                if !isPresented {
+                    appState.dismissExtensionCleanupSheet()
+                }
+            }
+        )
     }
 }
 

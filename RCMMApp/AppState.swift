@@ -12,6 +12,14 @@ enum AppUpdateState: Equatable {
     case installing(DevAppcastItem)
 }
 
+enum ExtensionCleanupFlowState: Equatable {
+    case idle
+    case planning
+    case review(ExtensionCleanupPlan)
+    case running(ExtensionCleanupStep)
+    case finished(ExtensionCleanupResult)
+}
+
 @Observable
 @MainActor
 final class AppState {
@@ -24,6 +32,8 @@ final class AppState {
     var autoRepairMessage: String? = nil
     var currentDisplayVersion = "未知版本"
     var updateState: AppUpdateState = .idle
+    var isShowingExtensionCleanupSheet = false
+    var extensionCleanupFlowState: ExtensionCleanupFlowState = .idle
 
     var isOnboardingCompleted: Bool {
         didSet {
@@ -45,6 +55,7 @@ final class AppState {
     @ObservationIgnored private var shouldHideToMenuBarAfterUpdatePromptCloses = true
     @ObservationIgnored private var sparkleUpdater: SparkleUpdaterService?
     @ObservationIgnored private let updateFeedClient = UpdateFeedClient()
+    @ObservationIgnored private let extensionCleanupService = ExtensionCleanupService()
     private let configService = SharedConfigService()
     private let errorQueue = SharedErrorQueue()
     private var hasTriggeredAutoRepair = false
@@ -146,6 +157,53 @@ final class AppState {
         }
 
         logger.info("Extension 状态变化: \(oldStatus.rawValue) → \(newStatus.rawValue), popoverState: \(String(describing: self.popoverState))")
+    }
+
+    // MARK: - Extension Cleanup
+
+    func beginExtensionCleanup() {
+        isShowingExtensionCleanupSheet = true
+        extensionCleanupFlowState = .planning
+
+        let cleanupService = extensionCleanupService
+        Task { [weak self] in
+            guard let self else { return }
+
+            let plan = await Task.detached(priority: .userInitiated) {
+                cleanupService.preparePlan(bundle: .main)
+            }.value
+
+            guard self.isShowingExtensionCleanupSheet else { return }
+            self.extensionCleanupFlowState = .review(plan)
+        }
+    }
+
+    func confirmExtensionCleanup(plan: ExtensionCleanupPlan) {
+        extensionCleanupFlowState = .running(.terminateProcesses)
+        let cleanupService = extensionCleanupService
+
+        Task { [weak self] in
+            guard let self else { return }
+
+            let result = await Task.detached(priority: .userInitiated) {
+                cleanupService.execute(plan: plan) { step in
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        guard self.isShowingExtensionCleanupSheet else { return }
+                        self.extensionCleanupFlowState = .running(step)
+                    }
+                }
+            }.value
+
+            self.checkExtensionStatus()
+            guard self.isShowingExtensionCleanupSheet else { return }
+            self.extensionCleanupFlowState = .finished(result)
+        }
+    }
+
+    func dismissExtensionCleanupSheet() {
+        isShowingExtensionCleanupSheet = false
+        extensionCleanupFlowState = .idle
     }
 
     /// 启动定期健康监控（每 30 分钟检测一次）
