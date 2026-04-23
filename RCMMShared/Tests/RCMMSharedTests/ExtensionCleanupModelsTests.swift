@@ -22,16 +22,16 @@ struct ExtensionCleanupModelsTests {
             disposition: .delete,
             skipReason: nil
         )
+        let process = makeProcess(pid: 42, appPath: "/tmp/old-1/rcmm.app")
         #expect(candidate != nil)
-        guard let candidate else { return }
+        #expect(process != nil)
+        guard let candidate, let process else { return }
 
         let plan = ExtensionCleanupPlan(
             currentAppPath: "/current/rcmm.app",
             deleteCandidates: [candidate],
             skippedCandidates: [],
-            processesToTerminate: [
-                ExtensionCleanupProcess(pid: 42, appPath: "/tmp/old-1/rcmm.app")
-            ],
+            processesToTerminate: [process],
             postCleanupCommands: [
                 "pluginkit -e use -i com.sunven.rcmm.FinderExtension",
                 "killall Finder"
@@ -67,14 +67,16 @@ struct ExtensionCleanupModelsTests {
             disposition: .delete,
             skipReason: nil
         )
+        let process = makeProcess(pid: 42, appPath: "/tmp/old-1/rcmm.app")
         #expect(candidate != nil)
-        guard let candidate else { return }
+        #expect(process != nil)
+        guard let candidate, let process else { return }
 
         let plan = ExtensionCleanupPlan(
             currentAppPath: "/current/rcmm.app",
             deleteCandidates: [candidate],
             skippedCandidates: [],
-            processesToTerminate: [ExtensionCleanupProcess(pid: 42, appPath: "/tmp/old-1/rcmm.app")],
+            processesToTerminate: [process],
             postCleanupCommands: []
         )
 
@@ -84,14 +86,17 @@ struct ExtensionCleanupModelsTests {
 
     @Test("清理计划仅有进程时摘要不出现 0 个旧副本")
     func planSummaryProcessOnlyWithoutCommands() {
+        let process1 = makeProcess(pid: 21, appPath: "/tmp/old-1/rcmm.app")
+        let process2 = makeProcess(pid: 22, appPath: "/tmp/old-2/rcmm.app")
+        #expect(process1 != nil)
+        #expect(process2 != nil)
+        guard let process1, let process2 else { return }
+
         let plan = ExtensionCleanupPlan(
             currentAppPath: "/current/rcmm.app",
             deleteCandidates: [],
             skippedCandidates: [],
-            processesToTerminate: [
-                ExtensionCleanupProcess(pid: 21, appPath: "/tmp/old-1/rcmm.app"),
-                ExtensionCleanupProcess(pid: 22, appPath: "/tmp/old-2/rcmm.app")
-            ],
+            processesToTerminate: [process1, process2],
             postCleanupCommands: []
         )
 
@@ -296,6 +301,23 @@ struct ExtensionCleanupModelsTests {
         #expect(decoded == nil)
     }
 
+    @Test("进程构造拒绝非正 pid")
+    func processRejectsNonPositivePID() {
+        let zeroPID = makeProcess(pid: 0, appPath: "/tmp/old-1/rcmm.app")
+        let negativePID = makeProcess(pid: -1, appPath: "/tmp/old-2/rcmm.app")
+
+        #expect(zeroPID == nil)
+        #expect(negativePID == nil)
+    }
+
+    @Test("进程解码会执行 pid 不变量校验")
+    func processDecodingRejectsNonPositivePID() throws {
+        let data = Data(#"{ "pid": 0, "appPath": "/tmp/old/rcmm.app" }"#.utf8)
+        let decoded = try? JSONDecoder().decode(ExtensionCleanupProcess.self, from: data)
+
+        #expect(decoded == nil)
+    }
+
     private func makeCandidate(
         appPath: String,
         extensionPath: String,
@@ -310,5 +332,9 @@ struct ExtensionCleanupModelsTests {
             disposition: disposition,
             skipReason: skipReason
         )
+    }
+
+    private func makeProcess(pid: Int32, appPath: String) -> ExtensionCleanupProcess? {
+        ExtensionCleanupProcess(pid: pid, appPath: appPath)
     }
 }
