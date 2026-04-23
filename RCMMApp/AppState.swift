@@ -20,6 +20,11 @@ enum ExtensionCleanupFlowState: Equatable {
     case finished(ExtensionCleanupResult)
 }
 
+enum ExtensionCleanupPresentationHost: Equatable {
+    case settings
+    case recoveryPanel
+}
+
 @Observable
 @MainActor
 final class AppState {
@@ -33,6 +38,7 @@ final class AppState {
     var currentDisplayVersion = "未知版本"
     var updateState: AppUpdateState = .idle
     var isShowingExtensionCleanupSheet = false
+    var extensionCleanupPresentationHost: ExtensionCleanupPresentationHost? = nil
     var extensionCleanupFlowState: ExtensionCleanupFlowState = .idle
 
     var isOnboardingCompleted: Bool {
@@ -162,13 +168,14 @@ final class AppState {
 
     // MARK: - Extension Cleanup
 
-    func beginExtensionCleanup() {
+    func beginExtensionCleanup(from host: ExtensionCleanupPresentationHost) {
         guard !isShowingExtensionCleanupSheet else { return }
         guard case .idle = extensionCleanupFlowState else { return }
 
         extensionCleanupPlanningRequestID &+= 1
         let requestID = extensionCleanupPlanningRequestID
         isShowingExtensionCleanupSheet = true
+        extensionCleanupPresentationHost = host
         extensionCleanupFlowState = .planning
 
         let cleanupService = extensionCleanupService
@@ -187,6 +194,10 @@ final class AppState {
     }
 
     func confirmExtensionCleanup(plan: ExtensionCleanupPlan) {
+        guard isShowingExtensionCleanupSheet else { return }
+        guard case .review(let currentPlan) = extensionCleanupFlowState else { return }
+        guard currentPlan == plan else { return }
+
         extensionCleanupFlowState = .running(.terminateProcesses)
         let cleanupService = extensionCleanupService
 
@@ -215,6 +226,7 @@ final class AppState {
         }
         extensionCleanupPlanningRequestID &+= 1
         isShowingExtensionCleanupSheet = false
+        extensionCleanupPresentationHost = nil
         extensionCleanupFlowState = .idle
     }
 

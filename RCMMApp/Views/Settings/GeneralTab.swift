@@ -30,18 +30,13 @@ struct GeneralTab: View {
 
             Section("扩展维护") {
                 Button("清理旧扩展副本…") {
-                    appState.beginExtensionCleanup()
+                    appState.beginExtensionCleanup(from: .settings)
                 }
                 .accessibilityLabel("清理旧扩展副本")
             }
         }
         .formStyle(.grouped)
-        .sheet(
-            isPresented: extensionCleanupSheetPresentedBinding,
-            onDismiss: {
-                appState.dismissExtensionCleanupSheet()
-            }
-        ) {
+        .sheet(isPresented: extensionCleanupSheetPresentedBinding) {
             ExtensionCleanupSheet()
                 .environment(appState)
         }
@@ -82,9 +77,12 @@ struct GeneralTab: View {
 
     private var extensionCleanupSheetPresentedBinding: Binding<Bool> {
         Binding(
-            get: { appState.isShowingExtensionCleanupSheet },
+            get: {
+                appState.isShowingExtensionCleanupSheet
+                    && appState.extensionCleanupPresentationHost == .settings
+            },
             set: { isPresented in
-                if !isPresented {
+                if !isPresented, appState.extensionCleanupPresentationHost == .settings {
                     appState.dismissExtensionCleanupSheet()
                 }
             }

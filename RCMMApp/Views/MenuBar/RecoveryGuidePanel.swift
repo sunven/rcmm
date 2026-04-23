@@ -24,12 +24,7 @@ struct RecoveryGuidePanel: View {
         .animation(.easeInOut(duration: 0.3), value: isRecovered)
         .onAppear { startPolling() }
         .onDisappear { stopPolling() }
-        .sheet(
-            isPresented: extensionCleanupSheetPresentedBinding,
-            onDismiss: {
-                appState.dismissExtensionCleanupSheet()
-            }
-        ) {
+        .sheet(isPresented: extensionCleanupSheetPresentedBinding) {
             ExtensionCleanupSheet()
                 .environment(appState)
         }
@@ -74,7 +69,7 @@ struct RecoveryGuidePanel: View {
 
             if appState.extensionStatus == .otherInstallationEnabled {
                 Button {
-                    appState.beginExtensionCleanup()
+                    appState.beginExtensionCleanup(from: .recoveryPanel)
                 } label: {
                     Text("清理旧扩展副本…")
                         .frame(maxWidth: .infinity)
@@ -156,9 +151,12 @@ struct RecoveryGuidePanel: View {
 
     private var extensionCleanupSheetPresentedBinding: Binding<Bool> {
         Binding(
-            get: { appState.isShowingExtensionCleanupSheet },
+            get: {
+                appState.isShowingExtensionCleanupSheet
+                    && appState.extensionCleanupPresentationHost == .recoveryPanel
+            },
             set: { isPresented in
-                if !isPresented {
+                if !isPresented, appState.extensionCleanupPresentationHost == .recoveryPanel {
                     appState.dismissExtensionCleanupSheet()
                 }
             }
