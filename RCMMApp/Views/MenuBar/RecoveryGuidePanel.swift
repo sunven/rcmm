@@ -23,7 +23,10 @@ struct RecoveryGuidePanel: View {
         .padding(10)
         .animation(.easeInOut(duration: 0.3), value: isRecovered)
         .onAppear { startPolling() }
-        .onDisappear { stopPolling() }
+        .onDisappear {
+            stopPolling()
+            appState.handleExtensionCleanupHostDisappear(.recoveryPanel)
+        }
         .sheet(isPresented: extensionCleanupSheetPresentedBinding) {
             ExtensionCleanupSheet()
                 .environment(appState)

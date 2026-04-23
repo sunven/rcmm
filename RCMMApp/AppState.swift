@@ -63,6 +63,7 @@ final class AppState {
     @ObservationIgnored private let updateFeedClient = UpdateFeedClient()
     @ObservationIgnored private let extensionCleanupService = ExtensionCleanupService()
     @ObservationIgnored private var extensionCleanupPlanningRequestID: UInt64 = 0
+    @ObservationIgnored private var extensionCleanupExecutionRequestID: UInt64 = 0
     private let configService = SharedConfigService()
     private let errorQueue = SharedErrorQueue()
     private var hasTriggeredAutoRepair = false
@@ -198,6 +199,8 @@ final class AppState {
         guard case .review(let currentPlan) = extensionCleanupFlowState else { return }
         guard currentPlan == plan else { return }
 
+        extensionCleanupExecutionRequestID &+= 1
+        let executionRequestID = extensionCleanupExecutionRequestID
         extensionCleanupFlowState = .running(.terminateProcesses)
         let cleanupService = extensionCleanupService
 
@@ -208,15 +211,28 @@ final class AppState {
                 cleanupService.execute(plan: plan) { step in
                     Task { @MainActor [weak self] in
                         guard let self else { return }
+                        guard self.extensionCleanupExecutionRequestID == executionRequestID else { return }
                         guard self.isShowingExtensionCleanupSheet else { return }
+                        guard case .running = self.extensionCleanupFlowState else { return }
                         self.extensionCleanupFlowState = .running(step)
                     }
                 }
             }.value
 
             self.checkExtensionStatus()
+            guard self.extensionCleanupExecutionRequestID == executionRequestID else { return }
             guard self.isShowingExtensionCleanupSheet else { return }
+            guard case .running = self.extensionCleanupFlowState else { return }
             self.extensionCleanupFlowState = .finished(result)
+        }
+    }
+
+    func handleExtensionCleanupHostDisappear(_ host: ExtensionCleanupPresentationHost) {
+        guard extensionCleanupPresentationHost == host else { return }
+        guard isShowingExtensionCleanupSheet else { return }
+        guard case .running = extensionCleanupFlowState else {
+            dismissExtensionCleanupSheet()
+            return
         }
     }
 
@@ -225,6 +241,7 @@ final class AppState {
             return
         }
         extensionCleanupPlanningRequestID &+= 1
+        extensionCleanupExecutionRequestID &+= 1
         isShowingExtensionCleanupSheet = false
         extensionCleanupPresentationHost = nil
         extensionCleanupFlowState = .idle

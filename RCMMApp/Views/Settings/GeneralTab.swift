@@ -40,6 +40,9 @@ struct GeneralTab: View {
             ExtensionCleanupSheet()
                 .environment(appState)
         }
+        .onDisappear {
+            appState.handleExtensionCleanupHostDisappear(.settings)
+        }
         .onAppear {
             isUpdating = true
             isLoginItemEnabled = SMAppService.mainApp.status == .enabled
