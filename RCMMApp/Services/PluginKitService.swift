@@ -32,6 +32,14 @@ enum PluginKitService {
         FIFinderSyncController.showExtensionManagementInterface()
     }
 
+    static func enabledExtensionPaths() -> [String] {
+        guard let output = pluginKitMatchOutput() else {
+            return []
+        }
+
+        return ExtensionInstallHealthResolver.enabledExtensionPaths(from: output)
+    }
+
     static func healthReport() -> ExtensionInstallHealth {
         let currentProcessEnabled = FIFinderSyncController.isExtensionEnabled
         if currentProcessEnabled {
@@ -80,7 +88,7 @@ enum PluginKitService {
         }
     }
 
-    private static func currentExtensionPath() -> String? {
+    static func currentExtensionPath() -> String? {
         let path = Bundle.main.builtInPlugInsURL?
             .appendingPathComponent("RCMMFinderExtension.appex")
             .path
