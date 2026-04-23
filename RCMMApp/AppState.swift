@@ -20,11 +20,6 @@ enum ExtensionCleanupFlowState: Equatable {
     case finished(ExtensionCleanupResult)
 }
 
-enum ExtensionCleanupPresentationHost: Equatable {
-    case settings
-    case recoveryPanel
-}
-
 @Observable
 @MainActor
 final class AppState {
@@ -38,7 +33,6 @@ final class AppState {
     var currentDisplayVersion = "未知版本"
     var updateState: AppUpdateState = .idle
     var isShowingExtensionCleanupSheet = false
-    var extensionCleanupPresentationHost: ExtensionCleanupPresentationHost? = nil
     var extensionCleanupFlowState: ExtensionCleanupFlowState = .idle
 
     var isOnboardingCompleted: Bool {
@@ -64,6 +58,8 @@ final class AppState {
     @ObservationIgnored private let extensionCleanupService = ExtensionCleanupService()
     @ObservationIgnored private var extensionCleanupPlanningRequestID: UInt64 = 0
     @ObservationIgnored private var extensionCleanupExecutionRequestID: UInt64 = 0
+    @ObservationIgnored private var extensionCleanupWindow: NSWindow?
+    @ObservationIgnored private var extensionCleanupWindowCloseObserver: Any?
     private let configService = SharedConfigService()
     private let errorQueue = SharedErrorQueue()
     private var hasTriggeredAutoRepair = false
@@ -169,14 +165,19 @@ final class AppState {
 
     // MARK: - Extension Cleanup
 
-    func beginExtensionCleanup(from host: ExtensionCleanupPresentationHost) {
-        guard !isShowingExtensionCleanupSheet else { return }
+    func beginExtensionCleanup() {
+        if let window = extensionCleanupWindow {
+            ActivationPolicyManager.activateAsRegularApp()
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            return
+        }
         guard case .idle = extensionCleanupFlowState else { return }
 
         extensionCleanupPlanningRequestID &+= 1
         let requestID = extensionCleanupPlanningRequestID
+        showExtensionCleanupWindowIfNeeded()
         isShowingExtensionCleanupSheet = true
-        extensionCleanupPresentationHost = host
         extensionCleanupFlowState = .planning
 
         let cleanupService = extensionCleanupService
@@ -227,30 +228,78 @@ final class AppState {
         }
     }
 
-    func adoptExtensionCleanupPresentationHost(_ host: ExtensionCleanupPresentationHost) {
-        guard isShowingExtensionCleanupSheet else { return }
-        guard extensionCleanupPresentationHost == nil else { return }
-        extensionCleanupPresentationHost = host
-    }
-
-    func handleExtensionCleanupHostDisappear(_ host: ExtensionCleanupPresentationHost) {
-        guard extensionCleanupPresentationHost == host else { return }
-        guard isShowingExtensionCleanupSheet else { return }
-        if case .running = extensionCleanupFlowState {
-            extensionCleanupPresentationHost = nil
-            return
-        }
-        dismissExtensionCleanupSheet()
-    }
-
     func dismissExtensionCleanupSheet() {
         if case .running = extensionCleanupFlowState {
             return
         }
         extensionCleanupPlanningRequestID &+= 1
         extensionCleanupExecutionRequestID &+= 1
+        closeExtensionCleanupWindow()
+    }
+
+    private func showExtensionCleanupWindowIfNeeded() {
+        guard extensionCleanupWindow == nil else { return }
+
+        let contentView = ExtensionCleanupSheet()
+            .environment(self)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 460),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: contentView)
+        window.title = "清理旧扩展副本"
+        window.center()
+        window.minSize = NSSize(width: 540, height: 360)
+
+        extensionCleanupWindowCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main
+        ) { [weak self, weak window] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.handleExtensionCleanupWindowClosed(window)
+            }
+        }
+
+        extensionCleanupWindow = window
+        ActivationPolicyManager.activateAsRegularApp()
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+    }
+
+    private func closeExtensionCleanupWindow() {
+        guard let window = extensionCleanupWindow else {
+            resetExtensionCleanupPresentationState()
+            return
+        }
+        window.close()
+    }
+
+    private func handleExtensionCleanupWindowClosed(_ window: NSWindow?) {
+        if let observer = extensionCleanupWindowCloseObserver {
+            NotificationCenter.default.removeObserver(observer)
+            extensionCleanupWindowCloseObserver = nil
+        }
+        if extensionCleanupWindow === window {
+            extensionCleanupWindow = nil
+        }
+        resetExtensionCleanupPresentationState()
+
+        guard let window else {
+            ActivationPolicyManager.hideToMenuBar()
+            return
+        }
+        guard !hasVisibleWindow(excluding: window) else { return }
+        ActivationPolicyManager.hideToMenuBar()
+    }
+
+    private func resetExtensionCleanupPresentationState() {
         isShowingExtensionCleanupSheet = false
-        extensionCleanupPresentationHost = nil
         extensionCleanupFlowState = .idle
     }
 

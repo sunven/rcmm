@@ -48,6 +48,21 @@ struct ExtensionInstallHealthTests {
         #expect(report.primaryEnabledPath == oldDebugPath)
     }
 
+    @Test("多份安装同时启用时标记为安装冲突")
+    func multipleEnabledInstallationsConflict() {
+        let report = ExtensionInstallHealthResolver.resolve(
+            currentExtensionPath: currentPath,
+            currentProcessExtensionEnabled: false,
+            pluginKitOutput: """
+            +    com.sunven.rcmm.FinderExtension(1.0.0)\tID-1\t2026-04-22 10:00:00 +0000\t\(currentPath)
+            +    com.sunven.rcmm.FinderExtension(1.0.0)\tID-2\t2026-04-22 10:05:00 +0000\t\(oldDebugPath)
+            """
+        )
+
+        #expect(report.status == .otherInstallationEnabled)
+        #expect(report.enabledExtensionPaths == [currentPath, oldDebugPath])
+    }
+
     @Test("没有启用项时标记为未启用")
     func noEnabledEntriesMeansDisabled() {
         let report = ExtensionInstallHealthResolver.resolve(

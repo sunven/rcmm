@@ -10,7 +10,7 @@ struct ExtensionCleanupSheet: View {
         }
         .padding(16)
         .frame(width: 540)
-        .interactiveDismissDisabled(isCleanupRunning)
+        .interactiveDismissDisabled(true)
     }
 
     @ViewBuilder
@@ -170,12 +170,6 @@ struct ExtensionCleanupSheet: View {
         }
     }
 
-    private var isCleanupRunning: Bool {
-        if case .running = appState.extensionCleanupFlowState {
-            return true
-        }
-        return false
-    }
 }
 
 #Preview("Planning") {

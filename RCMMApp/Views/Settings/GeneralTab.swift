@@ -30,21 +30,13 @@ struct GeneralTab: View {
 
             Section("扩展维护") {
                 Button("清理旧扩展副本…") {
-                    appState.beginExtensionCleanup(from: .settings)
+                    appState.beginExtensionCleanup()
                 }
                 .accessibilityLabel("清理旧扩展副本")
             }
         }
         .formStyle(.grouped)
-        .sheet(isPresented: extensionCleanupSheetPresentedBinding) {
-            ExtensionCleanupSheet()
-                .environment(appState)
-        }
-        .onDisappear {
-            appState.handleExtensionCleanupHostDisappear(.settings)
-        }
         .onAppear {
-            adoptExtensionCleanupPresentationIfNeeded()
             isUpdating = true
             isLoginItemEnabled = SMAppService.mainApp.status == .enabled
             errorMessage = nil
@@ -77,29 +69,6 @@ struct GeneralTab: View {
                 logger.error("开机自启操作失败: \(error.localizedDescription)")
             }
         }
-        .onChange(of: appState.extensionCleanupPresentationHost) { _, _ in
-            adoptExtensionCleanupPresentationIfNeeded()
-        }
-    }
-
-    private var extensionCleanupSheetPresentedBinding: Binding<Bool> {
-        Binding(
-            get: {
-                appState.isShowingExtensionCleanupSheet
-                    && appState.extensionCleanupPresentationHost == .settings
-            },
-            set: { isPresented in
-                if !isPresented, appState.extensionCleanupPresentationHost == .settings {
-                    appState.dismissExtensionCleanupSheet()
-                }
-            }
-        )
-    }
-
-    private func adoptExtensionCleanupPresentationIfNeeded() {
-        guard appState.isShowingExtensionCleanupSheet else { return }
-        guard appState.extensionCleanupPresentationHost == nil else { return }
-        appState.adoptExtensionCleanupPresentationHost(.settings)
     }
 }
 

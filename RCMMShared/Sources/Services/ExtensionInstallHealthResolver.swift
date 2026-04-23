@@ -24,6 +24,14 @@ public enum ExtensionInstallHealthResolver {
 
         let enabledPaths = enabledExtensionPaths(from: pluginKitOutput)
 
+        if enabledPaths.count > 1 {
+            return ExtensionInstallHealth(
+                status: .otherInstallationEnabled,
+                currentExtensionPath: currentExtensionPath,
+                enabledExtensionPaths: enabledPaths
+            )
+        }
+
         if let currentExtensionPath, enabledPaths.contains(currentExtensionPath) {
             return ExtensionInstallHealth(
                 status: .enabled,

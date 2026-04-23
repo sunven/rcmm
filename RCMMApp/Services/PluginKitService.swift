@@ -75,6 +75,16 @@ enum PluginKitService {
         case .otherInstallationEnabled:
             let currentPath = report.currentExtensionPath ?? "未知路径"
             let activePaths = report.enabledExtensionPaths.joined(separator: "\n")
+            if report.enabledExtensionPaths.count > 1 {
+                return """
+                检测到多份 rcmm Finder 扩展同时处于启用状态。
+                当前安装路径：
+                \(currentPath)
+
+                系统记录的启用路径：
+                \(activePaths)
+                """
+            }
             return """
             当前安装版扩展没有被系统接管。
             当前安装路径：

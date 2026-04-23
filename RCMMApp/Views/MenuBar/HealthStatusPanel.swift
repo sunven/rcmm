@@ -27,13 +27,17 @@ struct HealthStatusPanel: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: statusIcon)
                 .foregroundStyle(statusColor)
                 .font(.body)
             Text(status.statusDescription)
                 .font(.subheadline)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("扩展状态：\(status.statusDescription)")
         .accessibilityValue(status.statusDescription)

@@ -23,19 +23,10 @@ struct RecoveryGuidePanel: View {
         .padding(10)
         .animation(.easeInOut(duration: 0.3), value: isRecovered)
         .onAppear {
-            adoptExtensionCleanupPresentationIfNeeded()
             startPolling()
         }
         .onDisappear {
             stopPolling()
-            appState.handleExtensionCleanupHostDisappear(.recoveryPanel)
-        }
-        .onChange(of: appState.extensionCleanupPresentationHost) { _, _ in
-            adoptExtensionCleanupPresentationIfNeeded()
-        }
-        .sheet(isPresented: extensionCleanupSheetPresentedBinding) {
-            ExtensionCleanupSheet()
-                .environment(appState)
         }
     }
 
@@ -50,6 +41,8 @@ struct RecoveryGuidePanel: View {
             Text(primaryRecoveryText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let detail = appState.extensionStatusDetail {
@@ -57,28 +50,36 @@ struct RecoveryGuidePanel: View {
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .textSelection(.enabled)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             Text(recoveryCommandHint)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Text("pluginkit -e use -i com.sunven.rcmm.FinderExtension")
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .textSelection(.enabled)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Text("必要时请关闭旧的 rcmm 调试/测试版本，并重新启动 Finder。")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if appState.extensionStatus == .otherInstallationEnabled {
                 Button {
-                    appState.beginExtensionCleanup(from: .recoveryPanel)
+                    appState.beginExtensionCleanup()
                 } label: {
                     Text("清理旧扩展副本…")
                         .frame(maxWidth: .infinity)
@@ -158,20 +159,6 @@ struct RecoveryGuidePanel: View {
         transitionTask = nil
     }
 
-    private var extensionCleanupSheetPresentedBinding: Binding<Bool> {
-        Binding(
-            get: {
-                appState.isShowingExtensionCleanupSheet
-                    && appState.extensionCleanupPresentationHost == .recoveryPanel
-            },
-            set: { isPresented in
-                if !isPresented, appState.extensionCleanupPresentationHost == .recoveryPanel {
-                    appState.dismissExtensionCleanupSheet()
-                }
-            }
-        )
-    }
-
     private var primaryRecoveryText: String {
         switch appState.extensionStatus {
         case .otherInstallationEnabled:
@@ -192,12 +179,6 @@ struct RecoveryGuidePanel: View {
         default:
             return "如果系统设置中没有看到 rcmm，可在终端执行："
         }
-    }
-
-    private func adoptExtensionCleanupPresentationIfNeeded() {
-        guard appState.isShowingExtensionCleanupSheet else { return }
-        guard appState.extensionCleanupPresentationHost == nil else { return }
-        appState.adoptExtensionCleanupPresentationHost(.recoveryPanel)
     }
 }
 
