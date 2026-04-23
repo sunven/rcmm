@@ -49,6 +49,11 @@ struct GeneralTab: View {
             isUpdating = true
             isLoginItemEnabled = SMAppService.mainApp.status == .enabled
             errorMessage = nil
+            Task { @MainActor in
+                if isUpdating {
+                    isUpdating = false
+                }
+            }
         }
         .onChange(of: isLoginItemEnabled) { _, newValue in
             if isUpdating {
