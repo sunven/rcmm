@@ -42,4 +42,44 @@ public struct ExtensionCleanupResult: Equatable, Codable, Sendable {
         self.message = message
         self.followUpAdvice = followUpAdvice
     }
+
+    enum CodingKeys: String, CodingKey {
+        case outcome
+        case completedSteps
+        case failedStep
+        case deletedAppPaths
+        case terminatedProcessIDs
+        case message
+        case followUpAdvice
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let outcome = try container.decode(ExtensionCleanupOutcome.self, forKey: .outcome)
+        let completedSteps = try container.decode([ExtensionCleanupStep].self, forKey: .completedSteps)
+        let failedStep = try container.decodeIfPresent(ExtensionCleanupStep.self, forKey: .failedStep)
+        let deletedAppPaths = try container.decode([String].self, forKey: .deletedAppPaths)
+        let terminatedProcessIDs = try container.decode([Int32].self, forKey: .terminatedProcessIDs)
+        let message = try container.decode(String.self, forKey: .message)
+        let followUpAdvice = try container.decode([String].self, forKey: .followUpAdvice)
+
+        guard let result = Self(
+            outcome: outcome,
+            completedSteps: completedSteps,
+            failedStep: failedStep,
+            deletedAppPaths: deletedAppPaths,
+            terminatedProcessIDs: terminatedProcessIDs,
+            message: message,
+            followUpAdvice: followUpAdvice
+        ) else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Invalid extension cleanup result state."
+                )
+            )
+        }
+
+        self = result
+    }
 }

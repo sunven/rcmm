@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import RCMMShared
 
@@ -21,11 +22,12 @@ struct ExtensionCleanupModelsTests {
             disposition: .delete,
             skipReason: nil
         )
+        #expect(candidate != nil)
+        guard let candidate else { return }
+
         let plan = ExtensionCleanupPlan(
             currentAppPath: "/current/rcmm.app",
-            deleteCandidates: [
-                candidate!
-            ],
+            deleteCandidates: [candidate],
             skippedCandidates: [],
             processesToTerminate: [
                 ExtensionCleanupProcess(pid: 42, appPath: "/tmp/old-1/rcmm.app")
@@ -36,7 +38,6 @@ struct ExtensionCleanupModelsTests {
             ]
         )
 
-        #expect(candidate != nil)
         #expect(plan != nil)
         #expect(plan?.hasWork == true)
         #expect(plan?.summary == "发现 1 个旧副本，会结束 1 个旧 rcmm 进程，并在清理后自动切回当前扩展、重启 Finder。")
@@ -66,17 +67,36 @@ struct ExtensionCleanupModelsTests {
             disposition: .delete,
             skipReason: nil
         )
+        #expect(candidate != nil)
+        guard let candidate else { return }
+
         let plan = ExtensionCleanupPlan(
             currentAppPath: "/current/rcmm.app",
-            deleteCandidates: [candidate!],
+            deleteCandidates: [candidate],
             skippedCandidates: [],
             processesToTerminate: [ExtensionCleanupProcess(pid: 42, appPath: "/tmp/old-1/rcmm.app")],
             postCleanupCommands: []
         )
 
-        #expect(candidate != nil)
         #expect(plan != nil)
         #expect(plan?.summary == "发现 1 个旧副本，会结束 1 个旧 rcmm 进程。")
+    }
+
+    @Test("清理计划仅有进程时摘要不出现 0 个旧副本")
+    func planSummaryProcessOnlyWithoutCommands() {
+        let plan = ExtensionCleanupPlan(
+            currentAppPath: "/current/rcmm.app",
+            deleteCandidates: [],
+            skippedCandidates: [],
+            processesToTerminate: [
+                ExtensionCleanupProcess(pid: 21, appPath: "/tmp/old-1/rcmm.app"),
+                ExtensionCleanupProcess(pid: 22, appPath: "/tmp/old-2/rcmm.app")
+            ],
+            postCleanupCommands: []
+        )
+
+        #expect(plan != nil)
+        #expect(plan?.summary == "会结束 2 个旧 rcmm 进程。")
     }
 
     @Test("未执行结果保留建议")
@@ -112,11 +132,13 @@ struct ExtensionCleanupModelsTests {
             disposition: .delete,
             skipReason: nil
         )
+        #expect(skipCandidate != nil)
+        #expect(deleteCandidate != nil)
+        guard let skipCandidate, let deleteCandidate else { return }
+
         let invalidDeleteBucket = ExtensionCleanupPlan(
             currentAppPath: "/current/rcmm.app",
-            deleteCandidates: [
-                skipCandidate!
-            ],
+            deleteCandidates: [skipCandidate],
             skippedCandidates: [],
             processesToTerminate: [],
             postCleanupCommands: []
@@ -124,15 +146,11 @@ struct ExtensionCleanupModelsTests {
         let invalidSkippedBucket = ExtensionCleanupPlan(
             currentAppPath: "/current/rcmm.app",
             deleteCandidates: [],
-            skippedCandidates: [
-                deleteCandidate!
-            ],
+            skippedCandidates: [deleteCandidate],
             processesToTerminate: [],
             postCleanupCommands: []
         )
 
-        #expect(skipCandidate != nil)
-        #expect(deleteCandidate != nil)
         #expect(invalidDeleteBucket == nil)
         #expect(invalidSkippedBucket == nil)
     }
@@ -243,6 +261,39 @@ struct ExtensionCleanupModelsTests {
 
         #expect(candidate != nil)
         #expect(candidate?.id == "/tmp/old-1/rcmm.app#/tmp/old-1/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex")
+    }
+
+    @Test("候选项解码会执行不变量校验")
+    func candidateDecodingRejectsInvalidState() throws {
+        let data = Data(
+            #"{ "appPath": "/tmp/old/rcmm.app", "extensionPath": "/tmp/old/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex", "source": "unsupported", "disposition": "delete", "skipReason": null }"#
+                .utf8
+        )
+
+        let decoded = try? JSONDecoder().decode(ExtensionCleanupCandidate.self, from: data)
+        #expect(decoded == nil)
+    }
+
+    @Test("计划解码会执行不变量校验")
+    func planDecodingRejectsInvalidBuckets() throws {
+        let data = Data(
+            #"{ "currentAppPath": "/current/rcmm.app", "deleteCandidates": [{ "appPath": "/tmp/old/rcmm.app", "extensionPath": "/tmp/old/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex", "source": "derivedData", "disposition": "skip", "skipReason": "whitelist" }], "skippedCandidates": [], "processesToTerminate": [], "postCleanupCommands": [] }"#
+                .utf8
+        )
+
+        let decoded = try? JSONDecoder().decode(ExtensionCleanupPlan.self, from: data)
+        #expect(decoded == nil)
+    }
+
+    @Test("结果解码会执行不变量校验")
+    func resultDecodingRejectsInvalidOutcomeState() throws {
+        let data = Data(
+            #"{ "outcome": "noOp", "completedSteps": ["recheckHealth"], "failedStep": null, "deletedAppPaths": [], "terminatedProcessIDs": [], "message": "无需清理。", "followUpAdvice": [] }"#
+                .utf8
+        )
+
+        let decoded = try? JSONDecoder().decode(ExtensionCleanupResult.self, from: data)
+        #expect(decoded == nil)
     }
 
     private func makeCandidate(
