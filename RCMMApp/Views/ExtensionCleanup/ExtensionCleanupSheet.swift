@@ -10,6 +10,7 @@ struct ExtensionCleanupSheet: View {
         }
         .padding(16)
         .frame(width: 540)
+        .interactiveDismissDisabled(isCleanupRunning)
     }
 
     @ViewBuilder
@@ -167,6 +168,13 @@ struct ExtensionCleanupSheet: View {
         case .unsupported:
             return "来源：不支持目录"
         }
+    }
+
+    private var isCleanupRunning: Bool {
+        if case .running = appState.extensionCleanupFlowState {
+            return true
+        }
+        return false
     }
 }
 

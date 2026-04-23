@@ -56,6 +56,7 @@ final class AppState {
     @ObservationIgnored private var sparkleUpdater: SparkleUpdaterService?
     @ObservationIgnored private let updateFeedClient = UpdateFeedClient()
     @ObservationIgnored private let extensionCleanupService = ExtensionCleanupService()
+    @ObservationIgnored private var extensionCleanupPlanningRequestID: UInt64 = 0
     private let configService = SharedConfigService()
     private let errorQueue = SharedErrorQueue()
     private var hasTriggeredAutoRepair = false
@@ -162,6 +163,11 @@ final class AppState {
     // MARK: - Extension Cleanup
 
     func beginExtensionCleanup() {
+        guard !isShowingExtensionCleanupSheet else { return }
+        guard case .idle = extensionCleanupFlowState else { return }
+
+        extensionCleanupPlanningRequestID &+= 1
+        let requestID = extensionCleanupPlanningRequestID
         isShowingExtensionCleanupSheet = true
         extensionCleanupFlowState = .planning
 
@@ -173,7 +179,9 @@ final class AppState {
                 cleanupService.preparePlan(bundle: .main)
             }.value
 
+            guard self.extensionCleanupPlanningRequestID == requestID else { return }
             guard self.isShowingExtensionCleanupSheet else { return }
+            guard case .planning = self.extensionCleanupFlowState else { return }
             self.extensionCleanupFlowState = .review(plan)
         }
     }
@@ -202,6 +210,10 @@ final class AppState {
     }
 
     func dismissExtensionCleanupSheet() {
+        if case .running = extensionCleanupFlowState {
+            return
+        }
+        extensionCleanupPlanningRequestID &+= 1
         isShowingExtensionCleanupSheet = false
         extensionCleanupFlowState = .idle
     }
