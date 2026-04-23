@@ -17,13 +17,21 @@ public struct ExtensionCleanupCandidate: Equatable, Codable, Identifiable, Senda
     public let disposition: ExtensionCleanupCandidateDisposition
     public let skipReason: String?
 
-    public init(
+    public init?(
         appPath: String,
         extensionPath: String,
         source: ExtensionCleanupCandidateSource,
         disposition: ExtensionCleanupCandidateDisposition,
         skipReason: String?
     ) {
+        switch disposition {
+        case .delete:
+            guard skipReason == nil else { return nil }
+            guard source != .unsupported else { return nil }
+        case .skip:
+            guard skipReason != nil else { return nil }
+        }
+
         self.appPath = appPath
         self.extensionPath = extensionPath
         self.source = source
@@ -31,5 +39,5 @@ public struct ExtensionCleanupCandidate: Equatable, Codable, Identifiable, Senda
         self.skipReason = skipReason
     }
 
-    public var id: String { appPath }
+    public var id: String { "\(appPath)#\(extensionPath)" }
 }

@@ -22,7 +22,17 @@ public struct ExtensionCleanupResult: Equatable, Codable, Sendable {
         message: String,
         followUpAdvice: [String]
     ) {
-        guard !(failedStep != nil && (outcome == .success || outcome == .noOp)) else { return nil }
+        switch outcome {
+        case .success:
+            guard failedStep == nil else { return nil }
+        case .partialSuccess:
+            guard failedStep != nil else { return nil }
+        case .noOp:
+            guard failedStep == nil else { return nil }
+            guard completedSteps.isEmpty else { return nil }
+            guard deletedAppPaths.isEmpty else { return nil }
+            guard terminatedProcessIDs.isEmpty else { return nil }
+        }
 
         self.outcome = outcome
         self.completedSteps = completedSteps
