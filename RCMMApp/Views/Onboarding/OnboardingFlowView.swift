@@ -74,14 +74,14 @@ struct OnboardingFlowView: View {
                             saveSelectedApps()
                             advanceToNextStep()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(AppPrimaryButtonStyle())
                         .disabled(selectedAppIds.isEmpty)
                         .accessibilityLabel("前往下一步")
                     } else if currentStep == .verify {
                         Button("完成") {
                             completeOnboarding()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(AppPrimaryButtonStyle())
                         .accessibilityLabel("完成引导设置")
                     }
                 }

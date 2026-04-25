@@ -115,7 +115,7 @@ struct ExtensionCleanupSheet: View {
                     Button("确认清理") {
                         appState.confirmExtensionCleanup(plan: plan)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(AppPrimaryButtonStyle())
                     .disabled(!plan.hasWork)
                     .keyboardShortcut(.defaultAction)
                 }
@@ -155,7 +155,7 @@ struct ExtensionCleanupSheet: View {
                     Button("完成") {
                         appState.dismissExtensionCleanupSheet()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(AppPrimaryButtonStyle())
                     .keyboardShortcut(.defaultAction)
                 }
             }

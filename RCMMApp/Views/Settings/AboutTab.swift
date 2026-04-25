@@ -49,7 +49,7 @@ struct AboutTab: View {
                         Button(appState.updatePrimaryActionTitle) {
                             appState.performUpdatePrimaryAction()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(AppPrimaryButtonStyle())
                     }
                 }
             }

@@ -83,7 +83,7 @@ struct ErrorBannerView: View {
                 ActivationPolicyManager.activateAsRegularApp()
             } postAction: {
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(AppPrimaryButtonStyle())
             .controlSize(.small)
             .accessibilityLabel("打开设置以修复问题")
 

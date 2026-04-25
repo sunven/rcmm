@@ -79,7 +79,7 @@ struct EnableExtensionStepView: View {
                     Text("前往系统设置")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(AppPrimaryButtonStyle())
                 .controlSize(.large)
                 .accessibilityLabel("打开系统设置中的扩展管理页面")
 

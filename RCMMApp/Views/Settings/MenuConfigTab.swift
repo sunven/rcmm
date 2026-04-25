@@ -80,7 +80,7 @@ struct MenuConfigTab: View {
                 Button("添加应用") {
                     showingAppSelection = true
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(AppPrimaryButtonStyle())
                 .controlSize(.small)
                 .accessibilityLabel("添加应用到右键菜单")
 

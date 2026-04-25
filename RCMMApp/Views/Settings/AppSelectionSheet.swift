@@ -61,7 +61,7 @@ struct AppSelectionSheet: View {
                     addSelectedApps()
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(AppPrimaryButtonStyle())
                 .disabled(selectedAppIds.isEmpty)
                 .keyboardShortcut(.defaultAction)
             }

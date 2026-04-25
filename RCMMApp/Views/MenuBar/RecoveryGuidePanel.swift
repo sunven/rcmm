@@ -94,7 +94,7 @@ struct RecoveryGuidePanel: View {
                 Text("修复")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(AppPrimaryButtonStyle())
             .accessibilityLabel("前往系统设置修复扩展")
 
             Button {

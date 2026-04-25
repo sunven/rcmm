@@ -25,9 +25,14 @@ struct UpdatePromptView: View {
 
             HStack {
                 Button("稍后", action: onLater)
+                    .keyboardShortcut(.cancelAction)
                 Spacer()
-                Button(primaryButtonTitle, action: onPrimaryAction)
-                    .buttonStyle(.borderedProminent)
+                Button(action: onPrimaryAction) {
+                    Text(primaryButtonTitle)
+                        .frame(minWidth: 96)
+                }
+                .buttonStyle(AppPrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
