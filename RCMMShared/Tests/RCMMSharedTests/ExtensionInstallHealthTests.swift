@@ -7,8 +7,8 @@ struct ExtensionInstallHealthTests {
     private let currentPath = "/Applications/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex"
     private let oldDebugPath = "/Users/test/Library/Developer/Xcode/DerivedData/rcmm/Build/Products/Debug/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex"
 
-    @Test("当前进程已启用时直接视为当前安装正常")
-    func currentProcessEnabledWins() {
+    @Test("无法读取 pluginkit 时回退到当前进程启用状态")
+    func fallbackToCurrentProcessStateWhenPluginKitIsUnavailable() {
         let report = ExtensionInstallHealthResolver.resolve(
             currentExtensionPath: currentPath,
             currentProcessExtensionEnabled: true,
@@ -17,6 +17,20 @@ struct ExtensionInstallHealthTests {
 
         #expect(report.status == .enabled)
         #expect(report.enabledExtensionPaths.isEmpty)
+    }
+
+    @Test("pluginkit 可用时不会让当前进程启用状态掩盖旧副本冲突")
+    func pluginKitWinsOverCurrentProcessFlag() {
+        let report = ExtensionInstallHealthResolver.resolve(
+            currentExtensionPath: currentPath,
+            currentProcessExtensionEnabled: true,
+            pluginKitOutput: """
+            +    com.sunven.rcmm.FinderExtension(1.0.0)\tID-1\t2026-04-22 10:00:00 +0000\t\(oldDebugPath)
+            """
+        )
+
+        #expect(report.status == .otherInstallationEnabled)
+        #expect(report.enabledExtensionPaths == [oldDebugPath])
     }
 
     @Test("pluginkit 包含当前安装路径时视为当前安装正常")
@@ -77,8 +91,8 @@ struct ExtensionInstallHealthTests {
         #expect(report.enabledExtensionPaths.isEmpty)
     }
 
-    @Test("无法读取 pluginkit 输出时保留未知状态")
-    func nilPluginKitOutputIsUnknown() {
+    @Test("无法读取 pluginkit 且当前进程未启用时保留未知状态")
+    func nilPluginKitOutputWithDisabledCurrentProcessIsUnknown() {
         let report = ExtensionInstallHealthResolver.resolve(
             currentExtensionPath: currentPath,
             currentProcessExtensionEnabled: false,
@@ -88,4 +102,21 @@ struct ExtensionInstallHealthTests {
         #expect(report.status == .unknown)
         #expect(report.enabledExtensionPaths.isEmpty)
     }
+
+    @Test("启用路径会标准化并去重")
+    func enabledPathsAreNormalizedAndDeduplicated() {
+        let report = ExtensionInstallHealthResolver.resolve(
+            currentExtensionPath: "/Applications/rcmm.app/Contents/PlugIns/../PlugIns/RCMMFinderExtension.appex",
+            currentProcessExtensionEnabled: false,
+            pluginKitOutput: """
+            +    com.sunven.rcmm.FinderExtension(1.0.0)\tID-1\t2026-04-22 10:00:00 +0000\t/Applications/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex
+            +    com.sunven.rcmm.FinderExtension(1.0.0)\tID-2\t2026-04-22 10:05:00 +0000\t/Applications/rcmm.app/Contents/PlugIns/../PlugIns/RCMMFinderExtension.appex
+            """
+        )
+
+        #expect(report.status == .enabled)
+        #expect(report.currentExtensionPath == currentPath)
+        #expect(report.enabledExtensionPaths == [currentPath])
+    }
+
 }

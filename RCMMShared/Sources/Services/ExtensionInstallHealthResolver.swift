@@ -6,51 +6,54 @@ public enum ExtensionInstallHealthResolver {
         currentProcessExtensionEnabled: Bool,
         pluginKitOutput: String?
     ) -> ExtensionInstallHealth {
+        let normalizedCurrentExtensionPath = currentExtensionPath.map(normalizePath(_:))
+
+        if let pluginKitOutput {
+            let enabledPaths = enabledExtensionPaths(from: pluginKitOutput)
+
+            if enabledPaths.count > 1 {
+                return ExtensionInstallHealth(
+                    status: .otherInstallationEnabled,
+                    currentExtensionPath: normalizedCurrentExtensionPath,
+                    enabledExtensionPaths: enabledPaths
+                )
+            }
+
+            if let normalizedCurrentExtensionPath,
+               enabledPaths.contains(normalizedCurrentExtensionPath) {
+                return ExtensionInstallHealth(
+                    status: .enabled,
+                    currentExtensionPath: normalizedCurrentExtensionPath,
+                    enabledExtensionPaths: enabledPaths
+                )
+            }
+
+            if !enabledPaths.isEmpty {
+                return ExtensionInstallHealth(
+                    status: .otherInstallationEnabled,
+                    currentExtensionPath: normalizedCurrentExtensionPath,
+                    enabledExtensionPaths: enabledPaths
+                )
+            }
+
+            return ExtensionInstallHealth(
+                status: .disabled,
+                currentExtensionPath: normalizedCurrentExtensionPath,
+                enabledExtensionPaths: []
+            )
+        }
+
         if currentProcessExtensionEnabled {
             return ExtensionInstallHealth(
                 status: .enabled,
-                currentExtensionPath: currentExtensionPath,
+                currentExtensionPath: normalizedCurrentExtensionPath,
                 enabledExtensionPaths: []
-            )
-        }
-
-        guard let pluginKitOutput else {
-            return ExtensionInstallHealth(
-                status: .unknown,
-                currentExtensionPath: currentExtensionPath,
-                enabledExtensionPaths: []
-            )
-        }
-
-        let enabledPaths = enabledExtensionPaths(from: pluginKitOutput)
-
-        if enabledPaths.count > 1 {
-            return ExtensionInstallHealth(
-                status: .otherInstallationEnabled,
-                currentExtensionPath: currentExtensionPath,
-                enabledExtensionPaths: enabledPaths
-            )
-        }
-
-        if let currentExtensionPath, enabledPaths.contains(currentExtensionPath) {
-            return ExtensionInstallHealth(
-                status: .enabled,
-                currentExtensionPath: currentExtensionPath,
-                enabledExtensionPaths: enabledPaths
-            )
-        }
-
-        if !enabledPaths.isEmpty {
-            return ExtensionInstallHealth(
-                status: .otherInstallationEnabled,
-                currentExtensionPath: currentExtensionPath,
-                enabledExtensionPaths: enabledPaths
             )
         }
 
         return ExtensionInstallHealth(
-            status: .disabled,
-            currentExtensionPath: currentExtensionPath,
+            status: .unknown,
+            currentExtensionPath: normalizedCurrentExtensionPath,
             enabledExtensionPaths: []
         )
     }
@@ -61,11 +64,16 @@ public enum ExtensionInstallHealthResolver {
             .compactMap { rawLine -> String? in
                 let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard line.first == "+" else { return nil }
-                return line
+                guard let rawPath = line
                     .split(separator: "\t")
                     .last
                     .map(String.init)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                    !rawPath.isEmpty
+                else {
+                    return nil
+                }
+                return normalizePath(rawPath)
             }
 
         var deduplicated: [String] = []
@@ -73,5 +81,9 @@ public enum ExtensionInstallHealthResolver {
             deduplicated.append(path)
         }
         return deduplicated
+    }
+
+    private static func normalizePath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path
     }
 }

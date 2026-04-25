@@ -14,7 +14,8 @@ class FinderSync: FIFinderSync {
 
     override init() {
         super.init()
-        FIFinderSyncController.default().directoryURLs = [URL(fileURLWithPath: "/")]
+        let monitoredURLs = Self.monitoredDirectoryURLs()
+        FIFinderSyncController.default().directoryURLs = monitoredURLs
 
         configObservation = DarwinNotificationCenter.shared.addObserver(
             name: NotificationNames.configChanged
@@ -22,7 +23,13 @@ class FinderSync: FIFinderSync {
             self?.logger.info("收到配置变更通知，下次右键将使用最新配置")
         }
 
-        logger.info("FinderSync Extension 已初始化，已注册配置变更监听")
+        logger.info(
+            """
+            FinderSync Extension 已初始化，已注册配置变更监听。
+            监控目录：
+            \(monitoredURLs.map(\.path).sorted().joined(separator: "\n"))
+            """
+        )
     }
 
     // MARK: - Menu
@@ -31,6 +38,10 @@ class FinderSync: FIFinderSync {
         let menu = NSMenu(title: "")
         let entries = configService.loadEntries()
             .filter { $0.isEnabled }
+
+        logger.debug(
+            "开始构建 Finder 菜单，menuKind=\(String(describing: menuKind), privacy: .public)，启用项数量=\(entries.count)"
+        )
 
         guard !entries.isEmpty else {
             logger.warning("无菜单配置项")
@@ -153,6 +164,37 @@ class FinderSync: FIFinderSync {
         pasteboard.setString(targetPath, forType: .string)
 
         logger.info("已拷贝路径: \(targetPath)")
+    }
+
+    private static func monitoredDirectoryURLs(
+        fileManager: FileManager = .default
+    ) -> Set<URL> {
+        let candidatePaths = [
+            NSHomeDirectory(),
+            "/Users",
+            "/Applications",
+            "/System/Applications",
+            "/System/Volumes/Data",
+            "/System/Volumes/Data/Users",
+            "/System/Volumes/Data/Applications",
+        ]
+
+        let candidateURLs = candidatePaths.compactMap { path -> URL? in
+            var isDirectory = ObjCBool(false)
+            guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                return nil
+            }
+            return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        }
+
+        let visibleVolumeURLs = (try? fileManager.contentsOfDirectory(
+            at: URL(fileURLWithPath: "/Volumes", isDirectory: true),
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []
+
+        return Set(candidateURLs + visibleVolumeURLs.map(\.standardizedFileURL))
     }
 
     /// 解析右键点击的目标路径（文件或目录）

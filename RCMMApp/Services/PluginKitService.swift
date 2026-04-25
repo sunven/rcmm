@@ -7,6 +7,7 @@ enum PluginKitService {
     private static let logger = Logger(subsystem: "com.sunven.rcmm", category: "health")
     private static let extensionBundleID = "com.sunven.rcmm.FinderExtension"
     private static let pluginKitExecutable = URL(fileURLWithPath: "/usr/bin/pluginkit")
+    private static let killAllExecutable = URL(fileURLWithPath: "/usr/bin/killall")
 
     static var isExtensionEnabled: Bool {
         let report = healthReport()
@@ -17,8 +18,8 @@ enum PluginKitService {
 
     /// 健康检测：查询 Finder Extension 注册状态，返回 ExtensionStatus 枚举值
     ///
-    /// 优先使用 `FIFinderSyncController.isExtensionEnabled` 判断当前运行中的 app 所附带扩展。
-    /// 若当前进程未被系统标记为启用，再回退到 `pluginkit` 查询当前安装路径是否真正被系统接管。
+    /// 优先使用 `pluginkit` 判断系统当前真正接管的是哪一份 Finder 扩展。
+    /// 只有在 `pluginkit` 不可用时，才回退到 `FIFinderSyncController.isExtensionEnabled`。
     ///
     /// `.unknown` 作为 `AppState.extensionStatus` 的初始默认值，表示应用启动后尚未执行首次检测的状态。
     static func checkHealth() -> ExtensionStatus {
@@ -30,6 +31,30 @@ enum PluginKitService {
     static func showExtensionManagement() {
         logger.info("跳转系统设置 - Extension 管理页面")
         FIFinderSyncController.showExtensionManagementInterface()
+    }
+
+    static func restartFinder(
+        commandRunner: SystemCommandRunning = SystemCommandRunner()
+    ) throws {
+        logger.info("手动重启 Finder")
+
+        let result = try commandRunner.run(
+            executable: killAllExecutable,
+            arguments: ["Finder"]
+        )
+
+        guard result.terminationStatus == 0 else {
+            let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let failureReason = stderr.isEmpty
+                ? "killall Finder 退出码：\(result.terminationStatus)"
+                : stderr
+            logger.error("重启 Finder 失败：\(failureReason, privacy: .public)")
+            throw NSError(
+                domain: "PluginKitService",
+                code: Int(result.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: failureReason]
+            )
+        }
     }
 
     static func enabledExtensionPaths() -> [String] {
@@ -46,10 +71,21 @@ enum PluginKitService {
             logger.debug("FinderSync API 检测到当前扩展实例已启用")
         }
 
+        let currentExtensionPath = currentExtensionPath()
+        let pluginKitOutput = pluginKitMatchOutput()
         let report = ExtensionInstallHealthResolver.resolve(
-            currentExtensionPath: currentExtensionPath(),
+            currentExtensionPath: currentExtensionPath,
             currentProcessExtensionEnabled: currentProcessEnabled,
-            pluginKitOutput: pluginKitMatchOutput()
+            pluginKitOutput: pluginKitOutput
+        )
+
+        logger.debug(
+            """
+            健康检测详情:
+            currentProcessEnabled=\(currentProcessEnabled, privacy: .public)
+            currentExtensionPath=\(currentExtensionPath ?? "nil", privacy: .public)
+            enabledExtensionPaths=\(report.enabledExtensionPaths.joined(separator: ", "), privacy: .public)
+            """
         )
 
         if report.status == .otherInstallationEnabled {
@@ -75,6 +111,10 @@ enum PluginKitService {
         case .otherInstallationEnabled:
             let currentPath = report.currentExtensionPath ?? "未知路径"
             let activePaths = report.enabledExtensionPaths.joined(separator: "\n")
+            let conflictHint = """
+            这通常发生在 Xcode 调试副本或旧安装副本仍被系统记录为启用时。
+            Finder 可能不会显示当前这份 rcmm 的右键菜单。请点击“清理旧扩展副本…”后重试。
+            """
             if report.enabledExtensionPaths.count > 1 {
                 return """
                 检测到多份 rcmm Finder 扩展同时处于启用状态。
@@ -83,6 +123,8 @@ enum PluginKitService {
 
                 系统记录的启用路径：
                 \(activePaths)
+
+                \(conflictHint)
                 """
             }
             return """
@@ -92,6 +134,8 @@ enum PluginKitService {
 
             系统当前启用的 rcmm 扩展路径：
             \(activePaths)
+
+            \(conflictHint)
             """
         case .unknown:
             return "暂时无法读取系统扩展注册状态。"
