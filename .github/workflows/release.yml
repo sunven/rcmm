@@ -193,6 +193,7 @@ jobs:
           fi
 
       - name: Install signing assets
+        id: signing_assets
         env:
           APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64 }}
           APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD }}
@@ -246,17 +247,20 @@ jobs:
           fi
 
           install_profile() {
-            local base64_value="$1"
-            local expected_identifier="$2"
+            local output_prefix="$1"
+            local base64_value="$2"
+            local expected_identifier="$3"
             local temp_profile="$RUNNER_TEMP/$(uuidgen).provisionprofile"
             local profile_plist="$RUNNER_TEMP/$(uuidgen).plist"
             local uuid
+            local profile_name
             local application_identifier
             local team_identifier
 
             printf '%s' "$base64_value" | decode_base64 > "$temp_profile"
             security cms -D -i "$temp_profile" > "$profile_plist"
             uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$profile_plist")"
+            profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$profile_plist")"
             application_identifier="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$profile_plist")"
             team_identifier="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.team-identifier' "$profile_plist")"
 
@@ -270,11 +274,17 @@ jobs:
             fi
 
             cp "$temp_profile" "$profiles_dir/$uuid.provisionprofile"
-            echo "Installed provisioning profile $uuid for $application_identifier"
+            echo "Installed provisioning profile $uuid ($profile_name) for $application_identifier"
+            {
+              echo "${output_prefix}_profile_uuid=$uuid"
+              echo "${output_prefix}_profile_name=$profile_name"
+            } >> "$GITHUB_OUTPUT"
           }
 
-          install_profile "$RCMM_APP_PROVISION_PROFILE_BASE64" "K65J6JBW5K.com.sunven.rcmm"
-          install_profile "$RCMM_EXTENSION_PROVISION_PROFILE_BASE64" "K65J6JBW5K.com.sunven.rcmm.FinderExtension"
+          install_profile "app" "$RCMM_APP_PROVISION_PROFILE_BASE64" "K65J6JBW5K.com.sunven.rcmm"
+          install_profile "extension" "$RCMM_EXTENSION_PROVISION_PROFILE_BASE64" "K65J6JBW5K.com.sunven.rcmm.FinderExtension"
+
+          echo "keychain_path=$keychain_path" >> "$GITHUB_OUTPUT"
 
           ls -la "$profiles_dir"
 
@@ -286,6 +296,12 @@ jobs:
       # 正常的 Apple Development 签名和 entitlements。
       # =====================================================================
       - name: Build signed archive
+        env:
+          RCMM_SIGNING_KEYCHAIN_PATH: ${{ steps.signing_assets.outputs.keychain_path }}
+          RCMM_APP_PROFILE_NAME: ${{ steps.signing_assets.outputs.app_profile_name }}
+          RCMM_APP_PROFILE_UUID: ${{ steps.signing_assets.outputs.app_profile_uuid }}
+          RCMM_EXTENSION_PROFILE_NAME: ${{ steps.signing_assets.outputs.extension_profile_name }}
+          RCMM_EXTENSION_PROFILE_UUID: ${{ steps.signing_assets.outputs.extension_profile_uuid }}
         run: |
           set -euo pipefail
 
@@ -302,7 +318,14 @@ jobs:
             MARKETING_VERSION=${{ steps.normalized.outputs.short_version }} \
             CURRENT_PROJECT_VERSION=${{ steps.normalized.outputs.bundle_version }} \
             RCMM_DISPLAY_VERSION=${{ steps.normalized.outputs.display_version }} \
-            -allowProvisioningUpdates \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Development" \
+            DEVELOPMENT_TEAM=K65J6JBW5K \
+            OTHER_CODE_SIGN_FLAGS="--keychain $RCMM_SIGNING_KEYCHAIN_PATH" \
+            RCMM_APP_PROVISIONING_PROFILE_SPECIFIER="$RCMM_APP_PROFILE_NAME" \
+            RCMM_APP_PROVISIONING_PROFILE_UUID="$RCMM_APP_PROFILE_UUID" \
+            RCMM_EXTENSION_PROVISIONING_PROFILE_SPECIFIER="$RCMM_EXTENSION_PROFILE_NAME" \
+            RCMM_EXTENSION_PROVISIONING_PROFILE_UUID="$RCMM_EXTENSION_PROFILE_UUID" \
             | tee build/xcodebuild.log
 
           # Verify archive was created
