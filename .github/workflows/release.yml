@@ -329,7 +329,7 @@ jobs:
           File.write(path, content)
           RUBY
 
-          rg -n 'CODE_SIGN_STYLE =|PROVISIONING_PROFILE' rcmm.xcodeproj/project.pbxproj
+          grep -nE 'CODE_SIGN_STYLE =|PROVISIONING_PROFILE' rcmm.xcodeproj/project.pbxproj
 
           xcodebuild archive \
             -project rcmm.xcodeproj \
