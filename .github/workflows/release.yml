@@ -308,6 +308,27 @@ jobs:
           # Create build directory
           mkdir -p build
 
+          ruby <<'RUBY'
+          path = "rcmm.xcodeproj/project.pbxproj"
+          content = File.read(path)
+          replacements = {
+            'PROVISIONING_PROFILE = "$(RCMM_APP_PROVISIONING_PROFILE_UUID)";' => %(PROVISIONING_PROFILE = "#{ENV.fetch("RCMM_APP_PROFILE_UUID")}";),
+            'PROVISIONING_PROFILE_SPECIFIER = "$(RCMM_APP_PROVISIONING_PROFILE_SPECIFIER)";' => %(PROVISIONING_PROFILE_SPECIFIER = "#{ENV.fetch("RCMM_APP_PROFILE_NAME")}";),
+            'PROVISIONING_PROFILE = "$(RCMM_EXTENSION_PROVISIONING_PROFILE_UUID)";' => %(PROVISIONING_PROFILE = "#{ENV.fetch("RCMM_EXTENSION_PROFILE_UUID")}";),
+            'PROVISIONING_PROFILE_SPECIFIER = "$(RCMM_EXTENSION_PROVISIONING_PROFILE_SPECIFIER)";' => %(PROVISIONING_PROFILE_SPECIFIER = "#{ENV.fetch("RCMM_EXTENSION_PROFILE_NAME")}";),
+          }
+
+          replacements.each do |from, to|
+            unless content.include?(from)
+              warn "Missing signing placeholder: #{from}"
+              exit 1
+            end
+            content = content.sub(from, to)
+          end
+
+          File.write(path, content)
+          RUBY
+
           xcodebuild archive \
             -project rcmm.xcodeproj \
             -scheme rcmm \
@@ -322,10 +343,6 @@ jobs:
             CODE_SIGN_IDENTITY="Apple Development" \
             DEVELOPMENT_TEAM=K65J6JBW5K \
             OTHER_CODE_SIGN_FLAGS="--keychain $RCMM_SIGNING_KEYCHAIN_PATH" \
-            RCMM_APP_PROVISIONING_PROFILE_SPECIFIER="$RCMM_APP_PROFILE_NAME" \
-            RCMM_APP_PROVISIONING_PROFILE_UUID="$RCMM_APP_PROFILE_UUID" \
-            RCMM_EXTENSION_PROVISIONING_PROFILE_SPECIFIER="$RCMM_EXTENSION_PROFILE_NAME" \
-            RCMM_EXTENSION_PROVISIONING_PROFILE_UUID="$RCMM_EXTENSION_PROFILE_UUID" \
             | tee build/xcodebuild.log
 
           # Verify archive was created
