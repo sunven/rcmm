@@ -204,7 +204,8 @@ jobs:
           set -euo pipefail
 
           keychain_path="$RUNNER_TEMP/rcmm-signing.keychain-db"
-          profiles_dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          xcode_profiles_dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          mobiledevice_profiles_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
           cert_path="$RUNNER_TEMP/rcmm-dev-cert.p12"
 
           decode_base64() {
@@ -215,7 +216,7 @@ jobs:
             fi
           }
 
-          mkdir -p "$profiles_dir"
+          mkdir -p "$xcode_profiles_dir" "$mobiledevice_profiles_dir"
           printf '%s' "$APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64" | decode_base64 > "$cert_path"
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
@@ -273,7 +274,8 @@ jobs:
               exit 1
             fi
 
-            cp "$temp_profile" "$profiles_dir/$uuid.provisionprofile"
+            cp "$temp_profile" "$xcode_profiles_dir/$uuid.provisionprofile"
+            cp "$temp_profile" "$mobiledevice_profiles_dir/$uuid.provisionprofile"
             echo "Installed provisioning profile $uuid ($profile_name) for $application_identifier"
             {
               echo "${output_prefix}_profile_uuid=$uuid"
@@ -286,7 +288,8 @@ jobs:
 
           echo "keychain_path=$keychain_path" >> "$GITHUB_OUTPUT"
 
-          ls -la "$profiles_dir"
+          ls -la "$xcode_profiles_dir"
+          ls -la "$mobiledevice_profiles_dir"
 
       # =====================================================================
       # Step 6: 构建已签名 Xcode Archive
