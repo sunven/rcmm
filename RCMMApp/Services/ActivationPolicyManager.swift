@@ -18,6 +18,24 @@ enum ActivationPolicyManager {
         logger.debug("ActivationPolicy → .regular")
     }
 
+    /// 从菜单栏弹窗打开 Settings 后重新抢回焦点。
+    ///
+    /// SettingsLink 和 MenuBarExtra 的窗口关闭都由 SwiftUI 异步调度，
+    /// 这里延后一拍再次激活，避免 Settings 窗口处于非活动状态导致开关选中态变灰。
+    @MainActor
+    static func refocusSettingsAfterMenuAction() {
+        activateAsRegularApp()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            if let window = NSApp.windows.first(where: { $0.isVisible && !$0.isMiniaturized && $0.level == .normal }) {
+                window.makeKeyAndOrderFront(nil)
+            }
+            logger.debug("Settings window refocused after menu action")
+        }
+    }
+
     /// 延迟切换为 .accessory（隐藏 Dock 图标）
     ///
     /// 在 Settings 窗口或引导窗口关闭后调用。使用 DispatchQueue.main.async

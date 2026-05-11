@@ -564,7 +564,17 @@ final class AppState {
     // MARK: - Onboarding Window
 
     func showOnboardingIfNeeded() {
-        guard !isOnboardingCompleted, onboardingWindow == nil else { return }
+        guard !isOnboardingCompleted else { return }
+        showOnboarding()
+    }
+
+    func showOnboarding() {
+        if let window = onboardingWindow {
+            ActivationPolicyManager.activateAsRegularApp()
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            return
+        }
 
         let contentView = OnboardingFlowView()
             .environment(self)
@@ -587,11 +597,9 @@ final class AppState {
             forName: NSWindow.willCloseNotification,
             object: window,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self, weak window] _ in
             Task { @MainActor in
-                self?.onboardingWindow = nil
-                self?.windowCloseObserver = nil
-                ActivationPolicyManager.hideToMenuBar()
+                self?.handleOnboardingWindowClosed(window)
             }
         }
 
@@ -602,14 +610,29 @@ final class AppState {
     }
 
     func closeOnboarding() {
+        guard let window = onboardingWindow else {
+            scheduleStartupUpdateCheckIfNeeded()
+            return
+        }
+        window.close()
+        scheduleStartupUpdateCheckIfNeeded()
+    }
+
+    private func handleOnboardingWindowClosed(_ window: NSWindow?) {
         if let observer = windowCloseObserver {
             NotificationCenter.default.removeObserver(observer)
             windowCloseObserver = nil
         }
-        onboardingWindow?.close()
-        onboardingWindow = nil
+        if onboardingWindow === window {
+            onboardingWindow = nil
+        }
+
+        guard let window else {
+            ActivationPolicyManager.hideToMenuBar()
+            return
+        }
+        guard !hasVisibleWindow(excluding: window) else { return }
         ActivationPolicyManager.hideToMenuBar()
-        scheduleStartupUpdateCheckIfNeeded()
     }
 
     // MARK: - Menu Items
@@ -642,6 +665,7 @@ final class AppState {
 
     /// 从 AppInfo 创建 MenuItemConfig 并添加到菜单
     func addMenuItem(from appInfo: AppInfo) {
+        guard !containsCustomMenuItem(matching: appInfo) else { return }
         let newItem = MenuItemConfig(
             appName: appInfo.name,
             bundleId: appInfo.bundleId,
@@ -653,17 +677,51 @@ final class AppState {
 
     /// 批量添加多个应用到菜单（只触发一次 saveAndSync）
     func addMenuItems(from appInfos: [AppInfo]) {
+        var existingBundleIds = Set<String>()
+        var existingPaths = Set<String>()
+        for entry in menuEntries {
+            guard case .custom(let item) = entry else { continue }
+            if let bundleId = item.bundleId {
+                existingBundleIds.insert(bundleId)
+            }
+            existingPaths.insert(item.appPath)
+        }
+        var didAddItem = false
+
         for appInfo in appInfos {
+            if let bundleId = appInfo.bundleId, existingBundleIds.contains(bundleId) {
+                continue
+            }
+            guard !existingPaths.contains(appInfo.path) else { continue }
+
             let newItem = MenuItemConfig(
                 appName: appInfo.name,
                 bundleId: appInfo.bundleId,
                 appPath: appInfo.path
             )
             menuEntries.append(.custom(newItem))
+            if let bundleId = appInfo.bundleId {
+                existingBundleIds.insert(bundleId)
+            }
+            existingPaths.insert(appInfo.path)
+            didAddItem = true
         }
-        if !appInfos.isEmpty {
+        if didAddItem {
             saveAndSync()
         }
+    }
+
+    private func containsCustomMenuItem(matching appInfo: AppInfo) -> Bool {
+        for entry in menuEntries {
+            guard case .custom(let item) = entry else { continue }
+            if let bundleId = appInfo.bundleId, item.bundleId == bundleId {
+                return true
+            }
+            if item.appPath == appInfo.path {
+                return true
+            }
+        }
+        return false
     }
 
     /// 移动菜单项到新位置（拖拽排序）

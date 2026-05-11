@@ -31,6 +31,17 @@ struct GeneralTab: View {
                 }
             }
 
+            Section("设置向导") {
+                Text("重新打开首次设置流程，用于检查 Finder 扩展、添加应用和设置开机自启。不会清空已有菜单配置。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button("重新打开设置向导…") {
+                    appState.showOnboarding()
+                }
+                .accessibilityLabel("重新打开设置向导")
+            }
+
             Section("扩展维护") {
                 if appState.extensionStatus == .otherInstallationEnabled,
                    let detail = appState.extensionStatusDetail {

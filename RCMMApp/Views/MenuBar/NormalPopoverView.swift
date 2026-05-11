@@ -5,6 +5,7 @@ import SwiftUI
 /// 正常状态弹出窗口，展示扩展状态 + 错误信息 + 打开设置 + 退出按钮
 struct NormalPopoverView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State private var settingsHovered = false
     @State private var quitHovered = false
 
@@ -27,6 +28,8 @@ struct NormalPopoverView: View {
             } preAction: {
                 ActivationPolicyManager.activateAsRegularApp()
             } postAction: {
+                dismiss()
+                ActivationPolicyManager.refocusSettingsAfterMenuAction()
             }
             .buttonStyle(MenuItemButtonStyle())
             .environment(\.isHovered, settingsHovered)

@@ -1,8 +1,6 @@
-import AppKit
 import Foundation
 import os.log
 import RCMMShared
-import UniformTypeIdentifiers
 
 final class AppDiscoveryService: @unchecked Sendable {
 
@@ -55,31 +53,6 @@ final class AppDiscoveryService: @unchecked Sendable {
 
         logger.info("应用扫描完成: 发现 \(sorted.count) 个应用")
         return sorted
-    }
-
-    /// 弹出 NSOpenPanel 让用户手动选择 .app 文件
-    @MainActor
-    func selectApplicationManually() async -> AppInfo? {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.application]
-        panel.treatsFilePackagesAsDirectories = false
-        panel.directoryURL = URL(fileURLWithPath: "/Applications")
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.prompt = "选择"
-
-        let response = await panel.begin()
-        guard response == .OK, let url = panel.url else {
-            logger.info("用户取消了手动选择应用")
-            return nil
-        }
-
-        let result = appInfo(from: url)
-        if let result {
-            logger.info("用户手动选择了应用: \(result.name) (\(result.bundleId ?? "无 bundleId"))")
-        }
-        return result
     }
 
     // MARK: - Private

@@ -4,11 +4,11 @@ struct VerifyStepView: View {
     @Binding var launchAtLogin: Bool
 
     var body: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 20) {
             // 顶部图标和标题
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
                 Image(systemName: "hand.tap")
-                    .font(.system(size: 48))
+                    .font(.system(size: 44))
                     .foregroundStyle(Color.accentColor)
                     .accessibilityHidden(true)
 
@@ -42,14 +42,20 @@ struct VerifyStepView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal)
 
-            Spacer()
-
             // 开机自启 Toggle
-            Toggle("开机自动启动", isOn: $launchAtLogin)
-                .toggleStyle(.switch)
-                .padding(.horizontal)
-                .accessibilityLabel("开机自动启动")
-                .accessibilityHint("开启后应用将在登录时自动启动")
+            HStack(spacing: 12) {
+                Text("开机自动启动")
+                    .font(.subheadline)
+                Spacer()
+                Toggle("开机自动启动", isOn: $launchAtLogin)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .accessibilityLabel("开机自动启动")
+                    .accessibilityHint("开启后应用将在登录时自动启动")
+            }
+            .padding(.horizontal)
+
+            Spacer(minLength: 0)
         }
     }
 }

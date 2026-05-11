@@ -1,4 +1,3 @@
-import AppKit
 import RCMMShared
 import SwiftUI
 
@@ -21,31 +20,15 @@ struct AppSelectionSheet: View {
             }
             .padding()
 
-            if isLoading {
-                Spacer()
-                ProgressView("正在扫描应用…")
-                Spacer()
-            } else if discoveredApps.isEmpty {
-                Spacer()
-                VStack(spacing: 6) {
-                    Text("未发现可添加应用")
-                        .font(.body)
-                    Text("仅支持从 /Applications 和 ~/Applications 添加应用")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            } else {
-                List {
-                    ForEach(groupedApps, id: \.category) { group in
-                        Section(header: Text(group.category.displayName)) {
-                            ForEach(group.apps) { app in
-                                appRow(for: app)
-                            }
-                        }
-                    }
-                }
-            }
+            AppPickerListView(
+                apps: discoveredApps,
+                existingEntries: appState.menuEntries,
+                selectedAppIds: $selectedAppIds,
+                isLoading: isLoading,
+                loadingTitle: "正在扫描应用…",
+                emptyTitle: "未发现可添加应用",
+                emptySubtitle: "仅支持从 /Applications 和 ~/Applications 添加应用"
+            )
 
             Divider()
 
@@ -73,72 +56,6 @@ struct AppSelectionSheet: View {
         }
     }
 
-    private var existingAppIdentifiers: Set<String> {
-        var identifiers = Set<String>()
-        for entry in appState.menuEntries {
-            if case .custom(let item) = entry {
-                if let bundleId = item.bundleId {
-                    identifiers.insert(bundleId)
-                } else {
-                    identifiers.insert(item.appPath)
-                }
-            }
-        }
-        return identifiers
-    }
-
-    private func isAlreadyAdded(_ app: AppInfo) -> Bool {
-        if let bundleId = app.bundleId {
-            return existingAppIdentifiers.contains(bundleId)
-        }
-        return existingAppIdentifiers.contains(app.path)
-    }
-
-    private var groupedApps: [AppGroup] {
-        let grouped = Dictionary(grouping: discoveredApps) { app in
-            app.category ?? .other
-        }
-        return grouped
-            .map { AppGroup(category: $0.key, apps: $0.value) }
-            .sorted { $0.category < $1.category }
-    }
-
-    @ViewBuilder
-    private func appRow(for app: AppInfo) -> some View {
-        let alreadyAdded = isAlreadyAdded(app)
-
-        HStack(spacing: 12) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: app.path))
-                .resizable()
-                .frame(width: 24, height: 24)
-            Text(app.name)
-                .font(.body)
-            Spacer()
-
-            if alreadyAdded {
-                Text("已添加")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Toggle("", isOn: Binding(
-                    get: { selectedAppIds.contains(app.id) },
-                    set: { isSelected in
-                        if isSelected {
-                            selectedAppIds.insert(app.id)
-                        } else {
-                            selectedAppIds.remove(app.id)
-                        }
-                    }
-                ))
-                .toggleStyle(.checkbox)
-                .labelsHidden()
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(app.name)
-        .accessibilityHint(alreadyAdded ? "已添加到菜单" : "勾选以添加到右键菜单")
-    }
-
     private func loadApps() async {
         isLoading = true
         let discoveryService = AppDiscoveryService()
@@ -152,20 +69,5 @@ struct AppSelectionSheet: View {
     private func addSelectedApps() {
         let appsToAdd = discoveredApps.filter { selectedAppIds.contains($0.id) }
         appState.addMenuItems(from: appsToAdd)
-    }
-}
-
-private struct AppGroup {
-    let category: AppCategory
-    let apps: [AppInfo]
-}
-
-private extension AppCategory {
-    var displayName: String {
-        switch self {
-        case .terminal: return "终端"
-        case .editor: return "编辑器"
-        case .other: return "其他"
-        }
     }
 }

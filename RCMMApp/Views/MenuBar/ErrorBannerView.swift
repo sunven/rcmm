@@ -5,6 +5,7 @@ import SwiftUI
 /// 错误展示横幅，在弹出窗口中显示最近的执行错误和恢复建议
 struct ErrorBannerView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
     @State private var showAutoRepair = true
 
     /// 最多展示 3 条最近的错误，避免弹出窗口过高
@@ -82,6 +83,8 @@ struct ErrorBannerView: View {
             } preAction: {
                 ActivationPolicyManager.activateAsRegularApp()
             } postAction: {
+                dismiss()
+                ActivationPolicyManager.refocusSettingsAfterMenuAction()
             }
             .buttonStyle(AppPrimaryButtonStyle())
             .controlSize(.small)

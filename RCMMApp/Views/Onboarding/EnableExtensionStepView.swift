@@ -3,6 +3,7 @@ import SwiftUI
 
 struct EnableExtensionStepView: View {
     @Binding var isExtensionEnabled: Bool
+    var autoAdvanceWhenEnabled = true
     var onNext: () -> Void
 
     @State private var timerCancellable: Timer?
@@ -70,15 +71,14 @@ struct EnableExtensionStepView: View {
                     .accessibilityLabel("Finder 扩展已成功启用")
             }
 
-            Spacer()
-
             // 操作按钮
-            VStack(spacing: 12) {
+            HStack(spacing: 12) {
                 Button {
                     PluginKitService.showExtensionManagement()
                 } label: {
                     Text("前往系统设置")
                         .frame(maxWidth: .infinity)
+                        .lineLimit(1)
                 }
                 .buttonStyle(AppPrimaryButtonStyle())
                 .controlSize(.large)
@@ -89,6 +89,7 @@ struct EnableExtensionStepView: View {
                 } label: {
                     Text("重新检测")
                         .frame(maxWidth: .infinity)
+                        .lineLimit(1)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
@@ -96,6 +97,7 @@ struct EnableExtensionStepView: View {
             }
             .padding(.horizontal)
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .onAppear {
             checkExtensionStatus()
             startPolling()
@@ -110,7 +112,9 @@ struct EnableExtensionStepView: View {
         isExtensionEnabled = enabled
         if enabled {
             stopPolling()
-            onNext()
+            if autoAdvanceWhenEnabled {
+                onNext()
+            }
         }
     }
 

@@ -8,6 +8,7 @@ struct OnboardingFlowView: View {
     @State private var isExtensionEnabled = false
     @State private var selectedAppIds: Set<UUID> = []
     @State private var launchAtLogin = true
+    @State private var autoAdvanceWhenExtensionEnabled = true
     @State private var isCompleting = false
     @State private var registrationErrorMessage: String? = nil
 
@@ -31,7 +32,8 @@ struct OnboardingFlowView: View {
                     case .enableExtension:
                         EnableExtensionStepView(
                             isExtensionEnabled: $isExtensionEnabled,
-                            onNext: { advanceToStep(.selectApps) }
+                            autoAdvanceWhenEnabled: autoAdvanceWhenExtensionEnabled,
+                            onNext: { advanceFromExtensionStep() }
                         )
                     case .selectApps:
                         SelectAppsStepView(selectedAppIds: $selectedAppIds)
@@ -49,29 +51,34 @@ struct OnboardingFlowView: View {
             // 底部导航
             HStack {
                 if !isCompleting {
-                    if currentStep == .enableExtension || currentStep == .selectApps {
-                        Button("跳过") {
-                            advanceToNextStep()
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel(currentStep == .enableExtension ? "跳过启用扩展步骤" : "跳过应用选择步骤")
-                    } else if currentStep == .verify {
-                        Button("跳过") {
-                            completeOnboarding()
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel("跳过验证步骤并完成引导")
+                    Button("跳过") {
+                        skipOnboarding()
                     }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("跳过设置向导")
                 }
 
                 Spacer()
 
                 if !isCompleting {
-                    if currentStep == .selectApps {
+                    if canGoBack {
+                        Button("上一步") {
+                            returnToPreviousStep()
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel("返回上一步")
+                    }
+
+                    if currentStep == .enableExtension {
                         Button("下一步") {
-                            saveSelectedApps()
+                            advanceToNextStep()
+                        }
+                        .buttonStyle(AppPrimaryButtonStyle())
+                        .disabled(!isExtensionEnabled)
+                        .accessibilityLabel("前往下一步")
+                    } else if currentStep == .selectApps {
+                        Button("下一步") {
                             advanceToNextStep()
                         }
                         .buttonStyle(AppPrimaryButtonStyle())
@@ -135,26 +142,54 @@ struct OnboardingFlowView: View {
 
     // MARK: - 导航
 
+    private var canGoBack: Bool {
+        currentStep.rawValue > OnboardingStep.enableExtension.rawValue
+    }
+
     private func advanceToStep(_ step: OnboardingStep) {
         withAnimation(.easeInOut(duration: 0.3)) {
             currentStep = step
         }
     }
 
+    private func advanceFromExtensionStep() {
+        autoAdvanceWhenExtensionEnabled = true
+        advanceToStep(.selectApps)
+    }
+
     private func advanceToNextStep() {
         guard let nextStep = OnboardingStep(rawValue: currentStep.rawValue + 1) else { return }
+        if currentStep == .enableExtension {
+            autoAdvanceWhenExtensionEnabled = true
+        }
         advanceToStep(nextStep)
     }
 
-    private func saveSelectedApps() {
+    private func returnToPreviousStep() {
+        guard let previousStep = OnboardingStep(rawValue: currentStep.rawValue - 1) else { return }
+        if previousStep == .enableExtension {
+            autoAdvanceWhenExtensionEnabled = false
+        }
+        advanceToStep(previousStep)
+    }
+
+    private func applySelectedApps() {
         let appsToAdd = appState.discoveredApps.filter { selectedAppIds.contains($0.id) }
         appState.addMenuItems(from: appsToAdd)
     }
 
     // MARK: - 引导完成
 
+    private func skipOnboarding() {
+        guard !isCompleting else { return }
+        appState.isOnboardingCompleted = true
+        appState.closeOnboarding()
+    }
+
     private func completeOnboarding() {
         guard !isCompleting else { return }
+
+        applySelectedApps()
 
         // 根据 Toggle 状态注册或取消开机自启
         if launchAtLogin {
