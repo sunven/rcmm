@@ -14,7 +14,8 @@ public enum ExtensionCleanupPlanner {
         pluginKitExtensionPaths: [String],
         discoveredAppPaths: [String],
         runningProcesses: [ExtensionCleanupProcess],
-        repositoryRoot: String?
+        repositoryRoot: String?,
+        extensionBundleID: String = RuntimeConfiguration.defaultFinderExtensionBundleID
     ) -> ExtensionCleanupPlan {
         let normalizedCurrentAppPath = currentAppPath.map(normalizePath(_:))
         let normalizedRepositoryRoot = repositoryRoot.map(normalizePath(_:))
@@ -80,14 +81,17 @@ public enum ExtensionCleanupPlanner {
             currentAppPath: normalizedCurrentAppPath,
             deleteCandidates: deleteCandidates,
             skippedCandidates: skippedCandidates,
-            processesToTerminate: processesToTerminate
+            processesToTerminate: processesToTerminate,
+            postCleanupCommands: postCleanupCommands(extensionBundleID: extensionBundleID)
         )
     }
 
-    private static let postCleanupCommands: [String] = [
-        "pluginkit -e use -i com.sunven.rcmm.FinderExtension",
-        "killall Finder"
-    ]
+    private static func postCleanupCommands(extensionBundleID: String) -> [String] {
+        [
+            "pluginkit -e use -i \(extensionBundleID)",
+            "killall Finder"
+        ]
+    }
 
     private enum AppClassification {
         case derivedData
@@ -146,13 +150,15 @@ public enum ExtensionCleanupPlanner {
         currentAppPath: String?,
         deleteCandidates: [ExtensionCleanupCandidate],
         skippedCandidates: [ExtensionCleanupCandidate],
-        processesToTerminate: [ExtensionCleanupProcess]
+        processesToTerminate: [ExtensionCleanupProcess],
+        postCleanupCommands: [String]
     ) -> ExtensionCleanupPlan {
         makePlanOrSafeFallback(
             currentAppPath: currentAppPath,
             deleteCandidates: deleteCandidates,
             skippedCandidates: skippedCandidates,
             processesToTerminate: processesToTerminate,
+            postCleanupCommands: postCleanupCommands,
             emitDebugSignal: true
         )
     }
@@ -162,6 +168,7 @@ public enum ExtensionCleanupPlanner {
         deleteCandidates: [ExtensionCleanupCandidate],
         skippedCandidates: [ExtensionCleanupCandidate],
         processesToTerminate: [ExtensionCleanupProcess],
+        postCleanupCommands: [String],
         emitDebugSignal: Bool
     ) -> ExtensionCleanupPlan {
         if let plan = ExtensionCleanupPlan(
@@ -210,6 +217,7 @@ public enum ExtensionCleanupPlanner {
             deleteCandidates: deleteCandidates,
             skippedCandidates: skippedCandidates,
             processesToTerminate: processesToTerminate,
+            postCleanupCommands: [],
             emitDebugSignal: false
         )
     }

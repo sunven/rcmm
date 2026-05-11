@@ -115,6 +115,20 @@ struct ExtensionCleanupPlannerTests {
         #expect(plan.deleteCandidates.map(\.appPath) == [oldDerivedDataApp])
     }
 
+    @Test("清理计划使用当前构建的 extension bundle ID")
+    func usesCurrentExtensionBundleIDForPostCleanupCommand() {
+        let plan = ExtensionCleanupPlanner.buildPlan(
+            currentAppPath: currentApp,
+            pluginKitExtensionPaths: [],
+            discoveredAppPaths: [oldDerivedDataApp],
+            runningProcesses: [],
+            repositoryRoot: nil,
+            extensionBundleID: "com.sunven.rcmm.debug.FinderExtension"
+        )
+
+        #expect(plan.postCleanupCommands.first == "pluginkit -e use -i com.sunven.rcmm.debug.FinderExtension")
+    }
+
     @Test("无效 extension 后缀不会产生候选")
     func ignoresInvalidExtensionSuffix() {
         let plan = ExtensionCleanupPlanner.buildPlan(

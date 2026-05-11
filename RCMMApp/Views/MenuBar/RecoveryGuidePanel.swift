@@ -62,7 +62,7 @@ struct RecoveryGuidePanel: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text("pluginkit -e use -i com.sunven.rcmm.FinderExtension")
+            Text(PluginKitService.extensionEnableCommand)
                 .font(.system(.caption, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .textSelection(.enabled)

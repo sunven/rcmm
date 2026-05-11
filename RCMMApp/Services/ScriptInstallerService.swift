@@ -9,7 +9,7 @@ final class ScriptInstallerService {
     )
 
     /// Extension 的 bundle ID，用于定位脚本目录
-    private let extensionBundleID = "com.sunven.rcmm.FinderExtension"
+    private let extensionBundleID = RuntimeConfiguration.finderExtensionBundleID
 
     /// Extension 脚本目录
     private var scriptsDirectory: URL {

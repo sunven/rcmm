@@ -5,7 +5,7 @@ import RCMMShared
 
 final class ScriptExecutor {
     private let logger = Logger(
-        subsystem: "com.sunven.rcmm.FinderExtension",
+        subsystem: RuntimeConfiguration.finderExtensionBundleID,
         category: "script"
     )
     private let errorQueue = SharedErrorQueue()

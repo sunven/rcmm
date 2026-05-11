@@ -5,7 +5,7 @@ import os.log
 
 class FinderSync: FIFinderSync {
     private let logger = Logger(
-        subsystem: "com.sunven.rcmm.FinderExtension",
+        subsystem: RuntimeConfiguration.finderExtensionBundleID,
         category: "menu"
     )
     private let configService = SharedConfigService()

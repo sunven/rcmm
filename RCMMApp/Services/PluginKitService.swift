@@ -5,9 +5,20 @@ import RCMMShared
 
 enum PluginKitService {
     private static let logger = Logger(subsystem: "com.sunven.rcmm", category: "health")
-    private static let extensionBundleID = "com.sunven.rcmm.FinderExtension"
     private static let pluginKitExecutable = URL(fileURLWithPath: "/usr/bin/pluginkit")
     private static let killAllExecutable = URL(fileURLWithPath: "/usr/bin/killall")
+
+    static var appDisplayName: String {
+        RuntimeConfiguration.appDisplayName
+    }
+
+    static var extensionBundleID: String {
+        RuntimeConfiguration.finderExtensionBundleID
+    }
+
+    static var extensionEnableCommand: String {
+        "pluginkit -e use -i \(extensionBundleID)"
+    }
 
     static var isExtensionEnabled: Bool {
         let report = healthReport()

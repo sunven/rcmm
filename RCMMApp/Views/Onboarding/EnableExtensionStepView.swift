@@ -1,3 +1,4 @@
+import RCMMShared
 import SwiftUI
 
 struct EnableExtensionStepView: View {
@@ -18,7 +19,7 @@ struct EnableExtensionStepView: View {
                 Text("启用 Finder 扩展")
                     .font(.title2.bold())
 
-                Text("rcmm 需要启用 Finder Sync 扩展才能在右键菜单中显示快捷操作。")
+                Text("\(PluginKitService.appDisplayName) 需要启用 Finder Sync 扩展才能在右键菜单中显示快捷操作。")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -36,14 +37,14 @@ struct EnableExtensionStepView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Label("打开 系统设置", systemImage: "1.circle.fill")
                         Label("前往 通用 > 登录项与扩展", systemImage: "2.circle.fill")
-                        Label("找到 rcmm 并开启扩展", systemImage: "3.circle.fill")
+                        Label("找到 \(PluginKitService.appDisplayName) 并开启扩展", systemImage: "3.circle.fill")
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
                         Label("点击下方「前往系统设置」按钮", systemImage: "1.circle.fill")
-                        Label("在扩展列表中找到 rcmm 并开启", systemImage: "2.circle.fill")
+                        Label("在扩展列表中找到 \(PluginKitService.appDisplayName) 并开启", systemImage: "2.circle.fill")
                     }
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -52,7 +53,7 @@ struct EnableExtensionStepView: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .padding(.top, 4)
-                    Text("pluginkit -e use -i com.sunven.rcmm.FinderExtension")
+                    Text(PluginKitService.extensionEnableCommand)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.tertiary)
                         .textSelection(.enabled)

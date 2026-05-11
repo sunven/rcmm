@@ -162,16 +162,31 @@ In Xcode:
 3. Run the scheme
 4. Right-click in Finder to see the context menu
 
+### Debug and Release Coexistence
+
+Release builds keep `com.sunven.rcmm`, `com.sunven.rcmm.FinderExtension`, and `group.com.sunven.rcmm`.
+
+Debug builds use separate identifiers so the installed app and Xcode build can coexist:
+
+- App: `com.sunven.rcmm.debug`
+- Finder extension: `com.sunven.rcmm.debug.FinderExtension`
+- App Group: `group.com.sunven.rcmm.debug`
+- Display name: `rcmm Debug`
+
+The first signed Debug build needs matching Apple Developer App IDs, App Group, and provisioning profiles. Let Xcode manage signing, or run the build with provisioning updates allowed.
+
 ### Viewing Extension Logs
 
 ```bash
 log stream --predicate 'subsystem == "com.sunven.rcmm.FinderExtension"'
+log stream --predicate 'subsystem == "com.sunven.rcmm.debug.FinderExtension"'
 ```
 
 ### Checking Extension Registration
 
 ```bash
 pluginkit -m -i com.sunven.rcmm.FinderExtension
+pluginkit -m -i com.sunven.rcmm.debug.FinderExtension
 ```
 
 ## Architecture

@@ -23,12 +23,16 @@ xcodebuild -project rcmm.xcodeproj -scheme RCMMSharedTests test
 
 # 在终端查看扩展日志
 log stream --predicate 'subsystem == "com.sunven.rcmm.FinderExtension"'
+log stream --predicate 'subsystem == "com.sunven.rcmm.debug.FinderExtension"'
 
 # 检查扩展注册状态
 pluginkit -m -i com.sunven.rcmm.FinderExtension
+pluginkit -m -i com.sunven.rcmm.debug.FinderExtension
 ```
 
 **测试 Finder 扩展：** 在 Xcode 中选择 `RCMMFinderExtension` scheme，在 scheme editor 中将 Host Application 设置为 Finder，然后运行。在 Finder 中右键即可看到上下文菜单。
+
+**Debug/Release 共存：** Release 使用 `com.sunven.rcmm`、`com.sunven.rcmm.FinderExtension`、`group.com.sunven.rcmm`。Debug 使用 `com.sunven.rcmm.debug`、`com.sunven.rcmm.debug.FinderExtension`、`group.com.sunven.rcmm.debug`，显示名为 `rcmm Debug`。首次签名 Debug build 需要 Apple Developer 里存在对应 App IDs、App Group 和 provisioning profiles；可让 Xcode 自动管理 signing，或在命令行构建时允许 provisioning updates。
 
 **未配置 Linter。** 并发安全由 Xcode 内置警告在 Swift 6 模式下自动检查。
 
@@ -54,7 +58,7 @@ rcmm.xcodeproj
 | UI 窗口 | 是 | 否 |
 | Darwin Notifications | 是 | 是 |
 
-**进程间通信：** App Group UserDefaults（`group.com.sunven.rcmm`）传递数据 + Darwin Notifications 通知配置变更。
+**进程间通信：** App Group UserDefaults 传递数据 + Darwin Notifications 通知配置变更。Release 使用 `group.com.sunven.rcmm`；Debug 使用 `group.com.sunven.rcmm.debug`，避免与已安装版本串扰。
 
 ### 包依赖规则
 

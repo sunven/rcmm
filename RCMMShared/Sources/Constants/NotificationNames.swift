@@ -1,6 +1,11 @@
 import Foundation
 
 public enum NotificationNames {
-    public static let configChanged = "com.sunven.rcmm.configChanged"
-    public static let scriptUpdated = "com.sunven.rcmm.scriptUpdated"
+    public static var configChanged: String {
+        "\(RuntimeConfiguration.notificationPrefix).configChanged"
+    }
+
+    public static var scriptUpdated: String {
+        "\(RuntimeConfiguration.notificationPrefix).scriptUpdated"
+    }
 }

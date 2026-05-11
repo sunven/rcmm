@@ -10,13 +10,20 @@ enum ExtensionCleanupServiceError: Error {
 }
 
 final class ExtensionCleanupService {
-    private static let extensionBundleID = "com.sunven.rcmm.FinderExtension"
     private static let extensionRelativePath = "Contents/PlugIns/RCMMFinderExtension.appex"
     private static let executableSuffix = "/Contents/MacOS/rcmm"
 
     private let fileManager: FileManager
     private let commandRunner: SystemCommandRunning
     private let logger = Logger(subsystem: "com.sunven.rcmm", category: "cleanup")
+
+    private static var extensionBundleID: String {
+        RuntimeConfiguration.finderExtensionBundleID
+    }
+
+    private static var extensionEnableCommand: String {
+        "pluginkit -e use -i \(extensionBundleID)"
+    }
 
     init(
         fileManager: FileManager = .default,
@@ -37,7 +44,8 @@ final class ExtensionCleanupService {
             pluginKitExtensionPaths: PluginKitService.enabledExtensionPaths(),
             discoveredAppPaths: discoveredApps,
             runningProcesses: runningProcesses,
-            repositoryRoot: installContext.repositoryRoot
+            repositoryRoot: installContext.repositoryRoot,
+            extensionBundleID: Self.extensionBundleID
         )
     }
 
@@ -212,7 +220,8 @@ final class ExtensionCleanupService {
             pluginKitExtensionPaths: [],
             discoveredAppPaths: [normalizedAppPath],
             runningProcesses: [],
-            repositoryRoot: installContext.repositoryRoot
+            repositoryRoot: installContext.repositoryRoot,
+            extensionBundleID: Self.extensionBundleID
         )
 
         return validationPlan.deleteCandidates.contains { candidate in
@@ -343,7 +352,7 @@ final class ExtensionCleanupService {
     private func followUpAdvice(for error: ExtensionCleanupServiceError) -> [String] {
         switch error {
         case .commandFailed(.switchExtension, _):
-            return ["请手动执行 `pluginkit -e use -i com.sunven.rcmm.FinderExtension` 后重新检测。"]
+            return ["请手动执行 `\(Self.extensionEnableCommand)` 后重新检测。"]
         case .commandFailed(.restartFinder, _):
             return ["请手动执行 `killall Finder` 后重新检测。"]
         case .terminateFailed:
