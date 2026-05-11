@@ -68,6 +68,12 @@ final class AppState {
         category: "appState"
     )
 
+#if DEBUG
+    private static let isDebugBuild = true
+#else
+    private static let isDebugBuild = false
+#endif
+
     init(forPreview: Bool = false) {
         let defaults = UserDefaults(suiteName: AppGroupConstants.appGroupID)
         isOnboardingCompleted = defaults?.bool(forKey: SharedKeys.onboardingCompleted) ?? false
@@ -427,6 +433,7 @@ final class AppState {
 
     private func scheduleStartupUpdateCheckIfNeeded() {
         guard !hasScheduledStartupUpdateCheck, isOnboardingCompleted else { return }
+        guard UpdatePolicy.allowsStartupAutomaticCheck(isDebugBuild: Self.isDebugBuild) else { return }
         hasScheduledStartupUpdateCheck = true
 
         Task { @MainActor in

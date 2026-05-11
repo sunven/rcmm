@@ -13,6 +13,16 @@ struct UpdatePolicyTests {
         signature: "sig-10"
     )
 
+    @Test("Debug 构建会跳过启动自动检查")
+    func debugBuildSkipsStartupAutomaticCheck() {
+        #expect(!UpdatePolicy.allowsStartupAutomaticCheck(isDebugBuild: true))
+    }
+
+    @Test("非 Debug 构建允许启动自动检查")
+    func nonDebugBuildAllowsStartupAutomaticCheck() {
+        #expect(UpdatePolicy.allowsStartupAutomaticCheck(isDebugBuild: false))
+    }
+
     @Test("只有 /Applications/rcmm.app 允许原地安装")
     func applicationsBundleIsEligible() {
         let result = UpdatePolicy.installEligibility(

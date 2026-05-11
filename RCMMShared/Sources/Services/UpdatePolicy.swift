@@ -6,6 +6,10 @@ public enum UpdateStartupDecision: Equatable, Sendable {
 }
 
 public enum UpdatePolicy {
+    public static func allowsStartupAutomaticCheck(isDebugBuild: Bool) -> Bool {
+        !isDebugBuild
+    }
+
     public static func installEligibility(
         bundlePath: String,
         releasePageURL: URL
