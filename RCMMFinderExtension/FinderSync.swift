@@ -32,6 +32,29 @@ class FinderSync: FIFinderSync {
         )
     }
 
+    // MARK: - Toolbar
+
+    override var toolbarItemName: String {
+        "rcmm"
+    }
+
+    override var toolbarItemToolTip: String {
+        "显示 rcmm 右键菜单"
+    }
+
+    override var toolbarItemImage: NSImage {
+        if let image = NSImage(
+            systemSymbolName: "contextualmenu.and.cursorarrow",
+            accessibilityDescription: "rcmm"
+        ) {
+            image.size = NSSize(width: 18, height: 18)
+            image.isTemplate = true
+            return image
+        }
+
+        return NSImage(size: NSSize(width: 18, height: 18))
+    }
+
     // MARK: - Menu
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
