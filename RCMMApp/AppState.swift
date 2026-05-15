@@ -24,6 +24,7 @@ enum ExtensionCleanupFlowState: Equatable {
 @MainActor
 final class AppState {
     var menuEntries: [MenuEntry] = []
+    var menuPresentationMode: MenuPresentationMode = .flat
     var discoveredApps: [AppInfo] = []
     var popoverState: PopoverState = .normal
     var extensionStatus: ExtensionStatus = .unknown
@@ -85,6 +86,7 @@ final class AppState {
         }
         sparkleUpdater = SparkleUpdaterService()
 
+        loadMenuPresentationMode()
         loadMenuEntries()
         checkExtensionStatus()
         startHealthMonitoring()
@@ -637,6 +639,10 @@ final class AppState {
 
     // MARK: - Menu Items
 
+    func loadMenuPresentationMode() {
+        menuPresentationMode = configService.loadMenuPresentationMode()
+    }
+
     /// 从 SharedConfigService 加载已配置菜单项；首次启动时创建默认 Terminal 配置
     ///
     /// 注意: 每次启动都调用 syncScriptsInBackground() 是有意为之，确保脚本文件
@@ -765,6 +771,13 @@ final class AppState {
             menuEntries[index] = .custom(config)
         }
         saveAndSync()
+    }
+
+    func updateMenuPresentationMode(_ mode: MenuPresentationMode) {
+        guard menuPresentationMode != mode else { return }
+        menuPresentationMode = mode
+        configService.saveMenuPresentationMode(mode)
+        DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
     }
 
     /// 保存配置 + 同步脚本 + 发送 Darwin Notification

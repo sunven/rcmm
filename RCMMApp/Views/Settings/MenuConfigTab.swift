@@ -76,15 +76,40 @@ struct MenuConfigTab: View {
 
             Divider()
 
-            HStack(spacing: 8) {
-                Button("添加应用") {
-                    showingAppSelection = true
-                }
-                .buttonStyle(AppPrimaryButtonStyle())
-                .controlSize(.small)
-                .accessibilityLabel("添加应用到右键菜单")
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    Text("右键菜单")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
-                Spacer()
+                    Picker(
+                        "右键菜单显示方式",
+                        selection: Binding(
+                            get: { appState.menuPresentationMode },
+                            set: { appState.updateMenuPresentationMode($0) }
+                        )
+                    ) {
+                        ForEach(MenuPresentationMode.allCases) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+                    .accessibilityLabel("右键菜单显示方式")
+
+                    Spacer()
+                }
+
+                HStack(spacing: 8) {
+                    Button("添加应用") {
+                        showingAppSelection = true
+                    }
+                    .buttonStyle(AppPrimaryButtonStyle())
+                    .controlSize(.small)
+                    .accessibilityLabel("添加应用到右键菜单")
+
+                    Spacer()
+                }
             }
             .padding(Layout.footerPadding)
         }

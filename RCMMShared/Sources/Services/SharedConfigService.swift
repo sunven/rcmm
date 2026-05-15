@@ -25,6 +25,19 @@ public final class SharedConfigService: @unchecked Sendable {
         return migrateLegacyEntriesIfNeeded()
     }
 
+    public func saveMenuPresentationMode(_ mode: MenuPresentationMode) {
+        defaults.set(mode.rawValue, forKey: SharedKeys.menuPresentationMode)
+    }
+
+    public func loadMenuPresentationMode() -> MenuPresentationMode {
+        guard let rawValue = defaults.string(forKey: SharedKeys.menuPresentationMode),
+              let mode = MenuPresentationMode(rawValue: rawValue) else {
+            return .flat
+        }
+
+        return mode
+    }
+
     private func migrateLegacyEntriesIfNeeded() -> [MenuEntry] {
         let legacyItems = loadLegacyMenuItems()
         let hasLegacyCopyPathFlag = defaults.object(forKey: SharedKeys.legacyCopyPathEnabled) != nil

@@ -61,9 +61,10 @@ class FinderSync: FIFinderSync {
         let menu = NSMenu(title: "")
         let entries = configService.loadEntries()
             .filter { $0.isEnabled }
+        let presentationMode = configService.loadMenuPresentationMode()
 
         logger.debug(
-            "开始构建 Finder 菜单，menuKind=\(String(describing: menuKind), privacy: .public)，启用项数量=\(entries.count)"
+            "开始构建 Finder 菜单，menuKind=\(String(describing: menuKind), privacy: .public)，启用项数量=\(entries.count)，展示方式=\(presentationMode.rawValue, privacy: .public)"
         )
 
         guard !entries.isEmpty else {
@@ -71,6 +72,26 @@ class FinderSync: FIFinderSync {
             return menu
         }
 
+        switch presentationMode {
+        case .flat:
+            addMenuItems(for: entries, to: menu)
+        case .nestedUnderRCMM:
+            let parentItem = NSMenuItem(title: "RCMM", action: nil, keyEquivalent: "")
+            parentItem.image = makeMenuSymbolImage(
+                named: "contextualmenu.and.cursorarrow",
+                accessibilityDescription: "RCMM"
+            )
+
+            let submenu = NSMenu(title: "RCMM")
+            addMenuItems(for: entries, to: submenu)
+            parentItem.submenu = submenu
+            menu.addItem(parentItem)
+        }
+
+        return menu
+    }
+
+    private func addMenuItems(for entries: [MenuEntry], to menu: NSMenu) {
         for entry in entries {
             switch entry {
             case .builtIn(let item):
@@ -79,8 +100,6 @@ class FinderSync: FIFinderSync {
                 menu.addItem(makeCustomMenuItem(config))
             }
         }
-
-        return menu
     }
 
     private func makeBuiltInMenuItem(from item: BuiltInMenuItem) -> NSMenuItem {
@@ -144,21 +163,17 @@ class FinderSync: FIFinderSync {
     }
 
     @objc func openWithApp(_ sender: NSMenuItem) {
-        let title = sender.title
-        let prefix = "用 "
-        let suffix = " 打开"
-        guard title.hasPrefix(prefix) && title.hasSuffix(suffix) else {
-            logger.error("无效的菜单标题格式: \(title)")
+        guard let itemID = sender.representedObject as? String else {
+            logger.error("菜单项缺少配置 ID: \(sender.title)")
             return
         }
-        let appName = String(title.dropFirst(prefix.count).dropLast(suffix.count))
 
         let customItems = configService.loadEntries().compactMap { entry -> MenuItemConfig? in
             if case .custom(let config) = entry { return config }
             return nil
         }
-        guard let item = customItems.first(where: { $0.appName == appName }) else {
-            logger.error("找不到菜单项配置: \(appName)")
+        guard let item = customItems.first(where: { $0.id.uuidString == itemID }) else {
+            logger.error("找不到菜单项配置: \(itemID)")
             return
         }
 

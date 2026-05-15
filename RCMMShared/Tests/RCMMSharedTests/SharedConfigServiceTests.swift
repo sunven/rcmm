@@ -143,4 +143,24 @@ struct SharedConfigServiceTests {
         #expect(legacyItems[1].isEnabled == false)
         cleanup()
     }
+
+    @Test("菜单展示方式缺失时默认平铺")
+    func defaultMenuPresentationModeIsFlat() {
+        #expect(service.loadMenuPresentationMode() == .flat)
+        cleanup()
+    }
+
+    @Test("菜单展示方式可保存和读取")
+    func saveAndLoadMenuPresentationMode() {
+        service.saveMenuPresentationMode(.nestedUnderRCMM)
+        #expect(service.loadMenuPresentationMode() == .nestedUnderRCMM)
+        cleanup()
+    }
+
+    @Test("菜单展示方式无效值回退平铺")
+    func invalidMenuPresentationModeFallsBackToFlat() {
+        defaults.set("unknown", forKey: SharedKeys.menuPresentationMode)
+        #expect(service.loadMenuPresentationMode() == .flat)
+        cleanup()
+    }
 }
