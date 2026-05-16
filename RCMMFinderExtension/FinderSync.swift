@@ -92,12 +92,14 @@ class FinderSync: FIFinderSync {
     }
 
     private func addMenuItems(for entries: [MenuEntry], to menu: NSMenu) {
+        var customIndex = 0
         for entry in entries {
             switch entry {
             case .builtIn(let item):
                 menu.addItem(makeBuiltInMenuItem(from: item))
             case .custom(let config):
-                menu.addItem(makeCustomMenuItem(config))
+                menu.addItem(makeCustomMenuItem(config, customIndex: customIndex))
+                customIndex += 1
             }
         }
     }
@@ -129,13 +131,17 @@ class FinderSync: FIFinderSync {
         }
     }
 
-    private func makeCustomMenuItem(_ config: MenuItemConfig) -> NSMenuItem {
+    private func makeCustomMenuItem(
+        _ config: MenuItemConfig,
+        customIndex: Int
+    ) -> NSMenuItem {
         let menuItem = NSMenuItem(
             title: "用 \(config.appName) 打开",
             action: #selector(openWithApp(_:)),
             keyEquivalent: ""
         )
         menuItem.representedObject = config.id.uuidString
+        menuItem.tag = customIndex
         menuItem.target = self
 
         let icon = NSWorkspace.shared.icon(forFile: config.appPath)
@@ -163,17 +169,23 @@ class FinderSync: FIFinderSync {
     }
 
     @objc func openWithApp(_ sender: NSMenuItem) {
-        guard let itemID = sender.representedObject as? String else {
-            logger.error("菜单项缺少配置 ID: \(sender.title)")
-            return
-        }
-
         let customItems = configService.loadEntries().compactMap { entry -> MenuItemConfig? in
-            if case .custom(let config) = entry { return config }
+            if case .custom(let config) = entry, config.isEnabled { return config }
             return nil
         }
-        guard let item = customItems.first(where: { $0.id.uuidString == itemID }) else {
-            logger.error("找不到菜单项配置: \(itemID)")
+        guard let item = MenuItemResolver.customItem(
+            in: customItems,
+            representedObject: sender.representedObject,
+            tag: sender.tag,
+            title: sender.title
+        ) else {
+            logger.error(
+                """
+                找不到菜单项配置：title=\(sender.title, privacy: .public)，\
+                tag=\(sender.tag, privacy: .public)，\
+                representedObject=\(String(describing: sender.representedObject), privacy: .private)
+                """
+            )
             return
         }
 
