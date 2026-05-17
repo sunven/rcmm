@@ -2,11 +2,10 @@ import Foundation
 
 public final class SharedErrorQueue: @unchecked Sendable {
     private static let maxRecords = 20
-    private let defaults: UserDefaults
+    private let preferences: SharedPreferencesStore
 
     public init(defaults: UserDefaults? = nil) {
-        self.defaults = defaults
-            ?? UserDefaults(suiteName: AppGroupConstants.appGroupID)!
+        preferences = SharedPreferencesStore(defaults: defaults)
     }
 
     /// Note: This method is not atomic across processes. If the main app and extension
@@ -15,24 +14,38 @@ public final class SharedErrorQueue: @unchecked Sendable {
     public func append(_ error: ErrorRecord) {
         var records = loadAll()
         records.append(error)
-        if records.count > SharedErrorQueue.maxRecords {
-            records = Array(records.suffix(SharedErrorQueue.maxRecords))
-        }
-        guard let data = try? JSONEncoder().encode(records) else {
+        save(records)
+    }
+
+    public func upsert(_ error: ErrorRecord) {
+        guard let key = error.key else {
+            append(error)
             return
         }
-        defaults.set(data, forKey: SharedKeys.errorQueue)
+
+        var records = loadAll().filter { $0.key != key }
+        records.append(error)
+        save(records)
     }
 
     public func loadAll() -> [ErrorRecord] {
-        guard let data = defaults.data(forKey: SharedKeys.errorQueue) else {
+        guard let data = preferences.data(forKey: SharedKeys.errorQueue) else {
             return []
         }
         return (try? JSONDecoder().decode([ErrorRecord].self, from: data)) ?? []
     }
 
     public func removeAll() {
-        defaults.removeObject(forKey: SharedKeys.errorQueue)
+        preferences.removeObject(forKey: SharedKeys.errorQueue)
+    }
+
+    public func remove(key: String) {
+        removeAll { $0.key == key }
+    }
+
+    public func removeAll(where shouldRemove: (ErrorRecord) -> Bool) {
+        let records = loadAll().filter { !shouldRemove($0) }
+        replaceAll(with: records)
     }
 
     /// 用新的记录列表替换队列中的全部内容；传入空数组等同于 removeAll()
@@ -45,6 +58,20 @@ public final class SharedErrorQueue: @unchecked Sendable {
             ? Array(records.suffix(SharedErrorQueue.maxRecords))
             : records
         guard let data = try? JSONEncoder().encode(trimmed) else { return }
-        defaults.set(data, forKey: SharedKeys.errorQueue)
+        preferences.set(data, forKey: SharedKeys.errorQueue)
+    }
+
+    private func save(_ records: [ErrorRecord]) {
+        if records.isEmpty {
+            removeAll()
+            return
+        }
+        let trimmed = records.count > SharedErrorQueue.maxRecords
+            ? Array(records.suffix(SharedErrorQueue.maxRecords))
+            : records
+        guard let data = try? JSONEncoder().encode(trimmed) else {
+            return
+        }
+        preferences.set(data, forKey: SharedKeys.errorQueue)
     }
 }

@@ -1,6 +1,43 @@
 import Foundation
 
 public enum MenuItemResolver: Sendable {
+    public static func scriptBackedEntry(
+        in scriptBackedEntries: [ScriptBackedMenuEntry],
+        customItems: [MenuItemConfig],
+        representedObject: Any?,
+        identifier: String?,
+        tag: Int,
+        title: String
+    ) -> ScriptBackedMenuEntry? {
+        if let titleMatchedEntry = uniqueScriptBackedEntry(
+            in: scriptBackedEntries,
+            title: title
+        ) {
+            return titleMatchedEntry
+        }
+
+        if let representedID = representedObject as? String,
+           let match = scriptBackedEntries.first(where: { $0.id == representedID }) {
+            return match
+        }
+
+        if let identifier,
+           let match = scriptBackedEntries.first(where: { $0.id == identifier }) {
+            return match
+        }
+
+        if let customItem = customItem(
+            in: customItems,
+            representedObject: representedObject,
+            tag: tag,
+            title: title
+        ) {
+            return scriptBackedEntries.first { $0.id == customItem.id.uuidString }
+        }
+
+        return nil
+    }
+
     public static func customItem(
         in items: [MenuItemConfig],
         representedObject: Any?,
@@ -12,16 +49,18 @@ public enum MenuItemResolver: Sendable {
             return item
         }
 
-        if let appName = appName(fromMenuTitle: title) {
-            let titleMatchedItem = items.first { $0.appName == appName }
+        guard let appName = appName(fromMenuTitle: title) else {
+            return nil
+        }
 
-            if tag >= 0, tag < items.count, items[tag].appName != appName {
-                return titleMatchedItem
-            }
+        let titleMatchedItem = items.first { $0.appName == appName }
 
-            if let titleMatchedItem {
-                return titleMatchedItem
-            }
+        if tag >= 0, tag < items.count, items[tag].appName != appName {
+            return titleMatchedItem
+        }
+
+        if let titleMatchedItem {
+            return titleMatchedItem
         }
 
         if tag >= 0, tag < items.count {
@@ -53,5 +92,25 @@ public enum MenuItemResolver: Sendable {
         in items: [MenuItemConfig]
     ) -> MenuItemConfig? {
         items.first { $0.id.uuidString == itemID }
+    }
+
+    private static func uniqueScriptBackedEntry(
+        in entries: [ScriptBackedMenuEntry],
+        title: String
+    ) -> ScriptBackedMenuEntry? {
+        let matches = entries.filter { entry in
+            switch entry.kind {
+            case .custom:
+                return appName(fromMenuTitle: title) == entry.displayName
+            case .composite:
+                return title == entry.displayName
+            }
+        }
+
+        guard matches.count == 1 else {
+            return nil
+        }
+
+        return matches[0]
     }
 }

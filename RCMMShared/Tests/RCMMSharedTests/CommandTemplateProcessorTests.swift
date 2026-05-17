@@ -54,6 +54,74 @@ struct CommandTemplateProcessorTests {
         #expect(result == "do shell script \"/usr/bin/open \" & quoted form of thePath & \" --new-window\"")
     }
 
+    @Test("多个 {path} 占位符全部保留")
+    func customCommandWithMultiplePathPlaceholders() {
+        let result = CommandTemplateProcessor.buildAppleScriptCommand(
+            template: "/bin/cp {path} {path}.bak",
+            appPath: "/Applications/Test.app"
+        )
+        #expect(result == "do shell script \"/bin/cp \" & quoted form of thePath & \" \" & quoted form of thePath & \".bak\"")
+    }
+
+    @Test("{path} 可出现在命令开头")
+    func customCommandWithPathAtBeginning() {
+        let result = CommandTemplateProcessor.buildAppleScriptCommand(
+            template: "{path} --flag",
+            appPath: "/Applications/Test.app"
+        )
+        #expect(result == "do shell script quoted form of thePath & \" --flag\"")
+    }
+
+    @Test("连续 {path} 占位符不会丢失")
+    func customCommandWithAdjacentPathPlaceholders() {
+        let result = CommandTemplateProcessor.buildAppleScriptCommand(
+            template: "{path}{path}",
+            appPath: "/Applications/Test.app"
+        )
+        #expect(result == "do shell script quoted form of thePath & quoted form of thePath")
+    }
+
+    @Test("app 占位符可生成 shell 安全引用")
+    func appPlaceholderCanBeShellQuoted() {
+        let result = CommandTemplateProcessor.buildAppleScriptCommand(
+            template: "open -a {app} {path}",
+            appPath: "/Applications/Visual Studio Code.app",
+            quoteAppPlaceholder: true
+        )
+        #expect(result == "do shell script \"open -a \" & quoted form of \"/Applications/Visual Studio Code.app\" & \" \" & quoted form of thePath")
+    }
+
+    @Test("app 和 path 占位符可多次安全引用")
+    func appAndPathPlaceholdersCanRepeatWhenShellQuoted() {
+        let result = CommandTemplateProcessor.buildAppleScriptCommand(
+            template: "{app} --open {path} --reuse {app}",
+            appPath: "/Applications/My \"App\".app",
+            quoteAppPlaceholder: true
+        )
+        #expect(result == "do shell script quoted form of \"/Applications/My \\\"App\\\".app\" & \" --open \" & quoted form of thePath & \" --reuse \" & quoted form of \"/Applications/My \\\"App\\\".app\"")
+    }
+
+    @Test("app 占位符后接路径片段时保持 shell 安全引用")
+    func appPlaceholderCanBeQuotedBeforePathSuffix() {
+        let result = CommandTemplateProcessor.buildAppleScriptCommand(
+            template: "{app}/Contents/Resources/app/bin/code -n {path}",
+            appPath: "/Applications/Visual Studio Code.app",
+            quoteAppPlaceholder: true
+        )
+        #expect(result == "do shell script quoted form of \"/Applications/Visual Studio Code.app\" & \"/Contents/Resources/app/bin/code -n \" & quoted form of thePath")
+    }
+
+    @Test("bundle 占位符可生成 shell 安全引用")
+    func bundlePlaceholderCanBeShellQuoted() {
+        let result = CommandTemplateProcessor.buildAppleScriptCommand(
+            template: "open -b {bundle} {path}",
+            appPath: "/Applications/Visual Studio Code.app",
+            bundleId: "com.microsoft.VSCode",
+            quoteAppPlaceholder: true
+        )
+        #expect(result == "do shell script \"open -b \" & quoted form of \"com.microsoft.VSCode\" & \" \" & quoted form of thePath")
+    }
+
     // MARK: - Task 4.6: customCommand 不包含任何占位符的静态命令
 
     @Test("不包含任何占位符的静态命令")

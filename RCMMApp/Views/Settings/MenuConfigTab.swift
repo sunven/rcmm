@@ -66,6 +66,54 @@ struct MenuConfigTab: View {
                             }
                             .listRowInsets(Layout.rowInsets)
                             .listRowSeparator(.hidden)
+                        case .composite(let config):
+                            DisclosureGroup(isExpanded: expandedBinding(for: entry.id)) {
+                                CompositeCommandEditor(
+                                    config: config,
+                                    onRename: { name in
+                                        appState.updateCompositeName(for: config.id, name: name)
+                                    },
+                                    onAddShellStep: {
+                                        appState.addShellStep(to: config.id)
+                                    },
+                                    onUpdateStep: { step, name, commandTemplate, appPath, bundleId, isEnabled in
+                                        appState.updateCompositeStep(
+                                            compositeId: config.id,
+                                            stepId: step.id,
+                                            name: name,
+                                            commandTemplate: commandTemplate,
+                                            appPath: appPath,
+                                            bundleId: bundleId,
+                                            isEnabled: isEnabled
+                                        )
+                                    },
+                                    onDeleteStep: { stepId in
+                                        appState.removeCompositeStep(compositeId: config.id, stepId: stepId)
+                                    },
+                                    onMoveStep: { source, destination in
+                                        appState.moveCompositeStep(
+                                            compositeId: config.id,
+                                            from: source,
+                                            to: destination
+                                        )
+                                    }
+                                )
+                            } label: {
+                                CompositeListRow(
+                                    config: config,
+                                    publishState: appState.scriptPublishStates[config.id.uuidString],
+                                    onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
+                                    onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                                    onDelete: { appState.removeEntry(at: IndexSet(integer: index)) },
+                                    onToggle: { isEnabled in
+                                        appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
+                                    },
+                                    position: index + 1,
+                                    total: appState.menuEntries.count
+                                )
+                            }
+                            .listRowInsets(Layout.rowInsets)
+                            .listRowSeparator(.hidden)
                         }
                     }
                     .onMove { source, destination in
@@ -101,14 +149,36 @@ struct MenuConfigTab: View {
                 }
 
                 HStack(spacing: 8) {
-                    Button("添加应用") {
-                        showingAppSelection = true
+                    Menu {
+                        Button("添加应用") {
+                            showingAppSelection = true
+                        }
+                        Button("VS Code + Terminal") {
+                            appState.addEditorTerminalPreset()
+                        }
+                        Button("新组合命令") {
+                            appState.addEmptyCompositeCommand()
+                        }
+                    } label: {
+                        Label("添加", systemImage: "plus")
                     }
+                    .menuStyle(.button)
                     .buttonStyle(AppPrimaryButtonStyle())
                     .controlSize(.small)
-                    .accessibilityLabel("添加应用到右键菜单")
+                    .accessibilityLabel("添加右键菜单项")
 
                     Spacer()
+                }
+
+                if let message = appState.compositePresetMessage {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.yellow)
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(Layout.footerPadding)

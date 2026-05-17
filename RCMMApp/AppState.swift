@@ -26,6 +26,8 @@ final class AppState {
     var menuEntries: [MenuEntry] = []
     var menuPresentationMode: MenuPresentationMode = .flat
     var discoveredApps: [AppInfo] = []
+    var compositePresetMessage: String? = nil
+    var scriptPublishStates: [String: ScriptPublishState] = [:]
     var popoverState: PopoverState = .normal
     var extensionStatus: ExtensionStatus = .unknown
     var extensionStatusDetail: String? = nil
@@ -38,8 +40,8 @@ final class AppState {
 
     var isOnboardingCompleted: Bool {
         didSet {
-            let defaults = UserDefaults(suiteName: AppGroupConstants.appGroupID)
-            defaults?.set(isOnboardingCompleted, forKey: SharedKeys.onboardingCompleted)
+            SharedPreferencesStore()
+                .set(isOnboardingCompleted, forKey: SharedKeys.onboardingCompleted)
         }
     }
 
@@ -63,6 +65,7 @@ final class AppState {
     @ObservationIgnored private var extensionCleanupWindowCloseObserver: Any?
     private let configService = SharedConfigService()
     private let errorQueue = SharedErrorQueue()
+    private let publishStore = ScriptPublishStore()
     private var hasTriggeredAutoRepair = false
     private let logger = Logger(
         subsystem: "com.sunven.rcmm",
@@ -76,8 +79,8 @@ final class AppState {
 #endif
 
     init(forPreview: Bool = false) {
-        let defaults = UserDefaults(suiteName: AppGroupConstants.appGroupID)
-        isOnboardingCompleted = defaults?.bool(forKey: SharedKeys.onboardingCompleted) ?? false
+        isOnboardingCompleted = SharedPreferencesStore()
+            .bool(forKey: SharedKeys.onboardingCompleted)
 
         guard !forPreview else { return }
 
@@ -113,24 +116,32 @@ final class AppState {
         }
         if hasScriptFileErrors {
             hasTriggeredAutoRepair = true
-            // 立即清除脚本相关错误（UI + UserDefaults 同步清除）
-            let remainingErrors = errorRecords.filter { record in
-                !record.message.contains("脚本文件不存在") && !record.message.contains("脚本文件无法加载")
-            }
-            errorRecords = remainingErrors
-            errorQueue.replaceAll(with: remainingErrors)
             autoRepairMessage = "正在自动修复脚本文件…"
 
-            let items = menuEntries.compactMap { entry -> MenuItemConfig? in
-                if case .custom(let config) = entry { return config }
-                return nil
-            }
+            let entries = menuEntries
             Self.syncQueue.async { [weak self] in
                 let installer = ScriptInstallerService()
-                installer.syncScripts(with: items)
+                let results = installer.syncScripts(with: entries)
                 DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
                 Task { @MainActor in
-                    self?.autoRepairMessage = "已自动修复脚本文件"
+                    guard let self else { return }
+                    let repairedNames = Set(
+                        results
+                            .filter { $0.status == .current }
+                            .map(\.displayName)
+                    )
+                    if !repairedNames.isEmpty {
+                        self.errorQueue.removeAll { record in
+                            repairedNames.contains(record.context ?? "")
+                                && (
+                                    record.message.contains("脚本文件不存在")
+                                        || record.message.contains("脚本文件无法加载")
+                                )
+                        }
+                    }
+                    self.errorRecords = self.errorQueue.loadAll()
+                    let didPublishAny = results.contains { $0.status == .current }
+                    self.autoRepairMessage = didPublishAny ? "已自动修复脚本文件" : "自动修复失败，请打开设置检查"
                 }
             }
         }
@@ -649,7 +660,8 @@ final class AppState {
     /// 与配置保持一致（防止脚本被手动删除或损坏的情况）。
     /// 优化建议: 未来可改为仅校验脚本文件是否存在，而非每次都重新编译。
     func loadMenuEntries() {
-        let existing = configService.loadEntries()
+        let existing = migrateCompositeCommandTemplatesIfNeeded(configService.loadEntries())
+        scriptPublishStates = publishStore.loadAll()
 
         if existing.isEmpty {
             let terminalConfig = MenuItemConfig(
@@ -669,6 +681,33 @@ final class AppState {
         }
     }
 
+    private func migrateCompositeCommandTemplatesIfNeeded(_ entries: [MenuEntry]) -> [MenuEntry] {
+        var didChange = false
+        let migratedEntries = entries.map { entry -> MenuEntry in
+            guard case .composite(var config) = entry else {
+                return entry
+            }
+
+            for index in config.steps.indices {
+                let step = config.steps[index]
+                guard step.bundleId == "com.microsoft.VSCode",
+                      CompositeCommandTemplates.shouldMigrateVSCodeTemplate(step.commandTemplate) else {
+                    continue
+                }
+
+                config.steps[index].commandTemplate = CompositeCommandTemplates.vsCodeCLI
+                didChange = true
+            }
+
+            return .composite(config)
+        }
+
+        if didChange {
+            configService.saveEntries(migratedEntries)
+        }
+        return migratedEntries
+    }
+
     /// 从 AppInfo 创建 MenuItemConfig 并添加到菜单
     func addMenuItem(from appInfo: AppInfo) {
         guard !containsCustomMenuItem(matching: appInfo) else { return }
@@ -678,6 +717,74 @@ final class AppState {
             appPath: appInfo.path
         )
         menuEntries.append(.custom(newItem))
+        saveAndSync()
+    }
+
+    func addEmptyCompositeCommand() {
+        let composite = CompositeMenuItemConfig(
+            name: "新组合命令",
+            iconName: "rectangle.stack.badge.play",
+            steps: []
+        )
+        menuEntries.append(.composite(composite))
+        saveAndSync()
+    }
+
+    func addEditorTerminalPreset() {
+        compositePresetMessage = "正在查找已安装的编辑器和终端…"
+
+        if discoveredApps.isEmpty {
+            let discoveryService = AppDiscoveryService()
+            Task { [weak self] in
+                let apps = await Task.detached {
+                    discoveryService.scanApplications()
+                }.value
+                await MainActor.run {
+                    guard let self else { return }
+                    self.discoveredApps = apps
+                    self.createEditorTerminalPresetFromDiscoveredApps()
+                }
+            }
+        } else {
+            createEditorTerminalPresetFromDiscoveredApps()
+        }
+    }
+
+    private func createEditorTerminalPresetFromDiscoveredApps() {
+        guard let editor = preferredDiscoveredApp(
+            in: .editor,
+            preferredBundleIds: ["com.microsoft.VSCode"]
+        ),
+              let terminal = preferredDiscoveredApp(
+                in: .terminal,
+                preferredBundleIds: ["com.apple.Terminal"]
+              ) else {
+            compositePresetMessage = "未找到可用的编辑器和终端，请先安装或通过添加应用确认扫描结果"
+            return
+        }
+
+        let composite = CompositeMenuItemConfig(
+            name: "VS Code + Terminal",
+            iconName: "rectangle.split.2x1",
+            steps: [
+                CompositeCommandStep(
+                    kind: .app,
+                    name: editor.name,
+                    commandTemplate: preferredCommandTemplate(for: editor),
+                    appPath: editor.path,
+                    bundleId: editor.bundleId
+                ),
+                CompositeCommandStep(
+                    kind: .app,
+                    name: terminal.name,
+                    commandTemplate: "open -a {app} {path}",
+                    appPath: terminal.path,
+                    bundleId: terminal.bundleId
+                ),
+            ]
+        )
+        menuEntries.append(.composite(composite))
+        compositePresetMessage = nil
         saveAndSync()
     }
 
@@ -730,6 +837,26 @@ final class AppState {
         return false
     }
 
+    private func preferredDiscoveredApp(
+        in category: AppCategory,
+        preferredBundleIds: [String]
+    ) -> AppInfo? {
+        for bundleId in preferredBundleIds {
+            if let match = discoveredApps.first(where: { $0.category == category && $0.bundleId == bundleId }) {
+                return match
+            }
+        }
+        return discoveredApps.first { $0.category == category }
+    }
+
+    private func preferredCommandTemplate(for appInfo: AppInfo) -> String {
+        if appInfo.bundleId == "com.microsoft.VSCode" {
+            return CompositeCommandTemplates.vsCodeCLI
+        }
+
+        return CompositeCommandTemplates.legacyOpenApp
+    }
+
     /// 移动菜单项到新位置（拖拽排序）
     func moveEntry(from source: IndexSet, to destination: Int) {
         menuEntries.move(fromOffsets: source, toOffset: destination)
@@ -738,11 +865,15 @@ final class AppState {
 
     /// 删除指定位置的菜单项
     func removeEntry(at offsets: IndexSet) {
-        let onlyCustomOffsets = offsets.filter { index in
-            if case .custom = menuEntries[index] { return true }
-            return false
+        let removableOffsets = offsets.filter { index in
+            switch menuEntries[index] {
+            case .custom, .composite:
+                return true
+            case .builtIn:
+                return false
+            }
         }
-        menuEntries.remove(atOffsets: IndexSet(onlyCustomOffsets))
+        menuEntries.remove(atOffsets: IndexSet(removableOffsets))
         saveAndSync()
     }
 
@@ -759,6 +890,71 @@ final class AppState {
         saveAndSync()
     }
 
+    func updateCompositeName(for compositeId: UUID, name: String) {
+        updateComposite(for: compositeId) { config in
+            config.name = name
+        }
+    }
+
+    func updateCompositeStep(
+        compositeId: UUID,
+        stepId: UUID,
+        name: String,
+        commandTemplate: String,
+        appPath: String?,
+        bundleId: String?,
+        isEnabled: Bool
+    ) {
+        updateComposite(for: compositeId) { config in
+            guard let stepIndex = config.steps.firstIndex(where: { $0.id == stepId }) else {
+                return
+            }
+            config.steps[stepIndex].name = name
+            config.steps[stepIndex].commandTemplate = commandTemplate
+            config.steps[stepIndex].appPath = appPath
+            config.steps[stepIndex].bundleId = bundleId
+            config.steps[stepIndex].isEnabled = isEnabled
+        }
+    }
+
+    func addShellStep(to compositeId: UUID) {
+        updateComposite(for: compositeId) { config in
+            config.steps.append(
+                CompositeCommandStep(
+                    kind: .shell,
+                    name: "Shell",
+                    commandTemplate: "open -a Terminal {path}"
+                )
+            )
+        }
+    }
+
+    func removeCompositeStep(compositeId: UUID, stepId: UUID) {
+        updateComposite(for: compositeId) { config in
+            config.steps.removeAll { $0.id == stepId }
+        }
+    }
+
+    func moveCompositeStep(compositeId: UUID, from source: IndexSet, to destination: Int) {
+        updateComposite(for: compositeId) { config in
+            config.steps.move(fromOffsets: source, toOffset: destination)
+        }
+    }
+
+    private func updateComposite(
+        for compositeId: UUID,
+        mutate: (inout CompositeMenuItemConfig) -> Void
+    ) {
+        guard let index = menuEntries.firstIndex(where: {
+            if case .composite(let config) = $0 { return config.id == compositeId }
+            return false
+        }) else { return }
+        guard case .composite(var config) = menuEntries[index] else { return }
+        mutate(&config)
+        menuEntries[index] = .composite(config)
+        saveAndSync()
+    }
+
     /// 切换菜单项的启用/禁用状态
     func toggleEntry(for entryId: String, isEnabled: Bool) {
         guard let index = menuEntries.firstIndex(where: { $0.id == entryId }) else { return }
@@ -769,6 +965,9 @@ final class AppState {
         case .custom(var config):
             config.isEnabled = isEnabled
             menuEntries[index] = .custom(config)
+        case .composite(var config):
+            config.isEnabled = isEnabled
+            menuEntries[index] = .composite(config)
         }
         saveAndSync()
     }
@@ -790,14 +989,17 @@ final class AppState {
     private static let syncQueue = DispatchQueue(label: "com.sunven.rcmm.scriptSync", qos: .userInitiated)
 
     private func syncScriptsInBackground() {
-        let items = menuEntries.compactMap { entry -> MenuItemConfig? in
-            if case .custom(let config) = entry { return config }
-            return nil
-        }
-        Self.syncQueue.async {
+        let entries = menuEntries
+        let publishStore = publishStore
+        let errorQueue = errorQueue
+        Self.syncQueue.async { [weak self] in
             let installer = ScriptInstallerService()
-            installer.syncScripts(with: items)
+            installer.syncScripts(with: entries)
             DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
+            Task { @MainActor in
+                self?.scriptPublishStates = publishStore.loadAll()
+                self?.errorRecords = errorQueue.loadAll()
+            }
         }
     }
 }

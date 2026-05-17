@@ -33,12 +33,14 @@ struct SharedConfigServiceTests {
         let entries: [MenuEntry] = [
             .custom(MenuItemConfig(appName: "Terminal", appPath: "/Applications/Utilities/Terminal.app")),
             .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
+            .composite(CompositeMenuItemConfig(name: "VS Code + Terminal", steps: [])),
         ]
         service.saveEntries(entries)
         let loaded = service.loadEntries()
-        #expect(loaded.count == 2)
+        #expect(loaded.count == 3)
         #expect(loaded[0].displayName == "Terminal")
         #expect(loaded[1].displayName == "拷贝路径")
+        #expect(loaded[2].displayName == "VS Code + Terminal")
         cleanup()
     }
 
@@ -64,13 +66,15 @@ struct SharedConfigServiceTests {
         let entries: [MenuEntry] = [
             .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
             .custom(MenuItemConfig(appName: "Terminal", appPath: "/t")),
+            .composite(CompositeMenuItemConfig(name: "Pair", steps: [])),
             .custom(MenuItemConfig(appName: "iTerm", appPath: "/i")),
         ]
         service.saveEntries(entries)
         let loaded = service.loadEntries()
         #expect(loaded[0].id == "builtIn.copyPath")
         #expect(loaded[1].displayName == "Terminal")
-        #expect(loaded[2].displayName == "iTerm")
+        #expect(loaded[2].displayName == "Pair")
+        #expect(loaded[3].displayName == "iTerm")
         cleanup()
     }
 
@@ -141,6 +145,64 @@ struct SharedConfigServiceTests {
         #expect(legacyItems[1].appName == "Code")
         #expect(legacyItems[1].sortOrder == 1)
         #expect(legacyItems[1].isEnabled == false)
+        cleanup()
+    }
+
+    @Test("保存 entries 时保留未知 envelope")
+    func saveEntriesPreservesUnknownEnvelopes() throws {
+        let json = """
+        [
+          {
+            "type": "future",
+            "payload": {
+              "id": "future-id",
+              "name": "Future Entry",
+              "enabled": true
+            }
+          }
+        ]
+        """
+        defaults.set(Data(json.utf8), forKey: SharedKeys.menuEntries)
+
+        service.saveEntries([
+            .custom(MenuItemConfig(appName: "Terminal", appPath: "/t")),
+        ])
+
+        let envelopes = service.loadEntryEnvelopes()
+        #expect(envelopes.count == 2)
+        #expect(envelopes.compactMap(\.entry).count == 1)
+        #expect(envelopes.contains { $0.isUnknown })
+        #expect(service.loadEntries().map(\.displayName) == ["Terminal"])
+        cleanup()
+    }
+
+    @Test("未知 unified entries 不触发 legacy 迁移")
+    func unknownUnifiedEntriesDoNotMigrateLegacyKeys() throws {
+        let legacyItems = [
+            LegacyMenuItemConfig(
+                id: UUID(),
+                appName: "Legacy",
+                bundleId: nil,
+                appPath: "/legacy",
+                customCommand: nil,
+                sortOrder: 0,
+                isEnabled: true
+            ),
+        ]
+        let json = """
+        [
+          {
+            "type": "future",
+            "payload": { "id": "future-id" }
+          }
+        ]
+        """
+        defaults.set(try JSONEncoder().encode(legacyItems), forKey: "rcmm.menu.items")
+        defaults.set(Data(json.utf8), forKey: SharedKeys.menuEntries)
+
+        let loaded = service.loadEntries()
+
+        #expect(loaded.isEmpty)
         cleanup()
     }
 

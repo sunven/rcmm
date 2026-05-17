@@ -63,6 +63,7 @@ struct AppSelectionSheet: View {
             discoveryService.scanApplications()
         }.value
         discoveredApps = apps
+        appState.discoveredApps = apps
         isLoading = false
     }
 

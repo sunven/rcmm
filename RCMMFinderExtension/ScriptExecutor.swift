@@ -34,7 +34,12 @@ final class ScriptExecutor {
                 userInfo: [NSLocalizedDescriptionKey: "无法获取脚本目录"]
             )
             logger.error("脚本目录不可用")
-            recordError(message: "脚本目录不可用", context: menuItemName)
+            recordError(
+                message: "脚本目录不可用",
+                context: menuItemName,
+                scriptId: scriptId,
+                kind: .scriptLoad
+            )
             completion?(error)
             return
         }
@@ -58,7 +63,9 @@ final class ScriptExecutor {
                     self?.logger.error("脚本执行失败: \(scriptId): \(error.localizedDescription)")
                     self?.recordError(
                         message: "脚本执行失败: \(error.localizedDescription)",
-                        context: menuItemName
+                        context: menuItemName,
+                        scriptId: scriptId,
+                        kind: .scriptExecution
                     )
                 } else {
                     self?.logger.info("脚本执行成功: \(scriptId) → \(targetPath)")
@@ -69,7 +76,9 @@ final class ScriptExecutor {
             logger.error("脚本加载失败: \(scriptId): \(error.localizedDescription)")
             recordError(
                 message: "脚本文件不存在或无法加载: \(error.localizedDescription)",
-                context: menuItemName
+                context: menuItemName,
+                scriptId: scriptId,
+                kind: .scriptLoad
             )
             completion?(error)
         }
@@ -100,12 +109,19 @@ final class ScriptExecutor {
     }
 
     /// 记录错误到 App Group 错误队列
-    private func recordError(message: String, context: String) {
+    private func recordError(
+        message: String,
+        context: String,
+        scriptId: String,
+        kind: ErrorRecordKind
+    ) {
         let record = ErrorRecord(
             source: "extension",
             message: message,
-            context: context
+            context: context,
+            key: "script.\(scriptId).\(kind.rawValue)",
+            kind: kind
         )
-        errorQueue.append(record)
+        errorQueue.upsert(record)
     }
 }

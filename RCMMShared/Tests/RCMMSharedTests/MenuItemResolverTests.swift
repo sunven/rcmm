@@ -60,6 +60,73 @@ struct MenuItemResolverTests {
         #expect(result?.appName == "Code")
     }
 
+    @Test("非自定义菜单标题不使用 tag 回退")
+    func doesNotUseTagFallbackForNonCustomTitle() {
+        let items = makeItems()
+
+        let result = MenuItemResolver.customItem(
+            in: items,
+            representedObject: nil,
+            tag: 0,
+            title: "VS Code + Terminal"
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test("脚本菜单解析优先使用唯一可见标题")
+    func scriptBackedResolutionPrefersUniqueVisibleTitle() {
+        let items = makeItems()
+        let compositeID = "2D9111D2-45A8-428E-B399-B79F41DE7F8C"
+        let entries = makeScriptBackedEntries(items: items, compositeID: compositeID)
+
+        let result = MenuItemResolver.scriptBackedEntry(
+            in: entries,
+            customItems: items,
+            representedObject: items[0].id.uuidString,
+            identifier: nil,
+            tag: 0,
+            title: "VS Code + Terminal"
+        )
+
+        #expect(result?.id == compositeID)
+    }
+
+    @Test("脚本菜单 representedObject 缺失时可用 identifier 解析")
+    func scriptBackedResolutionUsesIdentifierFallback() {
+        let items = makeItems()
+        let compositeID = "2D9111D2-45A8-428E-B399-B79F41DE7F8C"
+        let entries = makeScriptBackedEntries(items: items, compositeID: compositeID)
+
+        let result = MenuItemResolver.scriptBackedEntry(
+            in: entries,
+            customItems: items,
+            representedObject: nil,
+            identifier: compositeID,
+            tag: -1,
+            title: "未匹配标题"
+        )
+
+        #expect(result?.id == compositeID)
+    }
+
+    @Test("脚本菜单自定义项可见标题优先于陈旧 ID")
+    func scriptBackedCustomResolutionPrefersVisibleTitle() {
+        let items = makeItems()
+        let entries = makeScriptBackedEntries(items: items, compositeID: nil)
+
+        let result = MenuItemResolver.scriptBackedEntry(
+            in: entries,
+            customItems: items,
+            representedObject: items[0].id.uuidString,
+            identifier: nil,
+            tag: 0,
+            title: "用 Code 打开"
+        )
+
+        #expect(result?.id == items[1].id.uuidString)
+    }
+
     @Test("能从中文菜单标题解析应用名")
     func parsesAppNameFromMenuTitle() {
         #expect(MenuItemResolver.appName(fromMenuTitle: "用 Visual Studio Code 打开") == "Visual Studio Code")
@@ -80,5 +147,32 @@ struct MenuItemResolverTests {
                 appPath: "/Applications/Visual Studio Code.app"
             ),
         ]
+    }
+
+    private func makeScriptBackedEntries(
+        items: [MenuItemConfig],
+        compositeID: String?
+    ) -> [ScriptBackedMenuEntry] {
+        var entries = items.map { item in
+            ScriptBackedMenuEntry(
+                id: item.id.uuidString,
+                kind: .custom,
+                displayName: item.appName,
+                fingerprint: item.id.uuidString
+            )
+        }
+
+        if let compositeID {
+            entries.append(
+                ScriptBackedMenuEntry(
+                    id: compositeID,
+                    kind: .composite,
+                    displayName: "VS Code + Terminal",
+                    fingerprint: compositeID
+                )
+            )
+        }
+
+        return entries
     }
 }

@@ -9,6 +9,7 @@ class FinderSync: FIFinderSync {
         category: "menu"
     )
     private let configService = SharedConfigService()
+    private let publishStore = ScriptPublishStore()
     private let scriptExecutor = ScriptExecutor()
     private var configObservation: DarwinObservation?
 
@@ -59,8 +60,10 @@ class FinderSync: FIFinderSync {
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
         let menu = NSMenu(title: "")
-        let entries = configService.loadEntries()
-            .filter { $0.isEnabled }
+        let entries = FinderMenuPresenter.visibleEntries(
+            entries: configService.loadEntries(),
+            publishStates: publishStore.loadAll()
+        )
         let presentationMode = configService.loadMenuPresentationMode()
 
         logger.debug(
@@ -100,6 +103,8 @@ class FinderSync: FIFinderSync {
             case .custom(let config):
                 menu.addItem(makeCustomMenuItem(config, customIndex: customIndex))
                 customIndex += 1
+            case .composite(let config):
+                menu.addItem(makeCompositeMenuItem(config))
             }
         }
     }
@@ -137,16 +142,39 @@ class FinderSync: FIFinderSync {
     ) -> NSMenuItem {
         let menuItem = NSMenuItem(
             title: "用 \(config.appName) 打开",
-            action: #selector(openWithApp(_:)),
+            action: #selector(openScriptBackedEntry(_:)),
             keyEquivalent: ""
         )
         menuItem.representedObject = config.id.uuidString
+        menuItem.identifier = NSUserInterfaceItemIdentifier(config.id.uuidString)
         menuItem.tag = customIndex
         menuItem.target = self
 
         let icon = NSWorkspace.shared.icon(forFile: config.appPath)
         icon.size = NSSize(width: 16, height: 16)
         menuItem.image = icon
+
+        return menuItem
+    }
+
+    private func makeCompositeMenuItem(_ config: CompositeMenuItemConfig) -> NSMenuItem {
+        let menuItem = NSMenuItem(
+            title: config.name,
+            action: #selector(openScriptBackedEntry(_:)),
+            keyEquivalent: ""
+        )
+        menuItem.representedObject = config.id.uuidString
+        menuItem.identifier = NSUserInterfaceItemIdentifier(config.id.uuidString)
+        menuItem.tag = -1
+        menuItem.target = self
+
+        if let symbolName = config.iconName,
+           let image = makeMenuSymbolImage(
+               named: symbolName,
+               accessibilityDescription: config.name
+           ) {
+            menuItem.image = image
+        }
 
         return menuItem
     }
@@ -168,17 +196,8 @@ class FinderSync: FIFinderSync {
         return image
     }
 
-    @objc func openWithApp(_ sender: NSMenuItem) {
-        let customItems = configService.loadEntries().compactMap { entry -> MenuItemConfig? in
-            if case .custom(let config) = entry, config.isEnabled { return config }
-            return nil
-        }
-        guard let item = MenuItemResolver.customItem(
-            in: customItems,
-            representedObject: sender.representedObject,
-            tag: sender.tag,
-            title: sender.title
-        ) else {
+    @objc func openScriptBackedEntry(_ sender: NSMenuItem) {
+        guard let entry = resolveScriptBackedEntry(sender) else {
             logger.error(
                 """
                 找不到菜单项配置：title=\(sender.title, privacy: .public)，\
@@ -194,12 +213,47 @@ class FinderSync: FIFinderSync {
             return
         }
 
-        logger.info("执行: \(item.appName) → \(targetPath)")
+        logger.info("执行: \(entry.displayName, privacy: .public) → \(targetPath, privacy: .private)")
 
         scriptExecutor.execute(
-            scriptId: item.id.uuidString,
+            scriptId: entry.id,
             targetPath: targetPath,
-            menuItemName: item.appName
+            menuItemName: entry.displayName
+        )
+    }
+
+    @objc func openWithApp(_ sender: NSMenuItem) {
+        openScriptBackedEntry(sender)
+    }
+
+    private func resolveScriptBackedEntry(_ sender: NSMenuItem) -> ScriptBackedMenuEntry? {
+        let visibleEntries = FinderMenuPresenter.visibleEntries(
+            entries: configService.loadEntries(),
+            publishStates: publishStore.loadAll()
+        )
+        let scriptBackedEntries = visibleEntries.compactMap(MenuEntryScriptPolicy.scriptBackedEntry)
+
+        let customItems = visibleEntries.compactMap { entry -> MenuItemConfig? in
+            if case .custom(let config) = entry { return config }
+            return nil
+        }
+
+        logger.debug(
+            """
+            解析脚本菜单：title=\(sender.title, privacy: .public)，\
+            tag=\(sender.tag, privacy: .public)，\
+            representedID=\((sender.representedObject as? String) ?? "nil", privacy: .public)，\
+            identifier=\(sender.identifier?.rawValue ?? "nil", privacy: .public)
+            """
+        )
+
+        return MenuItemResolver.scriptBackedEntry(
+            in: scriptBackedEntries,
+            customItems: customItems,
+            representedObject: sender.representedObject,
+            identifier: sender.identifier?.rawValue,
+            tag: sender.tag,
+            title: sender.title
         )
     }
 

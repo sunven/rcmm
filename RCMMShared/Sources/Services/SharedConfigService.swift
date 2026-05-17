@@ -1,36 +1,65 @@
 import Foundation
 
 public final class SharedConfigService: @unchecked Sendable {
-    private let defaults: UserDefaults
+    private let preferences: SharedPreferencesStore
 
     public init(defaults: UserDefaults? = nil) {
-        self.defaults = defaults
-            ?? UserDefaults(suiteName: AppGroupConstants.appGroupID)!
+        preferences = SharedPreferencesStore(defaults: defaults)
     }
 
     public func saveEntries(_ entries: [MenuEntry]) {
-        guard let data = try? JSONEncoder().encode(entries) else {
+        let unknownEnvelopes = loadEntryEnvelopes().filter(\.isUnknown)
+        let envelopes = entries.map(MenuEntryEnvelope.init(entry:)) + unknownEnvelopes
+
+        guard let data = try? JSONEncoder().encode(envelopes) else {
             return
         }
-        defaults.set(data, forKey: SharedKeys.menuEntries)
+        preferences.set(data, forKey: SharedKeys.menuEntries)
         mirrorLegacyKeys(from: entries)
     }
 
     public func loadEntries() -> [MenuEntry] {
-        if let data = defaults.data(forKey: SharedKeys.menuEntries),
-           let entries = try? JSONDecoder().decode([MenuEntry].self, from: data) {
-            return entries
+        let envelopes = loadEntryEnvelopes()
+        if !envelopes.isEmpty {
+            let entries = envelopes.compactMap(\.entry)
+            if !entries.isEmpty || hasSavedEntriesData {
+                return entries
+            }
+        }
+
+        if hasSavedEntriesData {
+            return []
         }
 
         return migrateLegacyEntriesIfNeeded()
     }
 
+    public func loadEntryEnvelopes() -> [MenuEntryEnvelope] {
+        guard let data = preferences.data(forKey: SharedKeys.menuEntries) else {
+            return []
+        }
+
+        if let envelopes = try? JSONDecoder().decode([MenuEntryEnvelope].self, from: data) {
+            return envelopes
+        }
+
+        if let entries = try? JSONDecoder().decode([MenuEntry].self, from: data) {
+            return entries.map(MenuEntryEnvelope.init(entry:))
+        }
+
+        return []
+    }
+
+    public var hasSavedEntriesData: Bool {
+        preferences.data(forKey: SharedKeys.menuEntries) != nil
+    }
+
     public func saveMenuPresentationMode(_ mode: MenuPresentationMode) {
-        defaults.set(mode.rawValue, forKey: SharedKeys.menuPresentationMode)
+        preferences.set(mode.rawValue, forKey: SharedKeys.menuPresentationMode)
     }
 
     public func loadMenuPresentationMode() -> MenuPresentationMode {
-        guard let rawValue = defaults.string(forKey: SharedKeys.menuPresentationMode),
+        guard let rawValue = preferences.string(forKey: SharedKeys.menuPresentationMode),
               let mode = MenuPresentationMode(rawValue: rawValue) else {
             return .flat
         }
@@ -40,7 +69,7 @@ public final class SharedConfigService: @unchecked Sendable {
 
     private func migrateLegacyEntriesIfNeeded() -> [MenuEntry] {
         let legacyItems = loadLegacyMenuItems()
-        let hasLegacyCopyPathFlag = defaults.object(forKey: SharedKeys.legacyCopyPathEnabled) != nil
+        let hasLegacyCopyPathFlag = preferences.object(forKey: SharedKeys.legacyCopyPathEnabled) != nil
 
         guard !legacyItems.isEmpty || hasLegacyCopyPathFlag else {
             return []
@@ -52,7 +81,7 @@ public final class SharedConfigService: @unchecked Sendable {
                 .builtIn(
                     BuiltInMenuItem(
                         type: .copyPath,
-                        isEnabled: defaults.bool(forKey: SharedKeys.legacyCopyPathEnabled)
+                        isEnabled: preferences.bool(forKey: SharedKeys.legacyCopyPathEnabled)
                     )
                 )
             )
@@ -63,7 +92,7 @@ public final class SharedConfigService: @unchecked Sendable {
     }
 
     private func loadLegacyMenuItems() -> [MenuItemConfig] {
-        guard let data = defaults.data(forKey: SharedKeys.legacyMenuItems) else {
+        guard let data = preferences.data(forKey: SharedKeys.legacyMenuItems) else {
             return []
         }
 
@@ -82,7 +111,7 @@ public final class SharedConfigService: @unchecked Sendable {
         }
 
         if let legacyData = try? JSONEncoder().encode(legacyItems) {
-            defaults.set(legacyData, forKey: SharedKeys.legacyMenuItems)
+            preferences.set(legacyData, forKey: SharedKeys.legacyMenuItems)
         }
 
         let copyPathEnabled = entries.contains { entry in
@@ -91,7 +120,7 @@ public final class SharedConfigService: @unchecked Sendable {
             }
             return false
         }
-        defaults.set(copyPathEnabled, forKey: SharedKeys.legacyCopyPathEnabled)
+        preferences.set(copyPathEnabled, forKey: SharedKeys.legacyCopyPathEnabled)
     }
 }
 
