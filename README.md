@@ -147,11 +147,11 @@ bash scripts/build-dev-dmg.sh --unsigned 1.0.0-dev.1
 open rcmm.xcodeproj
 
 # Command-line build
-xcodebuild -project rcmm.xcodeproj -scheme RCMMApp -configuration Debug build
+xcodebuild -project rcmm.xcodeproj -scheme rcmm -configuration Debug build
 xcodebuild -project rcmm.xcodeproj -scheme RCMMFinderExtension -configuration Debug build
 
 # Run tests (using Swift Testing framework, not XCTest)
-xcodebuild -project rcmm.xcodeproj -scheme RCMMShared test
+cd RCMMShared && swift test
 ```
 
 ### Testing the Finder Extension

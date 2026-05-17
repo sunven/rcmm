@@ -15,11 +15,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 open rcmm.xcodeproj
 
 # 命令行构建
-xcodebuild -project rcmm.xcodeproj -scheme RCMMApp -configuration Debug build
+xcodebuild -project rcmm.xcodeproj -scheme rcmm -configuration Debug build
 xcodebuild -project rcmm.xcodeproj -scheme RCMMFinderExtension -configuration Debug build
 
 # 运行测试（使用 Swift Testing 框架，非 XCTest）
-xcodebuild -project rcmm.xcodeproj -scheme RCMMSharedTests test
+cd RCMMShared && swift test
 
 # 在终端查看扩展日志
 log stream --predicate 'subsystem == "com.sunven.rcmm.FinderExtension"'
