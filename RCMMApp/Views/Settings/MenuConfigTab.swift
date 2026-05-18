@@ -28,30 +28,22 @@ struct MenuConfigTab: View {
                     ForEach(Array(appState.menuEntries.enumerated()), id: \.element.id) { index, entry in
                         switch entry {
                         case .builtIn(let item):
-                            BuiltInListRow(
-                                item: item,
-                                onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                                onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
-                                onToggle: { isEnabled in
-                                    appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
-                                },
-                                position: index + 1,
-                                total: appState.menuEntries.count
-                            )
+                            AlignedMenuRow {
+                                BuiltInListRow(
+                                    item: item,
+                                    onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
+                                    onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                                    onToggle: { isEnabled in
+                                        appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
+                                    },
+                                    position: index + 1,
+                                    total: appState.menuEntries.count
+                                )
+                            }
                             .listRowInsets(Layout.rowInsets)
                             .listRowSeparator(.hidden)
                         case .custom(let config):
-                            DisclosureGroup(isExpanded: expandedBinding(for: entry.id)) {
-                                CommandEditor(
-                                    editedCommand: config.customCommand ?? "",
-                                    defaultCommand: resolveDefaultCommand(for: config),
-                                    appPath: config.appPath,
-                                    onSave: { command in
-                                        appState.updateCustomCommand(for: config.id, command: command)
-                                    }
-                                )
-                                .padding(.top, 4)
-                            } label: {
+                            ExpandableMenuRow(isExpanded: expandedBinding(for: entry.id)) {
                                 AppListRow(
                                     menuItem: config,
                                     onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
@@ -63,11 +55,34 @@ struct MenuConfigTab: View {
                                     position: index + 1,
                                     total: appState.menuEntries.count
                                 )
+                            } expandedContent: {
+                                CommandEditor(
+                                    editedCommand: config.customCommand ?? "",
+                                    defaultCommand: resolveDefaultCommand(for: config),
+                                    appPath: config.appPath,
+                                    onSave: { command in
+                                        appState.updateCustomCommand(for: config.id, command: command)
+                                    }
+                                )
+                                .padding(.top, 4)
                             }
                             .listRowInsets(Layout.rowInsets)
                             .listRowSeparator(.hidden)
                         case .composite(let config):
-                            DisclosureGroup(isExpanded: expandedBinding(for: entry.id)) {
+                            ExpandableMenuRow(isExpanded: expandedBinding(for: entry.id)) {
+                                CompositeListRow(
+                                    config: config,
+                                    publishState: appState.scriptPublishStates[config.id.uuidString],
+                                    onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
+                                    onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                                    onDelete: { appState.removeEntry(at: IndexSet(integer: index)) },
+                                    onToggle: { isEnabled in
+                                        appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
+                                    },
+                                    position: index + 1,
+                                    total: appState.menuEntries.count
+                                )
+                            } expandedContent: {
                                 CompositeCommandEditor(
                                     config: config,
                                     onRename: { name in
@@ -97,19 +112,6 @@ struct MenuConfigTab: View {
                                             to: destination
                                         )
                                     }
-                                )
-                            } label: {
-                                CompositeListRow(
-                                    config: config,
-                                    publishState: appState.scriptPublishStates[config.id.uuidString],
-                                    onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                                    onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
-                                    onDelete: { appState.removeEntry(at: IndexSet(integer: index)) },
-                                    onToggle: { isEnabled in
-                                        appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
-                                    },
-                                    position: index + 1,
-                                    total: appState.menuEntries.count
                                 )
                             }
                             .listRowInsets(Layout.rowInsets)
@@ -211,5 +213,59 @@ struct MenuConfigTab: View {
             return builtIn
         }
         return "open -a \"\(item.appPath)\" {path}"
+    }
+}
+
+private enum MenuRowAlignment {
+    static let disclosureSlotWidth: CGFloat = 18
+    static let rowHeight: CGFloat = 34
+}
+
+private struct AlignedMenuRow<Label: View>: View {
+    @ViewBuilder var label: Label
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 0) {
+            Color.clear
+                .frame(width: MenuRowAlignment.disclosureSlotWidth, height: MenuRowAlignment.rowHeight)
+
+            label
+        }
+    }
+}
+
+private struct ExpandableMenuRow<Label: View, ExpandedContent: View>: View {
+    @Binding var isExpanded: Bool
+    @ViewBuilder var label: Label
+    @ViewBuilder var expandedContent: ExpandedContent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .frame(
+                            width: MenuRowAlignment.disclosureSlotWidth,
+                            height: MenuRowAlignment.rowHeight
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isExpanded ? "收起命令配置" : "展开命令配置")
+
+                label
+            }
+
+            if isExpanded {
+                expandedContent
+                    .padding(.leading, MenuRowAlignment.disclosureSlotWidth)
+            }
+        }
     }
 }
