@@ -139,6 +139,8 @@ jobs:
           xcodebuild -resolvePackageDependencies \
             -project rcmm.xcodeproj \
             -scheme rcmm \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -skipPackageUpdates \
             -clonedSourcePackagesDirPath build/SourcePackages
 
       - name: Import Sparkle private key
@@ -338,6 +340,8 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=macOS' \
             -archivePath build/rcmm.xcarchive \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -skipPackageUpdates \
             -clonedSourcePackagesDirPath build/SourcePackages \
             MARKETING_VERSION=${{ steps.normalized.outputs.short_version }} \
             CURRENT_PROJECT_VERSION=${{ steps.normalized.outputs.bundle_version }} \
