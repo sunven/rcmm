@@ -11,7 +11,7 @@
 		84A0A0012F50000100AA0001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 84A0A0022F50000100AA0001 /* Sparkle */; };
 		A1000001 /* RCMMShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000002 /* RCMMShared */; };
 		A1000003 /* RCMMShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000004 /* RCMMShared */; };
-		A1000021 /* RCMMFinderExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1000202 /* RCMMFinderExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1000021 /* RCMMFinderExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1000202 /* RCMMFinderExtension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A1000601 /* FinderSync.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000600 /* FinderSync.framework */; };
 /* End PBXBuildFile section */
 

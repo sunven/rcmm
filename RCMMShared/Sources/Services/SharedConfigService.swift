@@ -130,6 +130,7 @@ private struct LegacyMenuItemConfig: Codable {
     let bundleId: String?
     let appPath: String
     let customCommand: String?
+    let executionMode: CustomCommandExecutionMode
     let sortOrder: Int
     let isEnabled: Bool
 
@@ -139,6 +140,7 @@ private struct LegacyMenuItemConfig: Codable {
         bundleId = item.bundleId
         appPath = item.appPath
         customCommand = item.customCommand
+        executionMode = item.executionMode
         self.sortOrder = sortOrder
         isEnabled = item.isEnabled
     }

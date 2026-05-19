@@ -13,13 +13,23 @@ struct AppListRow: View {
 
     @State private var isHovered = false
 
+    private var isShellCommand: Bool {
+        menuItem.executionMode == .currentDirectory
+    }
+
     private var appExists: Bool {
-        FileManager.default.fileExists(atPath: menuItem.appPath)
+        if isShellCommand {
+            return true
+        }
+        return FileManager.default.fileExists(atPath: menuItem.appPath)
     }
 
     private var statusText: String {
         if !menuItem.isEnabled {
             return "已停用"
+        }
+        if isShellCommand {
+            return "命令"
         }
         return appExists ? "就绪" : "未找到"
     }
@@ -28,13 +38,15 @@ struct AppListRow: View {
         if !menuItem.isEnabled {
             return .orange
         }
+        if isShellCommand {
+            return .secondary
+        }
         return appExists ? .secondary : .red
     }
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: menuItem.appPath))
-                .resizable()
+            menuIcon
                 .frame(width: 28, height: 28)
                 .saturation(appExists ? (menuItem.isEnabled ? 1 : 0.3) : 0)
                 .opacity(appExists ? (menuItem.isEnabled ? 1 : 0.5) : 0.4)
@@ -94,7 +106,7 @@ struct AppListRow: View {
         .ifLet(position) { view, pos in
             view.accessibilityValue("第 \(pos) 项，共 \(total ?? 1) 项")
         }
-        .accessibilityHint(appExists ? "右键菜单应用项" : "应用未找到，请检查是否已安装")
+        .accessibilityHint(accessibilityHint)
         .ifLet(onMoveUp) { view, action in
             view.accessibilityAction(named: "上移", action)
         }
@@ -104,6 +116,25 @@ struct AppListRow: View {
         .ifLet(onDelete) { view, action in
             view.accessibilityAction(named: "删除", action)
         }
+    }
+
+    @ViewBuilder
+    private var menuIcon: some View {
+        if isShellCommand {
+            Image(systemName: "terminal")
+                .font(.system(size: 22, weight: .regular))
+                .foregroundStyle(.secondary)
+        } else {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: menuItem.appPath))
+                .resizable()
+        }
+    }
+
+    private var accessibilityHint: String {
+        if isShellCommand {
+            return "右键菜单自定义命令项"
+        }
+        return appExists ? "右键菜单应用项" : "应用未找到，请检查是否已安装"
     }
 }
 

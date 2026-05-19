@@ -39,6 +39,15 @@ struct MenuItemConfigTests {
         #expect(item.isEnabled == true)
     }
 
+    @Test("解码时缺失 executionMode 默认为 selectedPath")
+    func missingExecutionModeDefaultsToSelectedPath() throws {
+        let json = """
+        {"id":"550E8400-E29B-41D4-A716-446655440000","appName":"Test","appPath":"/test"}
+        """
+        let item = try JSONDecoder().decode(MenuItemConfig.self, from: Data(json.utf8))
+        #expect(item.executionMode == .selectedPath)
+    }
+
     @Test("解码时缺失可选字段使用 nil")
     func missingOptionalFields() throws {
         let json = """
@@ -67,6 +76,7 @@ struct MenuItemConfigTests {
             bundleId: "com.microsoft.VSCode",
             appPath: "/Applications/Visual Studio Code.app",
             customCommand: "code",
+            executionMode: .currentDirectory,
             isEnabled: false
         )
         let data = try JSONEncoder().encode(item)
@@ -74,6 +84,7 @@ struct MenuItemConfigTests {
         #expect(decoded == item)
         #expect(decoded.bundleId == "com.microsoft.VSCode")
         #expect(decoded.customCommand == "code")
+        #expect(decoded.executionMode == .currentDirectory)
         #expect(decoded.isEnabled == false)
     }
 }

@@ -33,7 +33,7 @@ public enum MenuEntryScriptPolicy: Sendable {
         case .builtIn:
             return nil
         case .custom(let config):
-            guard config.isEnabled else { return nil }
+            guard CustomCommandValidator.validate(config).isExecutable else { return nil }
             return ScriptBackedMenuEntry(
                 id: config.id.uuidString,
                 kind: .custom,
@@ -55,11 +55,13 @@ public enum MenuEntryScriptPolicy: Sendable {
 
     public static func fingerprint(for config: MenuItemConfig) -> String {
         ScriptFingerprint.make(fields: [
-            "custom-v1",
+            "custom-v2",
             config.id.uuidString.lowercased(),
+            config.appName,
             config.bundleId ?? "",
             config.appPath,
             config.customCommand ?? "",
+            config.executionMode.rawValue,
             String(config.isEnabled),
         ])
     }

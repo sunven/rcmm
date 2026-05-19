@@ -142,6 +142,24 @@ struct CommandTemplateProcessorTests {
         #expect(result == "do shell script \"/usr/bin/open -a \\\"My App\\\"\"")
     }
 
+    @Test("当前目录命令使用目标路径 cd 后执行 zsh")
+    func currentDirectoryCommandRunsInTargetDirectory() {
+        let result = CommandTemplateProcessor.buildCurrentDirectoryAppleScriptCommand(
+            command: "git pull"
+        )
+
+        #expect(result == "do shell script \"cd \" & quoted form of thePath & \" && /bin/zsh -lc \" & quoted form of \"git pull\"")
+    }
+
+    @Test("当前目录命令转义 AppleScript 字符")
+    func currentDirectoryCommandEscapesAppleScriptCharacters() {
+        let result = CommandTemplateProcessor.buildCurrentDirectoryAppleScriptCommand(
+            command: "echo \"hello\" && printf path\\\\n"
+        )
+
+        #expect(result == "do shell script \"cd \" & quoted form of thePath & \" && /bin/zsh -lc \" & quoted form of \"echo \\\"hello\\\" && printf path\\\\\\\\n\"")
+    }
+
     // MARK: - escapeForAppleScript 测试
 
     @Test("转义反斜杠")

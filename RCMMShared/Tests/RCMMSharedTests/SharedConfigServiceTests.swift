@@ -10,6 +10,7 @@ struct SharedConfigServiceTests {
         var bundleId: String?
         var appPath: String
         var customCommand: String?
+        var executionMode: CustomCommandExecutionMode?
         var sortOrder: Int
         var isEnabled: Bool
     }
@@ -87,6 +88,7 @@ struct SharedConfigServiceTests {
                 bundleId: "dev.warp.Warp-Stable",
                 appPath: "/Applications/Warp.app",
                 customCommand: nil,
+                executionMode: nil,
                 sortOrder: 0,
                 isEnabled: true
             ),
@@ -96,6 +98,7 @@ struct SharedConfigServiceTests {
                 bundleId: "com.todesktop.230313mzl4w4u92",
                 appPath: "/Applications/Cursor.app",
                 customCommand: nil,
+                executionMode: nil,
                 sortOrder: 1,
                 isEnabled: false
             ),
@@ -123,7 +126,15 @@ struct SharedConfigServiceTests {
         let entries: [MenuEntry] = [
             .custom(MenuItemConfig(appName: "Warp", appPath: "/Applications/Warp.app")),
             .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: false)),
-            .custom(MenuItemConfig(appName: "Code", appPath: "/Applications/Visual Studio Code.app", isEnabled: false)),
+            .custom(
+                MenuItemConfig(
+                    appName: "Code",
+                    appPath: "/Applications/Visual Studio Code.app",
+                    customCommand: "git pull",
+                    executionMode: .currentDirectory,
+                    isEnabled: false
+                )
+            ),
         ]
 
         service.saveEntries(entries)
@@ -144,6 +155,7 @@ struct SharedConfigServiceTests {
         #expect(legacyItems[0].isEnabled == true)
         #expect(legacyItems[1].appName == "Code")
         #expect(legacyItems[1].sortOrder == 1)
+        #expect(legacyItems[1].executionMode == .currentDirectory)
         #expect(legacyItems[1].isEnabled == false)
         cleanup()
     }
@@ -185,6 +197,7 @@ struct SharedConfigServiceTests {
                 bundleId: nil,
                 appPath: "/legacy",
                 customCommand: nil,
+                executionMode: nil,
                 sortOrder: 0,
                 isEnabled: true
             ),

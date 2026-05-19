@@ -51,6 +51,15 @@ public enum CommandTemplateProcessor: Sendable {
         }
     }
 
+    public static func buildCurrentDirectoryAppleScriptCommand(
+        command: String
+    ) -> String {
+        let escapedCommand = escapeForAppleScript(command)
+        return """
+        do shell script "cd " & quoted form of thePath & " && /bin/zsh -lc " & quoted form of "\(escapedCommand)"
+        """
+    }
+
     private static func buildAppleScriptCommandWithQuotedPlaceholders(
         template: String,
         appPath: String,

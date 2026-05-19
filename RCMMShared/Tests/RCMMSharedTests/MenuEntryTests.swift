@@ -156,4 +156,45 @@ struct MenuEntryTests {
         #expect(custom.isBuiltIn == false)
         #expect(composite.isBuiltIn == false)
     }
+
+    @Test("currentDirectory 自定义命令无 appPath 时仍可生成脚本菜单项")
+    func currentDirectoryCustomCommandIsScriptBackedWithoutAppPath() throws {
+        let config = MenuItemConfig(
+            appName: "Git Pull",
+            appPath: "",
+            customCommand: "git pull",
+            executionMode: .currentDirectory
+        )
+
+        let scriptBackedEntry = try #require(
+            MenuEntryScriptPolicy.scriptBackedEntry(for: .custom(config))
+        )
+
+        #expect(scriptBackedEntry.displayName == "Git Pull")
+        #expect(scriptBackedEntry.kind == .custom)
+    }
+
+    @Test("自定义命令执行模式变化会改变 fingerprint")
+    func customCommandExecutionModeChangesFingerprint() {
+        let id = UUID(uuidString: "44444444-4444-4444-4444-444444444444")!
+        let selectedPath = MenuItemConfig(
+            id: id,
+            appName: "Command",
+            appPath: "/Applications/Terminal.app",
+            customCommand: "open -a {app} {path}",
+            executionMode: .selectedPath
+        )
+        let currentDirectory = MenuItemConfig(
+            id: id,
+            appName: "Command",
+            appPath: "/Applications/Terminal.app",
+            customCommand: "open -a {app} {path}",
+            executionMode: .currentDirectory
+        )
+
+        #expect(
+            MenuEntryScriptPolicy.fingerprint(for: selectedPath)
+                != MenuEntryScriptPolicy.fingerprint(for: currentDirectory)
+        )
+    }
 }

@@ -57,11 +57,18 @@ struct MenuConfigTab: View {
                                 )
                             } expandedContent: {
                                 CommandEditor(
+                                    name: config.appName,
                                     editedCommand: config.customCommand ?? "",
+                                    executionMode: config.executionMode,
                                     defaultCommand: resolveDefaultCommand(for: config),
                                     appPath: config.appPath,
-                                    onSave: { command in
-                                        appState.updateCustomCommand(for: config.id, command: command)
+                                    onSave: { name, command, executionMode in
+                                        appState.updateCustomCommand(
+                                            for: config.id,
+                                            name: name,
+                                            command: command,
+                                            executionMode: executionMode
+                                        )
                                     }
                                 )
                                 .padding(.top, 4)
@@ -158,6 +165,10 @@ struct MenuConfigTab: View {
                         Button("VS Code + Terminal") {
                             appState.addEditorTerminalPreset()
                         }
+                        Button("自定义命令") {
+                            let id = appState.addGitPullCommand()
+                            expandedItems.insert(id.uuidString)
+                        }
                         Button("新组合命令") {
                             appState.addEmptyCompositeCommand()
                         }
@@ -209,6 +220,9 @@ struct MenuConfigTab: View {
     }
 
     private func resolveDefaultCommand(for item: MenuItemConfig) -> String {
+        if item.executionMode == .currentDirectory {
+            return "git pull"
+        }
         if let builtIn = CommandMappingService.command(for: item.bundleId) {
             return builtIn
         }

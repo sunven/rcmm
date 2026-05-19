@@ -150,9 +150,16 @@ class FinderSync: FIFinderSync {
         menuItem.tag = customIndex
         menuItem.target = self
 
-        let icon = NSWorkspace.shared.icon(forFile: config.appPath)
-        icon.size = NSSize(width: 16, height: 16)
-        menuItem.image = icon
+        if config.executionMode == .currentDirectory {
+            menuItem.image = makeMenuSymbolImage(
+                named: "terminal",
+                accessibilityDescription: config.appName
+            )
+        } else {
+            let icon = NSWorkspace.shared.icon(forFile: config.appPath)
+            icon.size = NSSize(width: 16, height: 16)
+            menuItem.image = icon
+        }
 
         return menuItem
     }
@@ -212,12 +219,16 @@ class FinderSync: FIFinderSync {
             logger.error("无法解析目标路径")
             return
         }
+        let executionPath = FinderTargetPathResolver.executionPath(
+            for: targetPath,
+            executionMode: resolveExecutionMode(for: entry)
+        )
 
-        logger.info("执行: \(entry.displayName, privacy: .public) → \(targetPath, privacy: .private)")
+        logger.info("执行: \(entry.displayName, privacy: .public) → \(executionPath, privacy: .private)")
 
         scriptExecutor.execute(
             scriptId: entry.id,
-            targetPath: targetPath,
+            targetPath: executionPath,
             menuItemName: entry.displayName
         )
     }
@@ -255,6 +266,19 @@ class FinderSync: FIFinderSync {
             tag: sender.tag,
             title: sender.title
         )
+    }
+
+    private func resolveExecutionMode(for entry: ScriptBackedMenuEntry) -> CustomCommandExecutionMode? {
+        guard entry.kind == .custom else {
+            return nil
+        }
+
+        return configService.loadEntries().compactMap { menuEntry -> MenuItemConfig? in
+            guard case .custom(let config) = menuEntry else {
+                return nil
+            }
+            return config
+        }.first { $0.id.uuidString == entry.id }?.executionMode
     }
 
     @objc func copyPath(_ sender: NSMenuItem) {

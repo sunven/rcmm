@@ -37,6 +37,10 @@ struct ScriptSourceGenerator {
     }
 
     private func generate(for item: MenuItemConfig) -> String {
+        if item.executionMode == .currentDirectory {
+            return generateCurrentDirectoryCommand(for: item)
+        }
+
         let command: String
         if let customCommand = item.customCommand, !customCommand.isEmpty {
             command = CommandTemplateProcessor.buildAppleScriptCommand(
@@ -58,6 +62,15 @@ struct ScriptSourceGenerator {
         }
 
         return wrap(commands: [command])
+    }
+
+    private func generateCurrentDirectoryCommand(for item: MenuItemConfig) -> String {
+        let command = item.customCommand?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return wrap(commands: [
+            CommandTemplateProcessor.buildCurrentDirectoryAppleScriptCommand(
+                command: command
+            ),
+        ])
     }
 
     private func generate(

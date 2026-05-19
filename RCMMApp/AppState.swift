@@ -730,6 +730,19 @@ final class AppState {
         saveAndSync()
     }
 
+    @discardableResult
+    func addGitPullCommand() -> UUID {
+        let item = MenuItemConfig(
+            appName: "Git Pull",
+            appPath: "",
+            customCommand: "git pull",
+            executionMode: .currentDirectory
+        )
+        menuEntries.append(.custom(item))
+        saveAndSync()
+        return item.id
+    }
+
     func addEditorTerminalPreset() {
         compositePresetMessage = "正在查找已安装的编辑器和终端…"
 
@@ -877,14 +890,24 @@ final class AppState {
         saveAndSync()
     }
 
-    /// 更新指定菜单项的自定义命令
-    func updateCustomCommand(for itemId: UUID, command: String?) {
+    func updateCustomCommand(
+        for itemId: UUID,
+        name: String? = nil,
+        command: String?,
+        executionMode: CustomCommandExecutionMode? = nil
+    ) {
         guard let index = menuEntries.firstIndex(where: {
             if case .custom(let config) = $0 { return config.id == itemId }
             return false
         }) else { return }
         if case .custom(var config) = menuEntries[index] {
+            if let name {
+                config.appName = name
+            }
             config.customCommand = command
+            if let executionMode {
+                config.executionMode = executionMode
+            }
             menuEntries[index] = .custom(config)
         }
         saveAndSync()
