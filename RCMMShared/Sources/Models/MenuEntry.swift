@@ -4,9 +4,10 @@ public enum MenuEntry: Codable, Identifiable, Hashable, Sendable {
     case builtIn(BuiltInMenuItem)
     case custom(MenuItemConfig)
     case composite(CompositeMenuItemConfig)
+    case newFile(NewFileMenuConfig)
 
     enum LegacyCodingKeys: String, CodingKey {
-        case builtIn, custom, composite
+        case builtIn, custom, composite, newFile
     }
 
     public var id: String {
@@ -17,6 +18,8 @@ public enum MenuEntry: Codable, Identifiable, Hashable, Sendable {
             return config.id.uuidString
         case .composite(let config):
             return config.id.uuidString
+        case .newFile(let config):
+            return config.id.uuidString
         }
     }
 
@@ -25,6 +28,7 @@ public enum MenuEntry: Codable, Identifiable, Hashable, Sendable {
         case .builtIn(let item): return item.isEnabled
         case .custom(let config): return config.isEnabled
         case .composite(let config): return config.isEnabled
+        case .newFile(let config): return config.isEnabled
         }
     }
 
@@ -33,6 +37,7 @@ public enum MenuEntry: Codable, Identifiable, Hashable, Sendable {
         case .builtIn(let item): return item.displayName
         case .custom(let config): return config.appName
         case .composite(let config): return config.name
+        case .newFile(let config): return config.name
         }
     }
 
@@ -41,6 +46,7 @@ public enum MenuEntry: Codable, Identifiable, Hashable, Sendable {
         case .builtIn(let item): return item.iconName
         case .custom: return nil
         case .composite(let config): return config.iconName
+        case .newFile(let config): return config.iconName
         }
     }
 
@@ -57,6 +63,8 @@ public enum MenuEntry: Codable, Identifiable, Hashable, Sendable {
             return MenuEntryType.custom.rawValue
         case .composite:
             return MenuEntryType.composite.rawValue
+        case .newFile:
+            return MenuEntryType.newFile.rawValue
         }
     }
 
@@ -84,6 +92,8 @@ public enum MenuEntry: Codable, Identifiable, Hashable, Sendable {
             try container.encode(config, forKey: .custom)
         case .composite(let config):
             try container.encode(config, forKey: .composite)
+        case .newFile(let config):
+            try container.encode(config, forKey: .newFile)
         }
     }
 }

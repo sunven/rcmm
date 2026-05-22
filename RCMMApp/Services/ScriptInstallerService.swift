@@ -60,11 +60,14 @@ final class ScriptInstallerService {
         let entriesToSync = configService.hasSavedEntriesData
             ? configService.loadEntries()
             : entries
-        let scriptBackedEntries = entriesToSync.compactMap { entry -> (MenuEntry, ScriptBackedMenuEntry)? in
-            guard let scriptBackedEntry = MenuEntryScriptPolicy.scriptBackedEntry(for: entry) else {
-                return nil
+        let refreshedEntries = refreshNewFileTemplateFingerprints(in: entriesToSync)
+        if refreshedEntries != entriesToSync {
+            configService.saveEntries(refreshedEntries)
+        }
+        let scriptBackedEntries = refreshedEntries.flatMap { entry -> [(MenuEntry, ScriptBackedMenuEntry)] in
+            MenuEntryScriptPolicy.scriptBackedEntries(for: entry).map { scriptBackedEntry in
+                (entry, scriptBackedEntry)
             }
-            return (entry, scriptBackedEntry)
         }
         let expectedIDs = Set(scriptBackedEntries.map(\.1.id))
 
@@ -156,7 +159,12 @@ final class ScriptInstallerService {
         }
 
         do {
-            try publishCompiledScript(tempURL: tempURL, finalURL: finalURL)
+            try publishArtifacts(
+                entry: entry,
+                scriptBackedEntry: scriptBackedEntry,
+                tempScriptURL: tempURL,
+                finalScriptURL: finalURL
+            )
             publishStore.upsert(
                 ScriptPublishState(
                     entryID: scriptBackedEntry.id,
@@ -186,7 +194,80 @@ final class ScriptInstallerService {
         }
     }
 
-    private func publishCompiledScript(tempURL: URL, finalURL: URL) throws {
+    private func publishArtifacts(
+        entry: MenuEntry,
+        scriptBackedEntry: ScriptBackedMenuEntry,
+        tempScriptURL: URL,
+        finalScriptURL: URL
+    ) throws {
+        let templateResource = try prepareTemplateResourceIfNeeded(
+            entry: entry,
+            scriptBackedEntry: scriptBackedEntry
+        )
+
+        do {
+            try publishFile(tempURL: tempScriptURL, finalURL: finalScriptURL)
+            if let templateResource {
+                try publishFile(
+                    tempURL: templateResource.tempURL,
+                    finalURL: templateResource.finalURL
+                )
+                removeTemplateResources(
+                    for: scriptBackedEntry.id,
+                    keeping: templateResource.resourceName
+                )
+            }
+        } catch {
+            if let templateResource {
+                try? fileManager.removeItem(at: templateResource.tempURL)
+            }
+            throw error
+        }
+    }
+
+    private func prepareTemplateResourceIfNeeded(
+        entry: MenuEntry,
+        scriptBackedEntry: ScriptBackedMenuEntry
+    ) throws -> PendingTemplateResource? {
+        guard case .newFile(let config) = entry,
+              case .newFileTemplate(_, let templateID) = scriptBackedEntry.source,
+              let template = config.templates.first(where: { $0.id == templateID }),
+              template.creationMode == .copyTemplate else {
+            removeTemplateResources(for: scriptBackedEntry.id, keeping: nil)
+            return nil
+        }
+
+        guard let sourcePath = template.templatePath?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !sourcePath.isEmpty else {
+            throw NSError(
+                domain: "ScriptInstallerService",
+                code: 10,
+                userInfo: [NSLocalizedDescriptionKey: "复制模板缺少源文件路径"]
+            )
+        }
+
+        let resourceName = NewFileScriptBuilder.templateResourceName(
+            for: scriptBackedEntry.id,
+            fileExtension: template.fileExtension
+        )
+        let finalURL = scriptsDirectory.appendingPathComponent(resourceName)
+        let tempURL = scriptsDirectory
+            .appendingPathComponent(".\(resourceName).\(UUID().uuidString)")
+
+        try fileManager.copyItem(
+            at: URL(fileURLWithPath: sourcePath),
+            to: tempURL
+        )
+
+        return PendingTemplateResource(
+            tempURL: tempURL,
+            finalURL: finalURL,
+            resourceName: resourceName
+        )
+    }
+
+    private func publishFile(tempURL: URL, finalURL: URL) throws {
         if fileManager.fileExists(atPath: finalURL.path) {
             _ = try fileManager.replaceItemAt(
                 finalURL,
@@ -255,17 +336,49 @@ final class ScriptInstallerService {
             includingPropertiesForKeys: nil
         )) ?? []
 
-        for scriptURL in existingScripts where scriptURL.pathExtension == "scpt" {
-            let id = scriptURL.deletingPathExtension().lastPathComponent
-            guard !expectedIDs.contains(id) else { continue }
+        for scriptURL in existingScripts {
+            let obsoleteID: String?
+            if scriptURL.pathExtension == "scpt" {
+                obsoleteID = scriptURL.deletingPathExtension().lastPathComponent
+            } else if let id = templateResourceScriptID(from: scriptURL) {
+                obsoleteID = id
+            } else {
+                obsoleteID = nil
+            }
+
+            guard let id = obsoleteID, !expectedIDs.contains(id) else { continue }
             do {
                 try fileManager.removeItem(at: scriptURL)
                 publishStore.remove(entryID: id)
-                logger.info("删除多余脚本: \(id, privacy: .public)")
+                logger.info("删除多余脚本资源: \(id, privacy: .public)")
             } catch {
-                logger.warning("删除多余脚本失败: \(id, privacy: .public): \(error.localizedDescription)")
+                logger.warning("删除多余脚本资源失败: \(id, privacy: .public): \(error.localizedDescription)")
             }
         }
+    }
+
+    private func removeTemplateResources(for scriptID: String, keeping resourceName: String?) {
+        let existingScripts = (try? fileManager.contentsOfDirectory(
+            at: scriptsDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+
+        for url in existingScripts {
+            guard templateResourceScriptID(from: url) == scriptID,
+                  url.lastPathComponent != resourceName else {
+                continue
+            }
+            try? fileManager.removeItem(at: url)
+        }
+    }
+
+    private func templateResourceScriptID(from url: URL) -> String? {
+        let name = url.lastPathComponent
+        guard let range = name.range(of: ".template") else {
+            return nil
+        }
+        let id = String(name[..<range.lowerBound])
+        return id.isEmpty ? nil : id
     }
 
     private func scriptURL(for entryID: String) -> URL {
@@ -275,12 +388,32 @@ final class ScriptInstallerService {
     }
 
     private func isStillCurrent(_ scriptBackedEntry: ScriptBackedMenuEntry) -> Bool {
-        configService.loadEntries()
-            .compactMap(MenuEntryScriptPolicy.scriptBackedEntry)
+        refreshNewFileTemplateFingerprints(in: configService.loadEntries())
+            .flatMap(MenuEntryScriptPolicy.scriptBackedEntries)
             .contains { current in
                 current.id == scriptBackedEntry.id
                     && current.fingerprint == scriptBackedEntry.fingerprint
             }
+    }
+
+    private func refreshNewFileTemplateFingerprints(in entries: [MenuEntry]) -> [MenuEntry] {
+        entries.map { entry in
+            guard case .newFile(var config) = entry else {
+                return entry
+            }
+
+            for index in config.templates.indices {
+                guard config.templates[index].creationMode == .copyTemplate else {
+                    config.templates[index].templatePath = nil
+                    config.templates[index].templateFingerprint = nil
+                    continue
+                }
+                config.templates[index].templateFingerprint = NewFileTemplateFingerprint
+                    .fileFingerprint(at: config.templates[index].templatePath)
+            }
+
+            return .newFile(config)
+        }
     }
 
     private func errorKey(
@@ -315,4 +448,10 @@ final class ScriptInstallerService {
             return "脚本执行失败: \(summary)"
         }
     }
+}
+
+private struct PendingTemplateResource {
+    let tempURL: URL
+    let finalURL: URL
+    let resourceName: String
 }

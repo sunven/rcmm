@@ -84,7 +84,7 @@ struct ExtensionCleanupSheet: View {
                             }
                         }
 
-                        GroupBox("清理后命令（\(plan.postCleanupCommands.count)）") {
+                        GroupBox {
                             if plan.postCleanupCommands.isEmpty {
                                 Text("无额外命令")
                                     .foregroundStyle(.secondary)
@@ -94,8 +94,25 @@ struct ExtensionCleanupSheet: View {
                                     ForEach(Array(plan.postCleanupCommands.enumerated()), id: \.offset) { _, command in
                                         Text(command)
                                             .font(.system(.caption, design: .monospaced))
+                                            .textSelection(.enabled)
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                     }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text("清理后命令（\(plan.postCleanupCommands.count)）")
+
+                                Spacer()
+
+                                if !plan.postCleanupCommands.isEmpty {
+                                    Button {
+                                        copyCommands(plan.postCleanupCommands)
+                                    } label: {
+                                        Image(systemName: "doc.on.doc")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("复制清理后命令")
                                 }
                             }
                         }
@@ -175,6 +192,11 @@ struct ExtensionCleanupSheet: View {
         }
     }
 
+    private func copyCommands(_ commands: [String]) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(commands.joined(separator: "\n"), forType: .string)
+    }
 }
 
 #Preview("Planning") {

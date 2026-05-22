@@ -7,11 +7,13 @@ public enum MenuItemResolver: Sendable {
         representedObject: Any?,
         identifier: String?,
         tag: Int,
-        title: String
+        title: String,
+        parentMenuTitle: String? = nil
     ) -> ScriptBackedMenuEntry? {
         if let titleMatchedEntry = uniqueScriptBackedEntry(
             in: scriptBackedEntries,
-            title: title
+            title: title,
+            parentMenuTitle: parentMenuTitle
         ) {
             return titleMatchedEntry
         }
@@ -96,7 +98,8 @@ public enum MenuItemResolver: Sendable {
 
     private static func uniqueScriptBackedEntry(
         in entries: [ScriptBackedMenuEntry],
-        title: String
+        title: String,
+        parentMenuTitle: String?
     ) -> ScriptBackedMenuEntry? {
         let matches = entries.filter { entry in
             switch entry.kind {
@@ -104,6 +107,12 @@ public enum MenuItemResolver: Sendable {
                 return appName(fromMenuTitle: title) == entry.displayName
             case .composite:
                 return title == entry.displayName
+            case .newFileTemplate:
+                guard title == entry.displayName else { return false }
+                if let parentMenuTitle {
+                    return entry.parentDisplayName == parentMenuTitle
+                }
+                return true
             }
         }
 

@@ -731,6 +731,16 @@ final class AppState {
     }
 
     @discardableResult
+    func addNewFileMenu() -> UUID {
+        let config = NewFileMenuConfig(
+            name: uniqueNewFileMenuName(preferredName: "新建")
+        )
+        menuEntries.append(.newFile(config))
+        saveAndSync()
+        return config.id
+    }
+
+    @discardableResult
     func addGitPullCommand() -> UUID {
         let item = MenuItemConfig(
             appName: "Git Pull",
@@ -880,7 +890,7 @@ final class AppState {
     func removeEntry(at offsets: IndexSet) {
         let removableOffsets = offsets.filter { index in
             switch menuEntries[index] {
-            case .custom, .composite:
+            case .custom, .composite, .newFile:
                 return true
             case .builtIn:
                 return false
@@ -888,6 +898,146 @@ final class AppState {
         }
         menuEntries.remove(atOffsets: IndexSet(removableOffsets))
         saveAndSync()
+    }
+
+    func updateNewFileMenuName(for menuID: UUID, name: String) {
+        updateNewFileMenu(for: menuID) { config in
+            config.name = uniqueNewFileMenuName(
+                preferredName: name,
+                excluding: menuID
+            )
+        }
+    }
+
+    func addNewFileTemplate(to menuID: UUID) {
+        updateNewFileMenu(for: menuID) { config in
+            let displayName = uniqueNewFileTemplateName(
+                preferredName: "txt",
+                existingTemplates: config.templates
+            )
+            config.templates.append(
+                NewFileTemplateConfig(
+                    displayName: displayName,
+                    fileExtension: "txt",
+                    creationMode: .emptyFile
+                )
+            )
+        }
+    }
+
+    func updateNewFileTemplate(
+        menuID: UUID,
+        templateID: UUID,
+        displayName: String,
+        baseName: String,
+        fileExtension: String,
+        creationMode: NewFileCreationMode,
+        templatePath: String?,
+        initialContent: String?,
+        isEnabled: Bool
+    ) {
+        updateNewFileMenu(for: menuID) { config in
+            guard let index = config.templates.firstIndex(where: { $0.id == templateID }) else {
+                return
+            }
+            let normalizedTemplatePath = creationMode == .copyTemplate ? templatePath : nil
+            let normalizedInitialContent = creationMode == .textContent ? initialContent : nil
+            config.templates[index].displayName = displayName
+            config.templates[index].baseName = baseName
+            config.templates[index].fileExtension = fileExtension
+            config.templates[index].creationMode = creationMode
+            config.templates[index].templatePath = normalizedTemplatePath
+            config.templates[index].templateFingerprint = NewFileTemplateFingerprint.fileFingerprint(
+                at: normalizedTemplatePath
+            )
+            config.templates[index].initialContent = normalizedInitialContent
+            config.templates[index].isEnabled = isEnabled
+        }
+    }
+
+    func removeNewFileTemplate(menuID: UUID, templateID: UUID) {
+        updateNewFileMenu(for: menuID) { config in
+            config.templates.removeAll { $0.id == templateID }
+        }
+    }
+
+    func moveNewFileTemplate(menuID: UUID, from source: IndexSet, to destination: Int) {
+        updateNewFileMenu(for: menuID) { config in
+            config.templates.move(fromOffsets: source, toOffset: destination)
+        }
+    }
+
+    private func updateNewFileMenu(
+        for menuID: UUID,
+        mutate: (inout NewFileMenuConfig) -> Void
+    ) {
+        guard let index = menuEntries.firstIndex(where: {
+            if case .newFile(let config) = $0 { return config.id == menuID }
+            return false
+        }) else { return }
+        guard case .newFile(var config) = menuEntries[index] else { return }
+        mutate(&config)
+        menuEntries[index] = .newFile(config)
+        saveAndSync()
+    }
+
+    private func uniqueNewFileTemplateName(
+        preferredName: String,
+        existingTemplates: [NewFileTemplateConfig]
+    ) -> String {
+        let existingNames = Set(
+            existingTemplates
+                .map { $0.displayName.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
+        return uniqueName(
+            preferredName: preferredName,
+            fallbackName: "模板",
+            existingNames: existingNames
+        )
+    }
+
+    private func uniqueNewFileMenuName(
+        preferredName: String,
+        excluding menuID: UUID? = nil
+    ) -> String {
+        let existingNames = Set(
+            menuEntries.compactMap { entry -> String? in
+                guard case .newFile(let config) = entry,
+                      config.id != menuID else {
+                    return nil
+                }
+                let trimmed = config.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        )
+        return uniqueName(
+            preferredName: preferredName,
+            fallbackName: "新建",
+            existingNames: existingNames
+        )
+    }
+
+    private func uniqueName(
+        preferredName: String,
+        fallbackName: String,
+        existingNames: Set<String>
+    ) -> String {
+        let trimmedPreferredName = preferredName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseName = trimmedPreferredName.isEmpty ? fallbackName : trimmedPreferredName
+
+        guard existingNames.contains(baseName) else {
+            return baseName
+        }
+
+        var index = 2
+        while true {
+            let candidate = "\(baseName) \(index)"
+            if !existingNames.contains(candidate) {
+                return candidate
+            }
+            index += 1
+        }
     }
 
     func updateCustomCommand(
@@ -991,6 +1141,9 @@ final class AppState {
         case .composite(var config):
             config.isEnabled = isEnabled
             menuEntries[index] = .composite(config)
+        case .newFile(var config):
+            config.isEnabled = isEnabled
+            menuEntries[index] = .newFile(config)
         }
         saveAndSync()
     }

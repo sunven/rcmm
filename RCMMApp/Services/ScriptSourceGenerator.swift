@@ -5,6 +5,7 @@ enum ScriptSourceGenerationError: LocalizedError {
     case unsupportedEntry
     case noExecutableCompositeSteps
     case missingAppPath(stepName: String)
+    case templateNotFound
 
     var errorDescription: String? {
         switch self {
@@ -14,6 +15,8 @@ enum ScriptSourceGenerationError: LocalizedError {
             return "组合命令没有可执行步骤"
         case .missingAppPath(let stepName):
             return "步骤缺少应用路径: \(stepName)"
+        case .templateNotFound:
+            return "找不到对应的新建文件模板"
         }
     }
 }
@@ -32,6 +35,11 @@ struct ScriptSourceGenerator {
             return try generate(
                 for: config,
                 executableStepIDs: scriptBackedEntry.executableStepIDs
+            )
+        case .newFile(let config):
+            return try NewFileScriptBuilder.source(
+                for: config,
+                scriptBackedEntry: scriptBackedEntry
             )
         }
     }

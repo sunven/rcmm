@@ -127,6 +127,104 @@ struct MenuItemResolverTests {
         #expect(result?.id == items[1].id.uuidString)
     }
 
+    @Test("新建模板用父菜单和子菜单标题回退解析")
+    func newFileTemplateResolutionUsesParentAndChildTitle() {
+        let menuID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let txtID = UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB")!
+        let otherID = UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")!
+        let entries = [
+            ScriptBackedMenuEntry(
+                id: MenuEntryScriptPolicy.newFileScriptID(menuID: menuID, templateID: txtID),
+                kind: .newFileTemplate,
+                displayName: "txt",
+                fingerprint: "txt",
+                source: .newFileTemplate(menuID: menuID, templateID: txtID),
+                targetPolicy: .containingDirectory,
+                parentDisplayName: "新建"
+            ),
+            ScriptBackedMenuEntry(
+                id: MenuEntryScriptPolicy.newFileScriptID(menuID: menuID, templateID: otherID),
+                kind: .newFileTemplate,
+                displayName: "txt",
+                fingerprint: "other",
+                source: .newFileTemplate(menuID: menuID, templateID: otherID),
+                targetPolicy: .containingDirectory,
+                parentDisplayName: "模板"
+            ),
+        ]
+
+        let result = MenuItemResolver.scriptBackedEntry(
+            in: entries,
+            customItems: [],
+            representedObject: nil,
+            identifier: nil,
+            tag: -1,
+            title: "txt",
+            parentMenuTitle: "新建"
+        )
+
+        #expect(result?.id == entries[0].id)
+    }
+
+    @Test("新建模板缺少父菜单标题且同名时不误解析")
+    func newFileTemplateResolutionDoesNotGuessWhenDuplicateWithoutParentTitle() {
+        let entries = [
+            ScriptBackedMenuEntry(
+                id: "one",
+                kind: .newFileTemplate,
+                displayName: "txt",
+                fingerprint: "one",
+                source: .newFileTemplate(menuID: UUID(), templateID: UUID()),
+                targetPolicy: .containingDirectory,
+                parentDisplayName: "新建"
+            ),
+            ScriptBackedMenuEntry(
+                id: "two",
+                kind: .newFileTemplate,
+                displayName: "txt",
+                fingerprint: "two",
+                source: .newFileTemplate(menuID: UUID(), templateID: UUID()),
+                targetPolicy: .containingDirectory,
+                parentDisplayName: "模板"
+            ),
+        ]
+
+        let result = MenuItemResolver.scriptBackedEntry(
+            in: entries,
+            customItems: [],
+            representedObject: nil,
+            identifier: nil,
+            tag: -1,
+            title: "txt"
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test("新建模板缺少父菜单标题但子项标题唯一时可回退解析")
+    func newFileTemplateResolutionFallsBackToUniqueChildTitle() {
+        let entry = ScriptBackedMenuEntry(
+            id: "one",
+            kind: .newFileTemplate,
+            displayName: "txt",
+            fingerprint: "one",
+            source: .newFileTemplate(menuID: UUID(), templateID: UUID()),
+            targetPolicy: .containingDirectory,
+            parentDisplayName: "新建"
+        )
+
+        let result = MenuItemResolver.scriptBackedEntry(
+            in: [entry],
+            customItems: [],
+            representedObject: nil,
+            identifier: nil,
+            tag: -1,
+            title: "txt"
+        )
+
+        #expect(result == entry)
+    }
+
     @Test("能从中文菜单标题解析应用名")
     func parsesAppNameFromMenuTitle() {
         #expect(MenuItemResolver.appName(fromMenuTitle: "用 Visual Studio Code 打开") == "Visual Studio Code")
@@ -158,7 +256,9 @@ struct MenuItemResolverTests {
                 id: item.id.uuidString,
                 kind: .custom,
                 displayName: item.appName,
-                fingerprint: item.id.uuidString
+                fingerprint: item.id.uuidString,
+                source: .custom(id: item.id),
+                targetPolicy: .selectedPath
             )
         }
 
@@ -168,7 +268,12 @@ struct MenuItemResolverTests {
                     id: compositeID,
                     kind: .composite,
                     displayName: "VS Code + Terminal",
-                    fingerprint: compositeID
+                    fingerprint: compositeID,
+                    source: .composite(
+                        id: UUID(uuidString: compositeID)!,
+                        executableStepIDs: []
+                    ),
+                    targetPolicy: .selectedPath
                 )
             )
         }

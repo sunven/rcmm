@@ -27,6 +27,14 @@ struct MenuEntryTests {
         #expect(entry.id == uuid.uuidString)
     }
 
+    @Test("newFile entry id 使用 UUID")
+    func newFileId() {
+        let uuid = UUID()
+        let config = NewFileMenuConfig(id: uuid, name: "新建")
+        let entry = MenuEntry.newFile(config)
+        #expect(entry.id == uuid.uuidString)
+    }
+
     @Test("builtIn entry isEnabled 正确")
     func builtInIsEnabled() {
         let enabled = MenuEntry.builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true))
@@ -47,6 +55,14 @@ struct MenuEntryTests {
     func compositeIsEnabled() {
         let enabled = MenuEntry.composite(CompositeMenuItemConfig(name: "T", steps: [], isEnabled: true))
         let disabled = MenuEntry.composite(CompositeMenuItemConfig(name: "T", steps: [], isEnabled: false))
+        #expect(enabled.isEnabled == true)
+        #expect(disabled.isEnabled == false)
+    }
+
+    @Test("newFile entry isEnabled 正确")
+    func newFileIsEnabled() {
+        let enabled = MenuEntry.newFile(NewFileMenuConfig(name: "新建", isEnabled: true))
+        let disabled = MenuEntry.newFile(NewFileMenuConfig(name: "新建", isEnabled: false))
         #expect(enabled.isEnabled == true)
         #expect(disabled.isEnabled == false)
     }
@@ -95,6 +111,12 @@ struct MenuEntryTests {
         #expect(entry.displayName == "VS Code + Terminal")
     }
 
+    @Test("newFile displayName 使用 name")
+    func newFileDisplayName() {
+        let entry = MenuEntry.newFile(NewFileMenuConfig(name: "新建"))
+        #expect(entry.displayName == "新建")
+    }
+
     @Test("Round-trip 编解码 builtIn entry")
     func roundTripBuiltIn() throws {
         let entry = MenuEntry.builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true))
@@ -130,21 +152,41 @@ struct MenuEntryTests {
         #expect(decoded == entry)
     }
 
+    @Test("Round-trip 编解码 newFile entry")
+    func roundTripNewFile() throws {
+        let config = NewFileMenuConfig(
+            name: "新建",
+            templates: [
+                NewFileTemplateConfig(
+                    displayName: "txt",
+                    fileExtension: "txt",
+                    creationMode: .emptyFile
+                ),
+            ]
+        )
+        let entry = MenuEntry.newFile(config)
+        let data = try JSONEncoder().encode(entry)
+        let decoded = try JSONDecoder().decode(MenuEntry.self, from: data)
+        #expect(decoded == entry)
+    }
+
     @Test("混合数组编解码保持顺序和类型")
     func mixedArrayRoundTrip() throws {
         let entries: [MenuEntry] = [
             .custom(MenuItemConfig(appName: "Terminal", appPath: "/t")),
             .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
             .composite(CompositeMenuItemConfig(name: "Pair", steps: [])),
+            .newFile(NewFileMenuConfig(name: "新建", templates: [])),
             .custom(MenuItemConfig(appName: "iTerm", appPath: "/i")),
         ]
         let data = try JSONEncoder().encode(entries)
         let decoded = try JSONDecoder().decode([MenuEntry].self, from: data)
-        #expect(decoded.count == 4)
+        #expect(decoded.count == 5)
         #expect(decoded[0].id == entries[0].id)
         #expect(decoded[1].id == "builtIn.copyPath")
         #expect(decoded[2].displayName == "Pair")
-        #expect(decoded[3].id == entries[3].id)
+        #expect(decoded[3].displayName == "新建")
+        #expect(decoded[4].id == entries[4].id)
     }
 
     @Test("isBuiltIn 判断正确")
@@ -152,9 +194,40 @@ struct MenuEntryTests {
         let builtIn = MenuEntry.builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true))
         let custom = MenuEntry.custom(MenuItemConfig(appName: "T", appPath: "/t"))
         let composite = MenuEntry.composite(CompositeMenuItemConfig(name: "T", steps: []))
+        let newFile = MenuEntry.newFile(NewFileMenuConfig(name: "新建"))
         #expect(builtIn.isBuiltIn == true)
         #expect(custom.isBuiltIn == false)
         #expect(composite.isBuiltIn == false)
+        #expect(newFile.isBuiltIn == false)
+    }
+
+    @Test("newFile 为每个可执行模板生成脚本菜单项")
+    func newFileTemplatesAreScriptBacked() throws {
+        let menuID = UUID(uuidString: "55555555-5555-5555-5555-555555555555")!
+        let templateID = UUID(uuidString: "66666666-6666-6666-6666-666666666666")!
+        let entry = MenuEntry.newFile(
+            NewFileMenuConfig(
+                id: menuID,
+                name: "新建",
+                templates: [
+                    NewFileTemplateConfig(
+                        id: templateID,
+                        displayName: "txt",
+                        fileExtension: "txt",
+                        creationMode: .emptyFile
+                    ),
+                ]
+            )
+        )
+
+        let scriptBackedEntry = try #require(
+            MenuEntryScriptPolicy.scriptBackedEntries(for: entry).first
+        )
+
+        #expect(scriptBackedEntry.id == "\(menuID.uuidString).\(templateID.uuidString)")
+        #expect(scriptBackedEntry.kind == .newFileTemplate)
+        #expect(scriptBackedEntry.parentDisplayName == "新建")
+        #expect(scriptBackedEntry.targetPolicy == .containingDirectory)
     }
 
     @Test("currentDirectory 自定义命令无 appPath 时仍可生成脚本菜单项")

@@ -113,4 +113,85 @@ struct FinderMenuPresenterTests {
         )
         #expect(invalidVisible.isEmpty)
     }
+
+    @Test("newFile 只在至少一个模板发布状态匹配时显示")
+    func newFileRequiresAtLeastOneCurrentTemplate() {
+        let menu = NewFileMenuConfig(
+            id: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!,
+            name: "新建",
+            templates: [
+                NewFileTemplateConfig(
+                    id: UUID(uuidString: "55555555-5555-5555-5555-555555555555")!,
+                    displayName: "txt",
+                    fileExtension: "txt",
+                    creationMode: .emptyFile
+                ),
+                NewFileTemplateConfig(
+                    id: UUID(uuidString: "66666666-6666-6666-6666-666666666666")!,
+                    displayName: "md",
+                    fileExtension: "md",
+                    creationMode: .textContent,
+                    initialContent: "# Untitled\n"
+                ),
+            ]
+        )
+        let entry = MenuEntry.newFile(menu)
+        let scriptBackedEntries = MenuEntryScriptPolicy.scriptBackedEntries(for: entry)
+        let current = scriptBackedEntries[0]
+
+        let visible = FinderMenuPresenter.visibleEntries(
+            entries: [entry],
+            publishStates: [
+                current.id: ScriptPublishState(
+                    entryID: current.id,
+                    status: .current,
+                    fingerprint: current.fingerprint
+                ),
+            ]
+        )
+
+        #expect(visible == [entry])
+
+        let visibleTemplates = FinderMenuPresenter.visibleNewFileTemplates(
+            for: menu,
+            publishStates: [
+                current.id: ScriptPublishState(
+                    entryID: current.id,
+                    status: .current,
+                    fingerprint: current.fingerprint
+                ),
+            ]
+        )
+
+        #expect(visibleTemplates.map(\.displayName) == ["txt"])
+    }
+
+    @Test("newFile 模板发布状态过期时父菜单隐藏")
+    func newFileHidesWhenAllTemplatesAreStale() {
+        let menu = NewFileMenuConfig(
+            name: "新建",
+            templates: [
+                NewFileTemplateConfig(
+                    displayName: "txt",
+                    fileExtension: "txt",
+                    creationMode: .emptyFile
+                ),
+            ]
+        )
+        let entry = MenuEntry.newFile(menu)
+        let scriptBackedEntry = MenuEntryScriptPolicy.scriptBackedEntries(for: entry)[0]
+
+        let visible = FinderMenuPresenter.visibleEntries(
+            entries: [entry],
+            publishStates: [
+                scriptBackedEntry.id: ScriptPublishState(
+                    entryID: scriptBackedEntry.id,
+                    status: .current,
+                    fingerprint: "stale"
+                ),
+            ]
+        )
+
+        #expect(visible.isEmpty)
+    }
 }

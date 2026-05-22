@@ -38,4 +38,28 @@ struct FinderTargetPathResolverTests {
 
         #expect(result == "/Users/example/project")
     }
+
+    @Test("targetPolicy containingDirectory 对文件使用父目录")
+    func targetPolicyContainingDirectoryUsesParentForFile() {
+        let result = FinderTargetPathResolver.executionPath(
+            for: "/Users/example/project/file.swift",
+            targetPolicy: .containingDirectory,
+            isDirectory: { _ in false }
+        )
+
+        #expect(result == "/Users/example/project")
+    }
+
+    @Test("targetPolicy selectedPath 保持原路径")
+    func targetPolicySelectedPathKeepsTargetPath() {
+        let path = "/Users/example/project/file.swift"
+
+        let result = FinderTargetPathResolver.executionPath(
+            for: path,
+            targetPolicy: .selectedPath,
+            isDirectory: { _ in false }
+        )
+
+        #expect(result == path)
+    }
 }

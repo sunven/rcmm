@@ -12,6 +12,7 @@ class FinderSync: FIFinderSync {
     private let publishStore = ScriptPublishStore()
     private let scriptExecutor = ScriptExecutor()
     private var configObservation: DarwinObservation?
+    private var currentMenuKind: FIMenuKind?
 
     override init() {
         super.init()
@@ -59,6 +60,7 @@ class FinderSync: FIFinderSync {
     // MARK: - Menu
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
+        currentMenuKind = menuKind
         let menu = NSMenu(title: "")
         let entries = FinderMenuPresenter.visibleEntries(
             entries: configService.loadEntries(),
@@ -96,6 +98,7 @@ class FinderSync: FIFinderSync {
 
     private func addMenuItems(for entries: [MenuEntry], to menu: NSMenu) {
         var customIndex = 0
+        let publishStates = publishStore.loadAll()
         for entry in entries {
             switch entry {
             case .builtIn(let item):
@@ -105,6 +108,10 @@ class FinderSync: FIFinderSync {
                 customIndex += 1
             case .composite(let config):
                 menu.addItem(makeCompositeMenuItem(config))
+            case .newFile(let config):
+                if let item = makeNewFileMenuItem(config, publishStates: publishStates) {
+                    menu.addItem(item)
+                }
             }
         }
     }
@@ -186,6 +193,61 @@ class FinderSync: FIFinderSync {
         return menuItem
     }
 
+    private func makeNewFileMenuItem(
+        _ config: NewFileMenuConfig,
+        publishStates: [String: ScriptPublishState]
+    ) -> NSMenuItem? {
+        let templates = FinderMenuPresenter.visibleNewFileTemplates(
+            for: config,
+            publishStates: publishStates
+        )
+        guard !templates.isEmpty else { return nil }
+
+        let parentItem = NSMenuItem(title: config.name, action: nil, keyEquivalent: "")
+        if let symbolName = config.iconName,
+           let image = makeMenuSymbolImage(
+               named: symbolName,
+               accessibilityDescription: config.name
+           ) {
+            parentItem.image = image
+        }
+
+        let submenu = NSMenu(title: config.name)
+        for template in templates {
+            let scriptID = MenuEntryScriptPolicy.newFileScriptID(
+                menuID: config.id,
+                templateID: template.id
+            )
+            let childItem = NSMenuItem(
+                title: template.displayName,
+                action: #selector(openScriptBackedEntry(_:)),
+                keyEquivalent: ""
+            )
+            childItem.representedObject = scriptID
+            childItem.identifier = NSUserInterfaceItemIdentifier(scriptID)
+            childItem.tag = -1
+            childItem.target = self
+            childItem.image = makeMenuSymbolImage(
+                named: symbolName(for: template),
+                accessibilityDescription: template.displayName
+            )
+            submenu.addItem(childItem)
+        }
+        parentItem.submenu = submenu
+        return parentItem
+    }
+
+    private func symbolName(for template: NewFileTemplateConfig) -> String {
+        switch template.creationMode {
+        case .emptyFile:
+            return "doc"
+        case .textContent:
+            return "doc.text"
+        case .copyTemplate:
+            return "doc.on.doc"
+        }
+    }
+
     private func makeMenuSymbolImage(
         named symbolName: String,
         accessibilityDescription: String
@@ -215,13 +277,13 @@ class FinderSync: FIFinderSync {
             return
         }
 
-        guard let targetPath = resolveTargetPath() else {
+        guard let targetPath = resolveTargetPath(for: entry) else {
             logger.error("无法解析目标路径")
             return
         }
         let executionPath = FinderTargetPathResolver.executionPath(
             for: targetPath,
-            executionMode: resolveExecutionMode(for: entry)
+            targetPolicy: entry.targetPolicy
         )
 
         logger.info("执行: \(entry.displayName, privacy: .public) → \(executionPath, privacy: .private)")
@@ -242,7 +304,7 @@ class FinderSync: FIFinderSync {
             entries: configService.loadEntries(),
             publishStates: publishStore.loadAll()
         )
-        let scriptBackedEntries = visibleEntries.compactMap(MenuEntryScriptPolicy.scriptBackedEntry)
+        let scriptBackedEntries = visibleEntries.flatMap(MenuEntryScriptPolicy.scriptBackedEntries)
 
         let customItems = visibleEntries.compactMap { entry -> MenuItemConfig? in
             if case .custom(let config) = entry { return config }
@@ -264,21 +326,19 @@ class FinderSync: FIFinderSync {
             representedObject: sender.representedObject,
             identifier: sender.identifier?.rawValue,
             tag: sender.tag,
-            title: sender.title
+            title: sender.title,
+            parentMenuTitle: parentMenuTitle(for: sender)
         )
     }
 
-    private func resolveExecutionMode(for entry: ScriptBackedMenuEntry) -> CustomCommandExecutionMode? {
-        guard entry.kind == .custom else {
-            return nil
+    private func parentMenuTitle(for sender: NSMenuItem) -> String? {
+        if let menuTitle = sender.menu?.title, !menuTitle.isEmpty {
+            return menuTitle
         }
-
-        return configService.loadEntries().compactMap { menuEntry -> MenuItemConfig? in
-            guard case .custom(let config) = menuEntry else {
-                return nil
-            }
-            return config
-        }.first { $0.id.uuidString == entry.id }?.executionMode
+        if let parentTitle = sender.parent?.title, !parentTitle.isEmpty {
+            return parentTitle
+        }
+        return nil
     }
 
     @objc func copyPath(_ sender: NSMenuItem) {
@@ -323,6 +383,19 @@ class FinderSync: FIFinderSync {
         )) ?? []
 
         return Set(candidateURLs + visibleVolumeURLs.map(\.standardizedFileURL))
+    }
+
+    /// 解析右键点击的目标路径（文件或目录）
+    private func resolveTargetPath(for entry: ScriptBackedMenuEntry) -> String? {
+        let controller = FIFinderSyncController.default()
+
+        if entry.kind == .newFileTemplate,
+           currentMenuKind == .contextualMenuForContainer,
+           let targetedURL = controller.targetedURL() {
+            return targetedURL.path
+        }
+
+        return resolveTargetPath()
     }
 
     /// 解析右键点击的目标路径（文件或目录）

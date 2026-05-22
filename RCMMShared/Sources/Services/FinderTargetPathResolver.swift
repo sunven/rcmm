@@ -24,6 +24,30 @@ public enum FinderTargetPathResolver {
         return directoryPath(for: targetPath, isDirectory: isDirectory)
     }
 
+    public static func executionPath(
+        for targetPath: String,
+        targetPolicy: ScriptBackedTargetPolicy
+    ) -> String {
+        executionPath(
+            for: targetPath,
+            targetPolicy: targetPolicy,
+            isDirectory: defaultIsDirectory
+        )
+    }
+
+    public static func executionPath(
+        for targetPath: String,
+        targetPolicy: ScriptBackedTargetPolicy,
+        isDirectory: (String) -> Bool
+    ) -> String {
+        switch targetPolicy {
+        case .selectedPath:
+            return targetPath
+        case .containingDirectory:
+            return directoryPath(for: targetPath, isDirectory: isDirectory)
+        }
+    }
+
     public static func directoryPath(for targetPath: String) -> String {
         directoryPath(for: targetPath, isDirectory: defaultIsDirectory)
     }

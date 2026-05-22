@@ -9,7 +9,7 @@ public enum MenuEntryEnvelope: Codable, Hashable, Sendable {
     }
 
     private enum LegacyCodingKeys: String, CodingKey {
-        case builtIn, custom, composite
+        case builtIn, custom, composite, newFile
     }
 
     public init(entry: MenuEntry) {
@@ -52,6 +52,8 @@ public enum MenuEntryEnvelope: Codable, Hashable, Sendable {
             self = .known(.custom(try legacyContainer.decode(MenuItemConfig.self, forKey: .custom)))
         } else if legacyContainer.contains(.composite) {
             self = .known(.composite(try legacyContainer.decode(CompositeMenuItemConfig.self, forKey: .composite)))
+        } else if legacyContainer.contains(.newFile) {
+            self = .known(.newFile(try legacyContainer.decode(NewFileMenuConfig.self, forKey: .newFile)))
         } else {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(
@@ -75,6 +77,8 @@ public enum MenuEntryEnvelope: Codable, Hashable, Sendable {
                 try container.encode(config, forKey: .payload)
             case .composite(let config):
                 try container.encode(config, forKey: .payload)
+            case .newFile(let config):
+                try container.encode(config, forKey: .payload)
             }
         case .unknown(_, let payload):
             try container.encode(payload, forKey: .payload)
@@ -95,6 +99,8 @@ public enum MenuEntryEnvelope: Codable, Hashable, Sendable {
             return .known(.custom(try container.decode(MenuItemConfig.self, forKey: .payload)))
         case MenuEntryType.composite.rawValue:
             return .known(.composite(try container.decode(CompositeMenuItemConfig.self, forKey: .payload)))
+        case MenuEntryType.newFile.rawValue:
+            return .known(.newFile(try container.decode(NewFileMenuConfig.self, forKey: .payload)))
         default:
             let payload = try container.decodeIfPresent(JSONValue.self, forKey: .payload) ?? .null
             return .unknown(type: type, payload: payload)
@@ -106,4 +112,5 @@ enum MenuEntryType: String {
     case builtIn
     case custom
     case composite
+    case newFile
 }
