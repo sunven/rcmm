@@ -3,35 +3,13 @@ import SwiftUI
 
 struct NewFileListRow: View {
     let config: NewFileMenuConfig
-    let publishStates: [String: ScriptPublishState]
+    let summary: FinderMenuEntrySummary
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
     var onDelete: (() -> Void)?
     var onToggle: ((Bool) -> Void)?
     var position: Int?
     var total: Int?
-
-    @State private var isHovered = false
-
-    private var status: NewFileMenuStatus {
-        NewFileMenuStatusResolver.resolve(
-            config: config,
-            publishStates: publishStates
-        )
-    }
-
-    private var statusColor: Color {
-        switch status.kind {
-        case .disabled, .partiallyAvailable:
-            return .orange
-        case .unavailable:
-            return .red
-        case .warning:
-            return .yellow
-        case .syncing, .ready:
-            return .secondary
-        }
-    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -55,15 +33,7 @@ struct NewFileListRow: View {
 
             Spacer(minLength: 8)
 
-            Text(status.displayName)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(statusColor)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule()
-                        .fill(statusColor.opacity(0.12))
-                )
+            FinderMenuStatusBadge(summary: summary)
 
             if let onToggle {
                 Toggle("", isOn: Binding(
@@ -86,18 +56,15 @@ struct NewFileListRow: View {
                 .buttonStyle(.plain)
                 .help("删除此新建菜单")
             }
+
+            MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
-        )
         .controlSize(.small)
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(config.name)，新建文件菜单，\(status.displayName)")
+        .accessibilityLabel("\(config.name)，新建文件菜单，\(summary.statusText)")
         .ifLet(position) { view, pos in
             view.accessibilityValue("第 \(pos) 项，共 \(total ?? 1) 项")
         }

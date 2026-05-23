@@ -5,6 +5,8 @@ struct AppSelectionSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
+    var onAdded: (([UUID]) -> Void)?
+
     @State private var discoveredApps: [AppInfo] = []
     @State private var selectedAppIds: Set<UUID> = []
     @State private var isLoading = false
@@ -69,6 +71,7 @@ struct AppSelectionSheet: View {
 
     private func addSelectedApps() {
         let appsToAdd = discoveredApps.filter { selectedAppIds.contains($0.id) }
-        appState.addMenuItems(from: appsToAdd)
+        let addedIDs = appState.addMenuItems(from: appsToAdd)
+        onAdded?(addedIDs)
     }
 }

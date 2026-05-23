@@ -3,13 +3,12 @@ import SwiftUI
 
 struct BuiltInListRow: View {
     let item: BuiltInMenuItem
+    let summary: FinderMenuEntrySummary
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
     var onToggle: ((Bool) -> Void)?
     var position: Int?
     var total: Int?
-
-    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -25,29 +24,9 @@ struct BuiltInListRow: View {
                 .foregroundStyle(item.isEnabled ? .primary : .secondary)
                 .lineLimit(1)
 
-            Text("系统")
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.blue)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule()
-                        .fill(Color.blue.opacity(0.1))
-                )
-
             Spacer(minLength: 8)
 
-            if !item.isEnabled {
-                Text("已停用")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule()
-                            .fill(Color.orange.opacity(0.12))
-                    )
-            }
+            FinderMenuStatusBadge(summary: summary)
 
             if let onToggle = onToggle {
                 Toggle("", isOn: Binding(
@@ -59,20 +38,15 @@ struct BuiltInListRow: View {
                 .labelsHidden()
                 .help(item.isEnabled ? "停用此菜单项" : "启用此菜单项")
             }
+
+            MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
-        )
         .controlSize(.small)
         .contentShape(Rectangle())
-        .onHover { hovering in
-            isHovered = hovering
-        }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.displayName)，系统功能")
+        .accessibilityLabel("\(item.displayName)，系统功能，\(summary.statusText)")
         .ifLet(position) { view, pos in
             view.accessibilityValue("第 \(pos) 项，共 \(total ?? 1) 项")
         }

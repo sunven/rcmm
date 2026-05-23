@@ -3,46 +3,13 @@ import SwiftUI
 
 struct CompositeListRow: View {
     let config: CompositeMenuItemConfig
-    let publishState: ScriptPublishState?
+    let summary: FinderMenuEntrySummary
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
     var onDelete: (() -> Void)?
     var onToggle: ((Bool) -> Void)?
     var position: Int?
     var total: Int?
-
-    @State private var isHovered = false
-
-    private var validation: CompositeValidationResult {
-        CompositeMenuItemValidator.validate(config)
-    }
-
-    private var status: (text: String, color: Color) {
-        if !config.isEnabled {
-            return ("已停用", .orange)
-        }
-        if validation.hasErrors && validation.executableStepIDs.isEmpty {
-            return ("不可用", .red)
-        }
-        if validation.hasErrors {
-            return ("部分可用", .orange)
-        }
-        if validation.hasWarnings {
-            return ("有警告", .yellow)
-        }
-        guard let publishState else {
-            return ("同步中", .secondary)
-        }
-        if publishState.fingerprint != validation.fingerprint {
-            return ("同步中", .secondary)
-        }
-        switch publishState.status {
-        case .current:
-            return ("就绪", .secondary)
-        case .compileFailed:
-            return ("同步失败", .red)
-        }
-    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -66,15 +33,7 @@ struct CompositeListRow: View {
 
             Spacer(minLength: 8)
 
-            Text(status.text)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(status.color)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule()
-                        .fill(status.color.opacity(0.12))
-                )
+            FinderMenuStatusBadge(summary: summary)
 
             if let onToggle {
                 Toggle("", isOn: Binding(
@@ -97,18 +56,15 @@ struct CompositeListRow: View {
                 .buttonStyle(.plain)
                 .help("删除此组合命令")
             }
+
+            MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
-        )
         .controlSize(.small)
         .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(config.name)，组合命令，\(status.text)")
+        .accessibilityLabel("\(config.name)，组合命令，\(summary.statusText)")
         .ifLet(position) { view, pos in
             view.accessibilityValue("第 \(pos) 项，共 \(total ?? 1) 项")
         }

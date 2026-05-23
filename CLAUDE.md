@@ -106,3 +106,10 @@ rcmm.xcodeproj
 `_bmad-output/planning-artifacts/architecture.md`
 
 进行结构性改动前请先阅读，内容涵盖 macOS 沙盒限制、FinderSync API 约束、命名规范和架构不变量。
+
+## Design System
+
+Always read `DESIGN.md` before making visual or UI decisions.
+All font choices, colors, spacing, status treatments, and aesthetic direction are defined there.
+Do not deviate without explicit user approval.
+In QA mode, flag any code that does not match `DESIGN.md`.

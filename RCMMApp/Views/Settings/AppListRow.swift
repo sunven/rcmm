@@ -4,6 +4,7 @@ import SwiftUI
 
 struct AppListRow: View {
     let menuItem: MenuItemConfig
+    let summary: FinderMenuEntrySummary
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
     var onDelete: (() -> Void)?
@@ -11,45 +12,16 @@ struct AppListRow: View {
     var position: Int?
     var total: Int?
 
-    @State private var isHovered = false
-
     private var isShellCommand: Bool {
         menuItem.executionMode == .currentDirectory
-    }
-
-    private var appExists: Bool {
-        if isShellCommand {
-            return true
-        }
-        return FileManager.default.fileExists(atPath: menuItem.appPath)
-    }
-
-    private var statusText: String {
-        if !menuItem.isEnabled {
-            return "已停用"
-        }
-        if isShellCommand {
-            return "命令"
-        }
-        return appExists ? "就绪" : "未找到"
-    }
-
-    private var statusColor: Color {
-        if !menuItem.isEnabled {
-            return .orange
-        }
-        if isShellCommand {
-            return .secondary
-        }
-        return appExists ? .secondary : .red
     }
 
     var body: some View {
         HStack(spacing: 10) {
             menuIcon
                 .frame(width: 28, height: 28)
-                .saturation(appExists ? (menuItem.isEnabled ? 1 : 0.3) : 0)
-                .opacity(appExists ? (menuItem.isEnabled ? 1 : 0.5) : 0.4)
+                .saturation(isUnavailable ? 0 : (menuItem.isEnabled ? 1 : 0.3))
+                .opacity(isUnavailable ? 0.4 : (menuItem.isEnabled ? 1 : 0.5))
 
             Text(menuItem.appName)
                 .font(.callout)
@@ -58,15 +30,7 @@ struct AppListRow: View {
 
             Spacer(minLength: 8)
 
-            Text(statusText)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(statusColor)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule()
-                        .fill(statusColor.opacity(0.12))
-                )
+            FinderMenuStatusBadge(summary: summary)
 
             if let onToggle = onToggle {
                 Toggle("", isOn: Binding(
@@ -89,20 +53,15 @@ struct AppListRow: View {
                 .buttonStyle(.plain)
                 .help("删除此菜单项")
             }
+
+            MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
-        )
         .controlSize(.small)
         .contentShape(Rectangle())
-        .onHover { hovering in
-            isHovered = hovering
-        }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(menuItem.appName)
+        .accessibilityLabel("\(menuItem.appName)，\(summary.typeLabel)，\(summary.statusText)")
         .ifLet(position) { view, pos in
             view.accessibilityValue("第 \(pos) 项，共 \(total ?? 1) 项")
         }
@@ -130,11 +89,15 @@ struct AppListRow: View {
         }
     }
 
+    private var isUnavailable: Bool {
+        summary.statusKind == .unavailable || summary.statusKind == .failed
+    }
+
     private var accessibilityHint: String {
         if isShellCommand {
             return "右键菜单自定义命令项"
         }
-        return appExists ? "右键菜单应用项" : "应用未找到，请检查是否已安装"
+        return summary.statusKind == .unavailable ? "应用未找到，请检查是否已安装" : "右键菜单应用项"
     }
 }
 
@@ -145,6 +108,22 @@ struct AppListRow: View {
             bundleId: "com.apple.Terminal",
             appPath: "/System/Applications/Utilities/Terminal.app",
             isEnabled: true
+        ),
+        summary: FinderMenuEntrySummary(
+            id: UUID().uuidString,
+            title: "Terminal",
+            subtitle: "/System/Applications/Utilities/Terminal.app",
+            kind: .customApp,
+            typeLabel: "应用",
+            symbolName: nil,
+            appPath: "/System/Applications/Utilities/Terminal.app",
+            isEnabled: true,
+            position: 1,
+            total: 3,
+            statusKind: .ready,
+            statusText: "就绪",
+            statusDetail: nil,
+            allowsDelete: true
         ),
         onToggle: { _ in },
         position: 1,
@@ -160,6 +139,22 @@ struct AppListRow: View {
             appPath: "/Applications/iTerm.app",
             isEnabled: false
         ),
+        summary: FinderMenuEntrySummary(
+            id: UUID().uuidString,
+            title: "iTerm",
+            subtitle: "/Applications/iTerm.app",
+            kind: .customApp,
+            typeLabel: "应用",
+            symbolName: nil,
+            appPath: "/Applications/iTerm.app",
+            isEnabled: false,
+            position: 2,
+            total: 3,
+            statusKind: .disabled,
+            statusText: "已停用",
+            statusDetail: nil,
+            allowsDelete: true
+        ),
         onToggle: { _ in },
         position: 2,
         total: 3
@@ -173,6 +168,22 @@ struct AppListRow: View {
             appName: "不存在的应用",
             appPath: "/Applications/NonExistent.app",
             isEnabled: true
+        ),
+        summary: FinderMenuEntrySummary(
+            id: UUID().uuidString,
+            title: "不存在的应用",
+            subtitle: "/Applications/NonExistent.app",
+            kind: .customApp,
+            typeLabel: "应用",
+            symbolName: nil,
+            appPath: "/Applications/NonExistent.app",
+            isEnabled: true,
+            position: 3,
+            total: 3,
+            statusKind: .unavailable,
+            statusText: "未找到",
+            statusDetail: nil,
+            allowsDelete: true
         ),
         onToggle: { _ in },
         position: 3,

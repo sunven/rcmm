@@ -63,20 +63,21 @@ Effort: S/M human / S with CC+gstack.
 
 Depends on: v1 publish state, validation, and Finder presenter decisions.
 
-## P2: Project-level design system document
+## P2: Settings inspector diagnostic entry points
 
-What: Create a project-level `DESIGN.md` for rcmm.
+What: Add contextual diagnostic actions in the Settings inspector for failed or
+partially available Finder menu items.
 
-Why: New UI work currently infers design rules from existing SwiftUI code. A shared
-design source of truth would make Settings rows, status capsules, sheets, buttons,
-spacing, typography, colors, and accessibility behavior consistent across features.
+Why: When publish, validation, script generation, or Finder extension state fails,
+users should have a visible next step instead of only seeing a badge or error text.
 
-Context: The composite command design review added local design constraints to the
-feature plan, but the repo still lacks a durable design system document. After v1
-ships, capture the existing app UI vocabulary and the composite command decisions
-so future features do not re-derive them from code.
+Context: The Split Inspector settings plan says diagnostic actions should appear
+only in failed or partially available states. Candidate destinations include viewing
+logs, opening a diagnostics view, revealing generated script locations, or linking
+to existing Finder extension health recovery flows. Do not show permanent log links
+in the normal ready state.
 
-Effort: S/M human / S with CC+gstack.
+Effort: M human / S-M with CC+gstack.
 
-Depends on: None. Best done after composite command v1 or as a focused design
-documentation pass.
+Depends on: Split Inspector settings implementation and available diagnostics/log
+destinations.

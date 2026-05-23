@@ -736,8 +736,9 @@ final class AppState {
     }
 
     /// 从 AppInfo 创建 MenuItemConfig 并添加到菜单
-    func addMenuItem(from appInfo: AppInfo) {
-        guard !containsCustomMenuItem(matching: appInfo) else { return }
+    @discardableResult
+    func addMenuItem(from appInfo: AppInfo) -> UUID? {
+        guard !containsCustomMenuItem(matching: appInfo) else { return nil }
         let newItem = MenuItemConfig(
             appName: appInfo.name,
             bundleId: appInfo.bundleId,
@@ -745,9 +746,11 @@ final class AppState {
         )
         menuEntries.append(.custom(newItem))
         saveAndSync()
+        return newItem.id
     }
 
-    func addEmptyCompositeCommand() {
+    @discardableResult
+    func addEmptyCompositeCommand() -> UUID {
         let composite = CompositeMenuItemConfig(
             name: "新组合命令",
             iconName: "rectangle.stack.badge.play",
@@ -755,6 +758,7 @@ final class AppState {
         )
         menuEntries.append(.composite(composite))
         saveAndSync()
+        return composite.id
     }
 
     @discardableResult
@@ -770,7 +774,7 @@ final class AppState {
         return item.id
     }
 
-    func addEditorTerminalPreset() {
+    func addEditorTerminalPreset(onCreated: ((UUID) -> Void)? = nil) {
         compositePresetMessage = "正在查找已安装的编辑器和终端…"
 
         if discoveredApps.isEmpty {
@@ -782,15 +786,15 @@ final class AppState {
                 await MainActor.run {
                     guard let self else { return }
                     self.discoveredApps = apps
-                    self.createEditorTerminalPresetFromDiscoveredApps()
+                    self.createEditorTerminalPresetFromDiscoveredApps(onCreated: onCreated)
                 }
             }
         } else {
-            createEditorTerminalPresetFromDiscoveredApps()
+            createEditorTerminalPresetFromDiscoveredApps(onCreated: onCreated)
         }
     }
 
-    private func createEditorTerminalPresetFromDiscoveredApps() {
+    private func createEditorTerminalPresetFromDiscoveredApps(onCreated: ((UUID) -> Void)? = nil) {
         guard let editor = preferredDiscoveredApp(
             in: .editor,
             preferredBundleIds: ["com.microsoft.VSCode"]
@@ -826,12 +830,15 @@ final class AppState {
         menuEntries.append(.composite(composite))
         compositePresetMessage = nil
         saveAndSync()
+        onCreated?(composite.id)
     }
 
     /// 批量添加多个应用到菜单（只触发一次 saveAndSync）
-    func addMenuItems(from appInfos: [AppInfo]) {
+    @discardableResult
+    func addMenuItems(from appInfos: [AppInfo]) -> [UUID] {
         var existingBundleIds = Set<String>()
         var existingPaths = Set<String>()
+        var addedIDs: [UUID] = []
         for entry in menuEntries {
             guard case .custom(let item) = entry else { continue }
             if let bundleId = item.bundleId {
@@ -839,7 +846,6 @@ final class AppState {
             }
             existingPaths.insert(item.appPath)
         }
-        var didAddItem = false
 
         for appInfo in appInfos {
             if let bundleId = appInfo.bundleId, existingBundleIds.contains(bundleId) {
@@ -857,11 +863,12 @@ final class AppState {
                 existingBundleIds.insert(bundleId)
             }
             existingPaths.insert(appInfo.path)
-            didAddItem = true
+            addedIDs.append(newItem.id)
         }
-        if didAddItem {
+        if !addedIDs.isEmpty {
             saveAndSync()
         }
+        return addedIDs
     }
 
     private func containsCustomMenuItem(matching appInfo: AppInfo) -> Bool {
@@ -898,9 +905,11 @@ final class AppState {
     }
 
     /// 移动菜单项到新位置（拖拽排序）
-    func moveEntry(from source: IndexSet, to destination: Int) {
+    func moveEntry(from source: IndexSet, to destination: Int, sync: Bool = true) {
         menuEntries.move(fromOffsets: source, toOffset: destination)
-        saveAndSync()
+        if sync {
+            saveAndSync()
+        }
     }
 
     /// 删除指定位置的菜单项
