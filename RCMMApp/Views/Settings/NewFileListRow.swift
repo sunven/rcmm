@@ -13,33 +13,24 @@ struct NewFileListRow: View {
 
     @State private var isHovered = false
 
-    private var validation: NewFileValidationResult {
-        NewFileMenuValidator.validate(config)
+    private var status: NewFileMenuStatus {
+        NewFileMenuStatusResolver.resolve(
+            config: config,
+            publishStates: publishStates
+        )
     }
 
-    private var currentTemplateCount: Int {
-        FinderMenuPresenter
-            .visibleNewFileTemplates(for: config, publishStates: publishStates)
-            .count
-    }
-
-    private var status: (text: String, color: Color) {
-        if !config.isEnabled {
-            return ("已停用", .orange)
+    private var statusColor: Color {
+        switch status.kind {
+        case .disabled, .partiallyAvailable:
+            return .orange
+        case .unavailable:
+            return .red
+        case .warning:
+            return .yellow
+        case .syncing, .ready:
+            return .secondary
         }
-        if validation.hasErrors && validation.executableTemplateIDs.isEmpty {
-            return ("不可用", .red)
-        }
-        if validation.hasErrors {
-            return ("部分可用", .orange)
-        }
-        if validation.hasWarnings {
-            return ("有警告", .yellow)
-        }
-        if currentTemplateCount < validation.executableTemplateIDs.count {
-            return ("同步中", .secondary)
-        }
-        return ("就绪", .secondary)
     }
 
     var body: some View {
@@ -64,14 +55,14 @@ struct NewFileListRow: View {
 
             Spacer(minLength: 8)
 
-            Text(status.text)
+            Text(status.displayName)
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(status.color)
+                .foregroundStyle(statusColor)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(
                     Capsule()
-                        .fill(status.color.opacity(0.12))
+                        .fill(statusColor.opacity(0.12))
                 )
 
             if let onToggle {
@@ -106,7 +97,7 @@ struct NewFileListRow: View {
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(config.name)，新建文件菜单，\(status.text)")
+        .accessibilityLabel("\(config.name)，新建文件菜单，\(status.displayName)")
         .ifLet(position) { view, pos in
             view.accessibilityValue("第 \(pos) 项，共 \(total ?? 1) 项")
         }

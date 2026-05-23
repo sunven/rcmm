@@ -8,6 +8,10 @@ struct SettingsView: View {
                 .tabItem {
                     Label("菜单配置", systemImage: "list.bullet")
                 }
+            NewFileSettingsTab()
+                .tabItem {
+                    Label("新建文件", systemImage: "document.badge.plus")
+                }
             GeneralTab()
                 .tabItem {
                     Label("通用", systemImage: "gear")

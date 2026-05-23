@@ -660,10 +660,10 @@ final class AppState {
     /// 与配置保持一致（防止脚本被手动删除或损坏的情况）。
     /// 优化建议: 未来可改为仅校验脚本文件是否存在，而非每次都重新编译。
     func loadMenuEntries() {
-        let existing = migrateCompositeCommandTemplatesIfNeeded(configService.loadEntries())
+        let loadedEntries = migrateCompositeCommandTemplatesIfNeeded(configService.loadEntries())
         scriptPublishStates = publishStore.loadAll()
 
-        if existing.isEmpty {
+        if loadedEntries.isEmpty {
             let terminalConfig = MenuItemConfig(
                 appName: "Terminal",
                 bundleId: "com.apple.Terminal",
@@ -672,13 +672,40 @@ final class AppState {
             menuEntries = [
                 .custom(terminalConfig),
                 .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
+                .newFile(NewFileMenuConfig()),
             ]
             configService.saveEntries(menuEntries)
             syncScriptsInBackground()
         } else {
-            menuEntries = existing
+            menuEntries = ensurePrimaryNewFileMenuIfNeeded(loadedEntries)
             syncScriptsInBackground()
         }
+    }
+
+    var primaryNewFileMenu: NewFileMenuConfig? {
+        NewFileMenuPolicy.primaryNewFileMenu(in: menuEntries)
+    }
+
+    @discardableResult
+    func ensureNewFileMenu() -> UUID {
+        let result = NewFileMenuPolicy.ensurePrimaryNewFileMenu(in: menuEntries)
+        guard result.didChange else {
+            return result.menuID
+        }
+
+        menuEntries = result.entries
+        saveAndSync()
+        return result.menuID
+    }
+
+    private func ensurePrimaryNewFileMenuIfNeeded(_ entries: [MenuEntry]) -> [MenuEntry] {
+        let result = NewFileMenuPolicy.ensurePrimaryNewFileMenu(in: entries)
+        guard result.didChange else {
+            return entries
+        }
+
+        configService.saveEntries(result.entries)
+        return result.entries
     }
 
     private func migrateCompositeCommandTemplatesIfNeeded(_ entries: [MenuEntry]) -> [MenuEntry] {
@@ -728,16 +755,6 @@ final class AppState {
         )
         menuEntries.append(.composite(composite))
         saveAndSync()
-    }
-
-    @discardableResult
-    func addNewFileMenu() -> UUID {
-        let config = NewFileMenuConfig(
-            name: uniqueNewFileMenuName(preferredName: "新建")
-        )
-        menuEntries.append(.newFile(config))
-        saveAndSync()
-        return config.id
     }
 
     @discardableResult
@@ -890,9 +907,9 @@ final class AppState {
     func removeEntry(at offsets: IndexSet) {
         let removableOffsets = offsets.filter { index in
             switch menuEntries[index] {
-            case .custom, .composite, .newFile:
+            case .custom, .composite:
                 return true
-            case .builtIn:
+            case .builtIn, .newFile:
                 return false
             }
         }

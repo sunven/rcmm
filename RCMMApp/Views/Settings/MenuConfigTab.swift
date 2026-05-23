@@ -124,54 +124,17 @@ struct MenuConfigTab: View {
                             .listRowInsets(Layout.rowInsets)
                             .listRowSeparator(.hidden)
                         case .newFile(let config):
-                            ExpandableMenuRow(isExpanded: expandedBinding(for: entry.id)) {
+                            AlignedMenuRow {
                                 NewFileListRow(
                                     config: config,
                                     publishStates: appState.scriptPublishStates,
                                     onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
                                     onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
-                                    onDelete: { appState.removeEntry(at: IndexSet(integer: index)) },
                                     onToggle: { isEnabled in
                                         appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
                                     },
                                     position: index + 1,
                                     total: appState.menuEntries.count
-                                )
-                            } expandedContent: {
-                                NewFileMenuEditor(
-                                    config: config,
-                                    onRename: { name in
-                                        appState.updateNewFileMenuName(for: config.id, name: name)
-                                    },
-                                    onAddTemplate: {
-                                        appState.addNewFileTemplate(to: config.id)
-                                    },
-                                    onUpdateTemplate: { template, displayName, baseName, fileExtension, creationMode, templatePath, initialContent, isEnabled in
-                                        appState.updateNewFileTemplate(
-                                            menuID: config.id,
-                                            templateID: template.id,
-                                            displayName: displayName,
-                                            baseName: baseName,
-                                            fileExtension: fileExtension,
-                                            creationMode: creationMode,
-                                            templatePath: templatePath,
-                                            initialContent: initialContent,
-                                            isEnabled: isEnabled
-                                        )
-                                    },
-                                    onDeleteTemplate: { templateID in
-                                        appState.removeNewFileTemplate(
-                                            menuID: config.id,
-                                            templateID: templateID
-                                        )
-                                    },
-                                    onMoveTemplate: { source, destination in
-                                        appState.moveNewFileTemplate(
-                                            menuID: config.id,
-                                            from: source,
-                                            to: destination
-                                        )
-                                    }
                                 )
                             }
                             .listRowInsets(Layout.rowInsets)
@@ -224,10 +187,6 @@ struct MenuConfigTab: View {
                         }
                         Button("新组合命令") {
                             appState.addEmptyCompositeCommand()
-                        }
-                        Button("新建文件菜单") {
-                            let id = appState.addNewFileMenu()
-                            expandedItems.insert(id.uuidString)
                         }
                     } label: {
                         Label("添加", systemImage: "plus")
