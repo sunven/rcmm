@@ -1,6 +1,5 @@
 import RCMMShared
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct MenuConfigTab: View {
     @Environment(AppState.self) private var appState
@@ -11,6 +10,10 @@ struct MenuConfigTab: View {
     @State private var showingAppSelection = false
     @State private var activeDrag: FinderMenuDrag?
     @State private var dragPreviewEntries: [MenuEntry]?
+    @State private var rowFrames: [String: CGRect] = [:]
+    @State private var dragLocation: CGPoint?
+    @State private var dragOverlaySize: CGSize = .zero
+    @State private var dragGrabOffset: CGSize = .zero
 
     private enum Layout {
         static let rowInsets = EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10)
@@ -143,34 +146,54 @@ struct MenuConfigTab: View {
     }
 
     private var menuList: some View {
-        List {
-            ForEach(Array(displayedEntries.enumerated()), id: \.element.id) { index, entry in
-                SelectableMenuRow(isSelected: selectedEntryID == entry.id) {
-                    row(for: entry, at: index)
+        ZStack(alignment: .topLeading) {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(displayedEntries.enumerated()), id: \.element.id) { index, entry in
+                        SelectableMenuRow(isSelected: selectedEntryID == entry.id) {
+                            row(for: entry, at: index)
+                        }
+                        .padding(Layout.rowInsets)
+                        .opacity(activeDrag?.entryID == entry.id ? 0.28 : 1)
+                        .menuRowFrame(id: entry.id)
+                    }
                 }
-                .onDrag {
-                    let drag = FinderMenuDrag(
-                        entryID: entry.id,
-                        originalEntries: appState.menuEntries
-                    )
-                    activeDrag = drag
-                    dragPreviewEntries = appState.menuEntries
-                    selectEntry(entry.id)
-                    return NSItemProvider(object: drag.payload as NSString)
-                }
-                .onDrop(
-                    of: [.text],
-                    delegate: FinderMenuRowDropDelegate(
-                        targetID: entry.id,
-                        activeDrag: $activeDrag,
-                        previewEntry: previewDraggedEntry,
-                        commitEntry: commitDraggedEntry,
-                        cancelDrag: cancelDragPreview
-                    )
-                )
-                    .listRowInsets(Layout.rowInsets)
-                    .listRowSeparator(.hidden)
+                .frame(maxWidth: .infinity, alignment: .top)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            dragOverlay
+        }
+        .coordinateSpace(name: MenuListCoordinateSpace.name)
+        .onPreferenceChange(MenuRowFramePreferenceKey.self) { frames in
+            rowFrames = frames
+        }
+    }
+
+    @ViewBuilder
+    private var dragOverlay: some View {
+        if let drag = activeDrag,
+           let location = dragLocation,
+           let entry = drag.originalEntries.first(where: { $0.id == drag.entryID }) {
+            SelectableMenuRow(isSelected: true) {
+                row(
+                    for: entry,
+                    at: displayedEntries.firstIndex(where: { $0.id == drag.entryID }) ?? 0
+                )
+            }
+            .padding(Layout.rowInsets)
+            .frame(
+                width: dragOverlaySize.width,
+                height: dragOverlaySize.height,
+                alignment: .leading
+            )
+            .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
+            .position(
+                x: location.x - dragGrabOffset.width + dragOverlaySize.width / 2,
+                y: location.y - dragGrabOffset.height + dragOverlaySize.height / 2
+            )
+            .allowsHitTesting(false)
+            .zIndex(10)
         }
     }
 
@@ -248,7 +271,7 @@ struct MenuConfigTab: View {
 
         switch entry {
         case .builtIn(let item):
-            AlignedMenuRow {
+            AlignedMenuRow(dragGesture: dragGesture(for: entry)) {
                 BuiltInListRow(
                     item: item,
                     summary: summary,
@@ -265,7 +288,7 @@ struct MenuConfigTab: View {
                 selectedEntryID = entry.id
             }
         case .custom(let config):
-            AlignedMenuRow {
+            AlignedMenuRow(dragGesture: dragGesture(for: entry)) {
                 AppListRow(
                     menuItem: config,
                     summary: summary,
@@ -283,7 +306,7 @@ struct MenuConfigTab: View {
                 selectedEntryID = entry.id
             }
         case .composite(let config):
-            AlignedMenuRow {
+            AlignedMenuRow(dragGesture: dragGesture(for: entry)) {
                 CompositeListRow(
                     config: config,
                     summary: summary,
@@ -301,7 +324,7 @@ struct MenuConfigTab: View {
                 selectedEntryID = entry.id
             }
         case .newFile(let config):
-            AlignedMenuRow {
+            AlignedMenuRow(dragGesture: dragGesture(for: entry)) {
                 NewFileListRow(
                     config: config,
                     summary: summary,
@@ -327,6 +350,99 @@ struct MenuConfigTab: View {
             total: max(displayedEntries.count, 1),
             publishStates: appState.scriptPublishStates
         )
+    }
+
+    private func dragGesture(for entry: MenuEntry) -> AnyGesture<DragGesture.Value> {
+        AnyGesture(DragGesture(minimumDistance: 4, coordinateSpace: .named(MenuListCoordinateSpace.name))
+            .onChanged { value in
+                startDragIfNeeded(for: entry.id, startLocation: value.startLocation)
+                dragLocation = value.location
+
+                guard let drag = activeDrag, !drag.isExpired else {
+                    cancelDragPreview(activeDrag)
+                    activeDrag = nil
+                    clearDragOverlay()
+                    return
+                }
+
+                guard let targetID = targetEntryID(at: value.location),
+                      targetID != drag.entryID else {
+                    return
+                }
+
+                previewDraggedEntry(drag.entryID, to: targetID)
+            }
+            .onEnded { _ in
+                guard let drag = activeDrag else { return }
+
+                if drag.isExpired {
+                    cancelDragPreview(drag)
+                } else {
+                    _ = commitDraggedEntry(drag)
+                }
+                activeDrag = nil
+                clearDragOverlay()
+            }
+        )
+    }
+
+    private func startDragIfNeeded(for entryID: String, startLocation: CGPoint) {
+        if activeDrag?.entryID == entryID {
+            return
+        }
+
+        if let activeDrag {
+            cancelDragPreview(activeDrag)
+        }
+
+        let drag = FinderMenuDrag(
+            entryID: entryID,
+            originalEntries: appState.menuEntries
+        )
+        activeDrag = drag
+        dragPreviewEntries = appState.menuEntries
+        if let frame = rowFrames[entryID] {
+            dragOverlaySize = frame.size
+            dragGrabOffset = CGSize(
+                width: startLocation.x - frame.minX,
+                height: startLocation.y - frame.minY
+            )
+        } else {
+            dragOverlaySize = .zero
+            dragGrabOffset = .zero
+        }
+        dragLocation = startLocation
+        selectEntry(entryID)
+    }
+
+    private func clearDragOverlay() {
+        dragLocation = nil
+        dragOverlaySize = .zero
+        dragGrabOffset = .zero
+    }
+
+    private func targetEntryID(at location: CGPoint) -> String? {
+        let orderedFrames: [(id: String, frame: CGRect)] = displayedEntries.compactMap { entry in
+            guard let frame = rowFrames[entry.id] else { return nil }
+            return (entry.id, frame)
+        }
+
+        guard let first = orderedFrames.first,
+              let last = orderedFrames.last else {
+            return nil
+        }
+
+        if location.y < first.frame.minY {
+            return first.id
+        }
+
+        if location.y > last.frame.maxY {
+            return last.id
+        }
+
+        return orderedFrames.first { _, frame in
+            location.y >= frame.minY && location.y <= frame.maxY
+        }?.id
     }
 
     private func moveItem(at index: Int, direction: Int) {
@@ -408,24 +524,17 @@ struct MenuConfigTab: View {
 
 private struct FinderMenuDrag: Equatable {
     let entryID: String
-    let token: UUID
     let startedAt: Date
     let originalEntries: [MenuEntry]
 
     init(
         entryID: String,
-        token: UUID = UUID(),
         startedAt: Date = Date(),
         originalEntries: [MenuEntry]
     ) {
         self.entryID = entryID
-        self.token = token
         self.startedAt = startedAt
         self.originalEntries = originalEntries
-    }
-
-    var payload: String {
-        "rcmm-finder-menu-entry:\(token.uuidString):\(entryID)"
     }
 
     var isExpired: Bool {
@@ -438,7 +547,33 @@ private enum MenuRowAlignment {
     static let rowHeight: CGFloat = 34
 }
 
+private enum MenuListCoordinateSpace {
+    static let name = "finder-menu-list"
+}
+
+private struct MenuRowFramePreferenceKey: PreferenceKey {
+    static let defaultValue: [String: CGRect] = [:]
+
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, next in next })
+    }
+}
+
+private extension View {
+    func menuRowFrame(id: String) -> some View {
+        background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: MenuRowFramePreferenceKey.self,
+                    value: [id: proxy.frame(in: .named(MenuListCoordinateSpace.name))]
+                )
+            }
+        }
+    }
+}
+
 private struct AlignedMenuRow<Label: View>: View {
+    let dragGesture: AnyGesture<DragGesture.Value>
     @ViewBuilder var label: Label
 
     var body: some View {
@@ -447,78 +582,11 @@ private struct AlignedMenuRow<Label: View>: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.tertiary)
                 .frame(width: MenuRowAlignment.leadingSlotWidth, height: MenuRowAlignment.rowHeight)
+                .contentShape(Rectangle())
+                .gesture(dragGesture)
 
             label
         }
-    }
-}
-
-private struct FinderMenuRowDropDelegate: DropDelegate {
-    let targetID: String
-    @Binding var activeDrag: FinderMenuDrag?
-    let previewEntry: (String, String) -> Void
-    let commitEntry: (FinderMenuDrag) -> Bool
-    let cancelDrag: (FinderMenuDrag?) -> Void
-
-    func validateDrop(info: DropInfo) -> Bool {
-        guard let drag = activeDrag else {
-            return false
-        }
-        guard !drag.isExpired else {
-            activeDrag = nil
-            return false
-        }
-        return info.hasItemsConforming(to: [.text])
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func dropEntered(info: DropInfo) {
-        guard let drag = activeDrag,
-              !drag.isExpired,
-              drag.entryID != targetID else {
-            return
-        }
-
-        previewEntry(drag.entryID, targetID)
-    }
-
-    func dropExited(info: DropInfo) {
-        guard let drag = activeDrag, drag.isExpired else {
-            return
-        }
-        cancelDrag(drag)
-        activeDrag = nil
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard let drag = activeDrag, !drag.isExpired else {
-            cancelDrag(activeDrag)
-            activeDrag = nil
-            return false
-        }
-
-        guard let provider = info.itemProviders(for: [.text]).first else {
-            cancelDrag(drag)
-            activeDrag = nil
-            return false
-        }
-
-        provider.loadObject(ofClass: NSString.self) { object, _ in
-            Task { @MainActor in
-                defer { activeDrag = nil }
-                guard let payload = object as? String,
-                      payload == drag.payload else {
-                    cancelDrag(drag)
-                    return
-                }
-                _ = commitEntry(drag)
-            }
-        }
-
-        return true
     }
 }
 
@@ -530,6 +598,7 @@ private struct SelectableMenuRow<Content: View>: View {
 
     var body: some View {
         content
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(backgroundColor)
