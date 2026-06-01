@@ -296,43 +296,19 @@ jobs:
       # =====================================================================
       # Step 6: 构建已签名 Xcode Archive
       # =====================================================================
-      # 这里不再禁用签名，也不再走 ad-hoc deep re-sign。
+      # 这里使用 Xcode automatic signing，并依赖前一步导入的开发证书
+      # 和 provisioning profiles。不要在 CI 里做 ad-hoc deep re-sign。
       # 目标是让 archive 产出的主 app 和 Finder extension 从一开始就保留
       # 正常的 Apple Development 签名和 entitlements。
       # =====================================================================
       - name: Build signed archive
         env:
           RCMM_SIGNING_KEYCHAIN_PATH: ${{ steps.signing_assets.outputs.keychain_path }}
-          RCMM_APP_PROFILE_NAME: ${{ steps.signing_assets.outputs.app_profile_name }}
-          RCMM_APP_PROFILE_UUID: ${{ steps.signing_assets.outputs.app_profile_uuid }}
-          RCMM_EXTENSION_PROFILE_NAME: ${{ steps.signing_assets.outputs.extension_profile_name }}
-          RCMM_EXTENSION_PROFILE_UUID: ${{ steps.signing_assets.outputs.extension_profile_uuid }}
         run: |
           set -euo pipefail
 
           # Create build directory
           mkdir -p build
-
-          ruby <<'RUBY'
-          path = "rcmm.xcodeproj/project.pbxproj"
-          content = File.read(path)
-          replacements = {
-            'PROVISIONING_PROFILE = "$(RCMM_APP_PROVISIONING_PROFILE_UUID)";' => %(PROVISIONING_PROFILE = "#{ENV.fetch("RCMM_APP_PROFILE_UUID")}";),
-            'PROVISIONING_PROFILE = "$(RCMM_EXTENSION_PROVISIONING_PROFILE_UUID)";' => %(PROVISIONING_PROFILE = "#{ENV.fetch("RCMM_EXTENSION_PROFILE_UUID")}";),
-          }
-
-          replacements.each do |from, to|
-            unless content.include?(from)
-              warn "Missing signing placeholder: #{from}"
-              exit 1
-            end
-            content = content.sub(from, to)
-          end
-
-          File.write(path, content)
-          RUBY
-
-          grep -nE 'CODE_SIGN_STYLE =|PROVISIONING_PROFILE' rcmm.xcodeproj/project.pbxproj
 
           xcodebuild archive \
             -project rcmm.xcodeproj \
@@ -346,9 +322,12 @@ jobs:
             MARKETING_VERSION=${{ steps.normalized.outputs.short_version }} \
             CURRENT_PROJECT_VERSION=${{ steps.normalized.outputs.bundle_version }} \
             RCMM_DISPLAY_VERSION=${{ steps.normalized.outputs.display_version }} \
-            CODE_SIGN_STYLE=Manual \
+            -allowProvisioningUpdates \
+            CODE_SIGN_STYLE=Automatic \
             CODE_SIGN_IDENTITY="Apple Development" \
             DEVELOPMENT_TEAM=K65J6JBW5K \
+            PROVISIONING_PROFILE="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             OTHER_CODE_SIGN_FLAGS="--keychain $RCMM_SIGNING_KEYCHAIN_PATH" \
             | tee build/xcodebuild.log
 
