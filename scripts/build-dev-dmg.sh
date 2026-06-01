@@ -55,6 +55,9 @@ build_archive_signed() {
     -configuration Release \
     -archivePath "$ARCHIVE_PATH" \
     -allowProvisioningUpdates \
+    CODE_SIGN_STYLE=Automatic \
+    PROVISIONING_PROFILE="" \
+    PROVISIONING_PROFILE_SPECIFIER="" \
     | tee "$XCODEBUILD_LOG"
 }
 
