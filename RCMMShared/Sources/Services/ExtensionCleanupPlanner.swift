@@ -6,6 +6,14 @@ public enum ExtensionCleanupPlanner {
     private static let devReleaseComponents = ["build", "dev-release"]
     private static let derivedDataComponents = ["Library", "Developer", "Xcode", "DerivedData"]
     private static let derivedDataDebugTailComponents = ["Build", "Products", "Debug", "rcmm.app"]
+    private static let localDerivedDataBuildPrefix = ["DerivedData", "Build", "Products"]
+    private static let archiveIntermediatesPrefix = ["Build", "Intermediates.noindex", "ArchiveIntermediates"]
+    private static let archiveIntermediatesTail = [
+        "InstallationBuildProductsLocation",
+        "Applications",
+        "rcmm.app"
+    ]
+    private static let allowedLocalDerivedDataConfigurations = Set(["Debug", "Release"])
     private static let unsupportedReason = "该路径不在自动清理白名单内。"
     private static let missingRepositoryRootReason = "当前运行环境无法可靠识别仓库根目录。"
 
@@ -112,7 +120,7 @@ public enum ExtensionCleanupPlanner {
     }
 
     private static func classify(appPath: String, repositoryRoot: String?) -> AppClassification {
-        if isAllowedDerivedDataDebugApp(appPath) {
+        if isAllowedDerivedDataApp(appPath) {
             return .derivedData
         }
 
@@ -230,7 +238,13 @@ public enum ExtensionCleanupPlanner {
         ExtensionCleanupProcess(pid: process.pid, appPath: normalizePath(process.appPath))
     }
 
-    private static func isAllowedDerivedDataDebugApp(_ appPath: String) -> Bool {
+    private static func isAllowedDerivedDataApp(_ appPath: String) -> Bool {
+        isAllowedXcodeDerivedDataDebugApp(appPath)
+            || isAllowedLocalDerivedDataBuildApp(appPath)
+            || isAllowedArchiveIntermediatesApp(appPath)
+    }
+
+    private static func isAllowedXcodeDerivedDataDebugApp(_ appPath: String) -> Bool {
         let components = appPath.split(separator: "/").map(String.init)
         let prefixCount = derivedDataComponents.count
         let tailCount = derivedDataDebugTailComponents.count
@@ -248,6 +262,56 @@ public enum ExtensionCleanupPlanner {
             let tailEnd = tailStart + tailCount
             if tailEnd == components.count,
                Array(components[tailStart..<tailEnd]) == derivedDataDebugTailComponents {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private static func isAllowedLocalDerivedDataBuildApp(_ appPath: String) -> Bool {
+        let components = appPath.split(separator: "/").map(String.init)
+        guard components.count >= localDerivedDataBuildPrefix.count + 2 else { return false }
+        guard components.last == "rcmm.app" else { return false }
+
+        let prefixStart = components.count - (localDerivedDataBuildPrefix.count + 2)
+        let prefixEnd = prefixStart + localDerivedDataBuildPrefix.count
+        guard Array(components[prefixStart..<prefixEnd]) == localDerivedDataBuildPrefix else {
+            return false
+        }
+
+        let configuration = components[prefixEnd]
+        return allowedLocalDerivedDataConfigurations.contains(configuration)
+    }
+
+    private static func isAllowedArchiveIntermediatesApp(_ appPath: String) -> Bool {
+        let components = appPath.split(separator: "/").map(String.init)
+        let xcodePrefixCount = derivedDataComponents.count
+        let archivePrefixCount = archiveIntermediatesPrefix.count
+        let archiveTailCount = archiveIntermediatesTail.count
+        let minimumCount = xcodePrefixCount + 1 + archivePrefixCount + 1 + archiveTailCount
+        guard components.count >= minimumCount else { return false }
+
+        let lastPrefixStart = components.count - minimumCount
+        for startIndex in 0...lastPrefixStart {
+            let xcodePrefixEnd = startIndex + xcodePrefixCount
+            if Array(components[startIndex..<xcodePrefixEnd]) != derivedDataComponents {
+                continue
+            }
+
+            let buildFolderIndex = xcodePrefixEnd
+            let archivePrefixStart = buildFolderIndex + 1
+            let archivePrefixEnd = archivePrefixStart + archivePrefixCount
+            guard archivePrefixEnd < components.count else { continue }
+            if Array(components[archivePrefixStart..<archivePrefixEnd]) != archiveIntermediatesPrefix {
+                continue
+            }
+
+            let schemeIndex = archivePrefixEnd
+            let tailStart = schemeIndex + 1
+            let tailEnd = tailStart + archiveTailCount
+            if tailEnd == components.count,
+               Array(components[tailStart..<tailEnd]) == archiveIntermediatesTail {
                 return true
             }
         }

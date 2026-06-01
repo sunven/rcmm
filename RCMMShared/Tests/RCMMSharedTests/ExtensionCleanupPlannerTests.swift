@@ -5,6 +5,8 @@ import Testing
 struct ExtensionCleanupPlannerTests {
     private let currentApp = "/Users/test/Library/Developer/Xcode/DerivedData/rcmm-current/Build/Products/Debug/rcmm.app"
     private let oldDerivedDataApp = "/Users/test/Library/Developer/Xcode/DerivedData/rcmm-old/Build/Products/Debug/rcmm.app"
+    private let localReleaseApp = "/Users/test/work/rcmm/DerivedData/Build/Products/Release/rcmm.app"
+    private let archiveIntermediatesApp = "/Users/test/Library/Developer/Xcode/DerivedData/rcmm-old/Build/Intermediates.noindex/ArchiveIntermediates/rcmm/InstallationBuildProductsLocation/Applications/rcmm.app"
     private let oldDevReleaseApp = "/Users/test/work/rcmm/build/dev-release/dmg-root/rcmm.app"
     private let installedApp = "/Applications/rcmm.app"
 
@@ -159,6 +161,56 @@ struct ExtensionCleanupPlannerTests {
         #expect(plan.deleteCandidates.isEmpty)
         #expect(plan.skippedCandidates.map(\.appPath) == [releaseApp])
         #expect(plan.skippedCandidates.map(\.skipReason) == ["该路径不在自动清理白名单内。"])
+    }
+
+    @Test("仓库内 DerivedData 的 Debug 和 Release rcmm.app 会进入删除候选")
+    func deletesLocalDerivedDataBuildProducts() {
+        let localDebugApp = "/Users/test/work/rcmm/DerivedData/Build/Products/Debug/rcmm.app"
+        let plan = ExtensionCleanupPlanner.buildPlan(
+            currentAppPath: installedApp,
+            pluginKitExtensionPaths: [
+                localReleaseApp + "/Contents/PlugIns/RCMMFinderExtension.appex"
+            ],
+            discoveredAppPaths: [localDebugApp],
+            runningProcesses: [],
+            repositoryRoot: nil
+        )
+
+        #expect(plan.deleteCandidates.map(\.appPath) == [localDebugApp, localReleaseApp])
+        #expect(plan.deleteCandidates.allSatisfy { $0.source == .derivedData })
+        #expect(plan.skippedCandidates.isEmpty)
+    }
+
+    @Test("仓库内 DerivedData 中非构建产物 rcmm.app 不会进入删除候选")
+    func skipsLocalDerivedDataOutsideBuildProducts() {
+        let misplacedApp = "/Users/test/work/rcmm/DerivedData/Other/Products/Release/rcmm.app"
+        let plan = ExtensionCleanupPlanner.buildPlan(
+            currentAppPath: installedApp,
+            pluginKitExtensionPaths: [],
+            discoveredAppPaths: [misplacedApp],
+            runningProcesses: [],
+            repositoryRoot: nil
+        )
+
+        #expect(plan.deleteCandidates.isEmpty)
+        #expect(plan.skippedCandidates.map(\.appPath) == [misplacedApp])
+    }
+
+    @Test("ArchiveIntermediates 临时安装产物会进入删除候选")
+    func deletesArchiveIntermediatesInstallationProducts() {
+        let plan = ExtensionCleanupPlanner.buildPlan(
+            currentAppPath: installedApp,
+            pluginKitExtensionPaths: [
+                archiveIntermediatesApp + "/Contents/PlugIns/RCMMFinderExtension.appex"
+            ],
+            discoveredAppPaths: [],
+            runningProcesses: [],
+            repositoryRoot: nil
+        )
+
+        #expect(plan.deleteCandidates.map(\.appPath) == [archiveIntermediatesApp])
+        #expect(plan.deleteCandidates.first?.source == .derivedData)
+        #expect(plan.skippedCandidates.isEmpty)
     }
 
     @Test("dev-release 目录下非 rcmm.app 目标不会进入删除候选")
