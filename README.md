@@ -140,6 +140,20 @@ bash scripts/build-dev-dmg.sh --unsigned 1.0.0-dev.1
 - macOS 15.0+
 - Xcode 15.4+ (for Swift 6 support)
 
+### 解析 Swift Package 依赖
+
+如果 Xcode 卡在 `Package Dependencies`，一直显示正在解析或拉取 `Sparkle` / `SettingsAccess`，可以先用命令行解析依赖：
+
+```bash
+bash scripts/resolve-packages.sh
+```
+
+如果 Xcode 仍然卡住，先退出 Xcode，再重置这个项目的 Xcode DerivedData 包缓存：
+
+```bash
+bash scripts/resolve-packages.sh --reset
+```
+
 ### Building
 
 ```bash

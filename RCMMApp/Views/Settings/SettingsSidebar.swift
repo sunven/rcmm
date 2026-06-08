@@ -21,6 +21,7 @@ struct SettingsSidebar: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
+                        .contentShape(RoundedRectangle(cornerRadius: 8))
                         .background(
                             RoundedRectangle(cornerRadius: 8)
                                 .fill(selection == destination ? Color.accentColor.opacity(0.14) : Color.clear)
