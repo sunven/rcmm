@@ -4,6 +4,7 @@ import SwiftUI
 
 /// 错误展示横幅，在弹出窗口中显示最近的执行错误和恢复建议
 struct ErrorBannerView: View {
+    @Environment(AppCoordinator.self) private var appCoordinator
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
     @State private var showAutoRepair = true
@@ -46,7 +47,7 @@ struct ErrorBannerView: View {
         .task {
             try? await Task.sleep(for: .seconds(5))
             showAutoRepair = false
-            appState.autoRepairMessage = nil
+            appCoordinator.clearAutoRepairMessage()
         }
     }
 
@@ -116,31 +117,45 @@ struct ErrorBannerView: View {
 }
 
 #Preview("有错误") {
+    let coordinator = AppCoordinator(forPreview: true)
     let state = AppState(forPreview: true)
-    state.errorRecords = [
+    state.setCoordinator(coordinator)
+
+    // 直接设置到 configStore
+    coordinator.configStore.errorRecords = [
         ErrorRecord(source: "extension", message: "脚本执行失败: exit code 1", context: "VS Code"),
         ErrorRecord(source: "extension", message: "脚本文件不存在或无法加载: vscode.scpt", context: "VS Code"),
     ]
+
     return ErrorBannerView()
         .environment(state)
+        .environment(coordinator)
         .frame(width: 196)
         .padding()
 }
 
 #Preview("有自动修复消息") {
+    let coordinator = AppCoordinator(forPreview: true)
     let state = AppState(forPreview: true)
-    state.errorRecords = [
+    state.setCoordinator(coordinator)
+
+    coordinator.configStore.errorRecords = [
         ErrorRecord(source: "extension", message: "脚本文件不存在或无法加载: vscode.scpt", context: "VS Code"),
     ]
-    state.autoRepairMessage = "已自动修复脚本文件"
+    coordinator.autoRepairMessage = "已自动修复脚本文件"
+
     return ErrorBannerView()
         .environment(state)
+        .environment(coordinator)
         .frame(width: 196)
         .padding()
 }
 
 #Preview("无错误") {
+    let coordinator = AppCoordinator(forPreview: true)
     let state = AppState(forPreview: true)
+    state.setCoordinator(coordinator)
+
     return ErrorBannerView()
         .environment(state)
         .frame(width: 196)

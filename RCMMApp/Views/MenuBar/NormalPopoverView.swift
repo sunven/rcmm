@@ -60,11 +60,16 @@ struct NormalPopoverView: View {
 }
 
 #Preview("有错误") {
+    let coordinator = AppCoordinator(forPreview: true)
     let state = AppState(forPreview: true)
-    state.errorRecords = [
+    state.setCoordinator(coordinator)
+
+    coordinator.configStore.errorRecords = [
         ErrorRecord(source: "ScriptExecutor", message: "脚本执行失败: exit code 1", context: "VS Code"),
     ]
+
     return NormalPopoverView()
         .environment(state)
+        .environment(coordinator)
         .frame(width: 220)
 }

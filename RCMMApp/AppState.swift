@@ -23,16 +23,39 @@ enum ExtensionCleanupFlowState: Equatable {
 @Observable
 @MainActor
 final class AppState {
-    var menuEntries: [MenuEntry] = []
-    var menuPresentationMode: MenuPresentationMode = .flat
+    // MARK: - 领域模型（委托给 AppCoordinator）
+
+    private weak var coordinator: AppCoordinator?
+
+    var menuEntries: [MenuEntry] {
+        get { coordinator?.configStore.menuEntries ?? [] }
+        set { coordinator?.configStore.menuEntries = newValue }
+    }
+
+    var menuPresentationMode: MenuPresentationMode {
+        get { coordinator?.configStore.menuPresentationMode ?? .flat }
+        set { coordinator?.configStore.menuPresentationMode = newValue }
+    }
+
+    var scriptPublishStates: [String: ScriptPublishState] {
+        get { coordinator?.configStore.scriptPublishStates ?? [:] }
+    }
+
+    var errorRecords: [ErrorRecord] {
+        get { coordinator?.configStore.errorRecords ?? [] }
+    }
+
+    var autoRepairMessage: String? {
+        get { coordinator?.autoRepairMessage }
+    }
+
+    // MARK: - UI 状态（AppState 保留）
+
     var discoveredApps: [AppInfo] = []
     var compositePresetMessage: String? = nil
-    var scriptPublishStates: [String: ScriptPublishState] = [:]
     var popoverState: PopoverState = .normal
     var extensionStatus: ExtensionStatus = .unknown
     var extensionStatusDetail: String? = nil
-    var errorRecords: [ErrorRecord] = []
-    var autoRepairMessage: String? = nil
     var currentDisplayVersion = "未知版本"
     var updateState: AppUpdateState = .idle
     var isShowingExtensionCleanupSheet = false
@@ -63,10 +86,7 @@ final class AppState {
     @ObservationIgnored private var extensionCleanupExecutionRequestID: UInt64 = 0
     @ObservationIgnored private var extensionCleanupWindow: NSWindow?
     @ObservationIgnored private var extensionCleanupWindowCloseObserver: Any?
-    private let configService = SharedConfigService()
-    private let errorQueue = SharedErrorQueue()
-    private let publishStore = ScriptPublishStore()
-    private var hasTriggeredAutoRepair = false
+
     private let logger = Logger(
         subsystem: "com.sunven.rcmm",
         category: "appState"
@@ -77,6 +97,12 @@ final class AppState {
 #else
     private static let isDebugBuild = false
 #endif
+
+    // MARK: - Coordinator Integration
+
+    func setCoordinator(_ coordinator: AppCoordinator) {
+        self.coordinator = coordinator
+    }
 
     init(forPreview: Bool = false) {
         isOnboardingCompleted = SharedPreferencesStore()
@@ -89,8 +115,8 @@ final class AppState {
         }
         sparkleUpdater = SparkleUpdaterService()
 
-        loadMenuPresentationMode()
-        loadMenuEntries()
+        // 注意：loadMenuPresentationMode() 和 loadMenuEntries() 现在由 AppCoordinator 处理
+        // 只保留 UI 相关的初始化
         checkExtensionStatus()
         startHealthMonitoring()
 
@@ -107,51 +133,13 @@ final class AppState {
     // MARK: - Error Queue
 
     func loadErrors() {
-        errorRecords = errorQueue.loadAll()
-
-        guard !hasTriggeredAutoRepair else { return }
-
-        let hasScriptFileErrors = errorRecords.contains { record in
-            record.message.contains("脚本文件不存在") || record.message.contains("脚本文件无法加载")
-        }
-        if hasScriptFileErrors {
-            hasTriggeredAutoRepair = true
-            autoRepairMessage = "正在自动修复脚本文件…"
-
-            let entries = menuEntries
-            Self.syncQueue.async { [weak self] in
-                let installer = ScriptInstallerService()
-                let results = installer.syncScripts(with: entries)
-                DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
-                Task { @MainActor in
-                    guard let self else { return }
-                    let repairedNames = Set(
-                        results
-                            .filter { $0.status == .current }
-                            .map(\.displayName)
-                    )
-                    if !repairedNames.isEmpty {
-                        self.errorQueue.removeAll { record in
-                            repairedNames.contains(record.context ?? "")
-                                && (
-                                    record.message.contains("脚本文件不存在")
-                                        || record.message.contains("脚本文件无法加载")
-                                )
-                        }
-                    }
-                    self.errorRecords = self.errorQueue.loadAll()
-                    let didPublishAny = results.contains { $0.status == .current }
-                    self.autoRepairMessage = didPublishAny ? "已自动修复脚本文件" : "自动修复失败，请打开设置检查"
-                }
-            }
-        }
+        // 委托给 AppCoordinator，它会处理自动修复逻辑
+        coordinator?.configStore.loadErrors()
     }
 
     func dismissAllErrors() {
-        errorQueue.removeAll()
-        errorRecords = []
-        hasTriggeredAutoRepair = false
-        autoRepairMessage = nil
+        // 委托给 AppCoordinator
+        coordinator?.dismissAllErrors()
     }
 
     // MARK: - Extension Status
@@ -651,7 +639,8 @@ final class AppState {
     // MARK: - Menu Items
 
     func loadMenuPresentationMode() {
-        menuPresentationMode = configService.loadMenuPresentationMode()
+        // 委托给 AppCoordinator
+        coordinator?.configStore.loadMenuPresentationMode()
     }
 
     /// 从 SharedConfigService 加载已配置菜单项；首次启动时创建默认 Terminal 配置
@@ -660,79 +649,17 @@ final class AppState {
     /// 与配置保持一致（防止脚本被手动删除或损坏的情况）。
     /// 优化建议: 未来可改为仅校验脚本文件是否存在，而非每次都重新编译。
     func loadMenuEntries() {
-        let loadedEntries = migrateCompositeCommandTemplatesIfNeeded(configService.loadEntries())
-        scriptPublishStates = publishStore.loadAll()
-
-        if loadedEntries.isEmpty {
-            let terminalConfig = MenuItemConfig(
-                appName: "Terminal",
-                bundleId: "com.apple.Terminal",
-                appPath: "/System/Applications/Utilities/Terminal.app"
-            )
-            menuEntries = [
-                .custom(terminalConfig),
-                .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
-                .newFile(NewFileMenuConfig()),
-            ]
-            configService.saveEntries(menuEntries)
-            syncScriptsInBackground()
-        } else {
-            menuEntries = ensurePrimaryNewFileMenuIfNeeded(loadedEntries)
-            syncScriptsInBackground()
-        }
+        // 委托给 AppCoordinator，它在 init 时已经处理
+        // 这个方法保留是为了兼容性
     }
 
     var primaryNewFileMenu: NewFileMenuConfig? {
-        NewFileMenuPolicy.primaryNewFileMenu(in: menuEntries)
+        coordinator?.configStore.primaryNewFileMenu
     }
 
     @discardableResult
     func ensureNewFileMenu() -> UUID {
-        let result = NewFileMenuPolicy.ensurePrimaryNewFileMenu(in: menuEntries)
-        guard result.didChange else {
-            return result.menuID
-        }
-
-        menuEntries = result.entries
-        saveAndSync()
-        return result.menuID
-    }
-
-    private func ensurePrimaryNewFileMenuIfNeeded(_ entries: [MenuEntry]) -> [MenuEntry] {
-        let result = NewFileMenuPolicy.ensurePrimaryNewFileMenu(in: entries)
-        guard result.didChange else {
-            return entries
-        }
-
-        configService.saveEntries(result.entries)
-        return result.entries
-    }
-
-    private func migrateCompositeCommandTemplatesIfNeeded(_ entries: [MenuEntry]) -> [MenuEntry] {
-        var didChange = false
-        let migratedEntries = entries.map { entry -> MenuEntry in
-            guard case .composite(var config) = entry else {
-                return entry
-            }
-
-            for index in config.steps.indices {
-                let step = config.steps[index]
-                guard step.bundleId == "com.microsoft.VSCode",
-                      CompositeCommandTemplates.shouldMigrateVSCodeTemplate(step.commandTemplate) else {
-                    continue
-                }
-
-                config.steps[index].commandTemplate = CompositeCommandTemplates.vsCodeCLI
-                didChange = true
-            }
-
-            return .composite(config)
-        }
-
-        if didChange {
-            configService.saveEntries(migratedEntries)
-        }
-        return migratedEntries
+        coordinator?.configStore.ensureNewFileMenu() ?? UUID()
     }
 
     /// 从 AppInfo 创建 MenuItemConfig 并添加到菜单
@@ -1176,32 +1103,17 @@ final class AppState {
 
     func updateMenuPresentationMode(_ mode: MenuPresentationMode) {
         guard menuPresentationMode != mode else { return }
-        menuPresentationMode = mode
-        configService.saveMenuPresentationMode(mode)
+        coordinator?.configStore.saveMenuPresentationMode(mode)
         DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
     }
 
     /// 保存配置 + 同步脚本 + 发送 Darwin Notification
     func saveAndSync() {
-        configService.saveEntries(menuEntries)
-        syncScriptsInBackground()
+        coordinator?.saveAndSync()
     }
 
-    /// 串行队列确保脚本同步任务不会并发执行，避免竞态导致孤立脚本文件
-    private static let syncQueue = DispatchQueue(label: "com.sunven.rcmm.scriptSync", qos: .userInitiated)
-
     private func syncScriptsInBackground() {
-        let entries = menuEntries
-        let publishStore = publishStore
-        let errorQueue = errorQueue
-        Self.syncQueue.async { [weak self] in
-            let installer = ScriptInstallerService()
-            installer.syncScripts(with: entries)
-            DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
-            Task { @MainActor in
-                self?.scriptPublishStates = publishStore.loadAll()
-                self?.errorRecords = errorQueue.loadAll()
-            }
-        }
+        // 委托给 AppCoordinator
+        coordinator?.saveAndSync()
     }
 }
