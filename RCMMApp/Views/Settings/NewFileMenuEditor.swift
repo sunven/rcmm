@@ -88,13 +88,7 @@ struct NewFileMenuEditor: View {
             if !parentIssues.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(parentIssues.prefix(5)) { issue in
-                        HStack(spacing: 5) {
-                            Image(systemName: issue.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                                .foregroundStyle(issue.severity == .error ? .red : .yellow)
-                            Text(issue.message)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
+                        ValidationIssueRow(isError: issue.severity == .error, message: issue.message)
                     }
                 }
             }
@@ -302,13 +296,7 @@ private struct NewFileTemplateEditorRow: View {
 
             if !liveIssues.isEmpty {
                 ForEach(liveIssues) { issue in
-                    HStack(spacing: 5) {
-                        Image(systemName: issue.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(issue.severity == .error ? .red : .yellow)
-                        Text(issue.message)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    ValidationIssueRow(isError: issue.severity == .error, message: issue.message)
                 }
             }
 
@@ -393,12 +381,5 @@ private struct NewFileTemplateEditorRow: View {
                 fileExtension = url.pathExtension
             }
         }
-    }
-}
-
-private extension String {
-    var nilIfBlank: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

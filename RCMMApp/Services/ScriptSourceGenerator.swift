@@ -160,23 +160,22 @@ struct ScriptSourceGenerator {
             """
         }
 
+        let failureCheck = """
+        if (count of stepFailures) > 0 then
+        set AppleScript's text item delimiters to "\\n"
+        set combinedFailures to stepFailures as text
+        set AppleScript's text item delimiters to ""
+        error combinedFailures
+        end if
+        """
+
         return """
         on openApp(thePath)
         set stepFailures to {}
         \(commandBlocks.joined(separator: "\n"))
-        if (count of stepFailures) > 0 then
-        set AppleScript's text item delimiters to "\\n"
-        set combinedFailures to stepFailures as text
-        set AppleScript's text item delimiters to ""
-        error combinedFailures
-        end if
+        \(failureCheck)
         \(postSuccessBlocks.joined(separator: "\n"))
-        if (count of stepFailures) > 0 then
-        set AppleScript's text item delimiters to "\\n"
-        set combinedFailures to stepFailures as text
-        set AppleScript's text item delimiters to ""
-        error combinedFailures
-        end if
+        \(failureCheck)
         end openApp
         """
     }

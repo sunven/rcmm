@@ -133,10 +133,7 @@ final class AppState {
                     if !repairedNames.isEmpty {
                         self.errorQueue.removeAll { record in
                             repairedNames.contains(record.context ?? "")
-                                && (
-                                    record.message.contains("脚本文件不存在")
-                                        || record.message.contains("脚本文件无法加载")
-                                )
+                                && Self.isScriptFileErrorMessage(record.message)
                         }
                     }
                     self.errorRecords = self.errorQueue.loadAll()
@@ -152,6 +149,10 @@ final class AppState {
         errorRecords = []
         hasTriggeredAutoRepair = false
         autoRepairMessage = nil
+    }
+
+    private static func isScriptFileErrorMessage(_ message: String) -> Bool {
+        message.contains("脚本文件不存在") || message.contains("脚本文件无法加载")
     }
 
     // MARK: - Extension Status
@@ -390,6 +391,10 @@ final class AppState {
             return "检查更新"
         }
 
+        return Self.primaryButtonTitle(for: eligibility)
+    }
+
+    private static func primaryButtonTitle(for eligibility: UpdateInstallEligibility) -> String {
         switch eligibility {
         case .inPlaceInstall:
             return "立即更新"
@@ -484,13 +489,7 @@ final class AppState {
         ActivationPolicyManager.activateAsRegularApp()
         shouldHideToMenuBarAfterUpdatePromptCloses = true
 
-        let primaryButtonTitle: String
-        switch eligibility {
-        case .inPlaceInstall:
-            primaryButtonTitle = "立即更新"
-        case .manualInstall:
-            primaryButtonTitle = "打开下载页"
-        }
+        let primaryButtonTitle = Self.primaryButtonTitle(for: eligibility)
 
         let contentView = UpdatePromptView(
             version: item.version.displayVersion,

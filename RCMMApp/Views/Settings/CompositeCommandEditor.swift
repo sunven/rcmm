@@ -64,13 +64,7 @@ struct CompositeCommandEditor: View {
             if !validation.issues.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(validation.issues.prefix(4)) { issue in
-                        HStack(spacing: 5) {
-                            Image(systemName: issue.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                                .foregroundStyle(issue.severity == .error ? .red : .yellow)
-                            Text(issue.message)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
+                        ValidationIssueRow(isError: issue.severity == .error, message: issue.message)
                     }
                 }
             }
@@ -210,13 +204,7 @@ private struct CompositeStepEditorRow: View {
 
             if !issues.isEmpty {
                 ForEach(issues) { issue in
-                    HStack(spacing: 5) {
-                        Image(systemName: issue.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                            .foregroundStyle(issue.severity == .error ? .red : .yellow)
-                        Text(issue.message)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    ValidationIssueRow(isError: issue.severity == .error, message: issue.message)
                 }
             }
 
@@ -255,12 +243,5 @@ private struct CompositeStepEditorRow: View {
             || appPath.nilIfBlank != step.appPath
             || bundleId.nilIfBlank != step.bundleId
             || isEnabled != step.isEnabled
-    }
-}
-
-private extension String {
-    var nilIfBlank: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

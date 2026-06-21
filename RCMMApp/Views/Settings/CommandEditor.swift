@@ -126,14 +126,14 @@ struct CommandEditor: View {
             if !validationIssues.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     ForEach(validationIssues.prefix(4)) { issue in
-                        HStack(spacing: 4) {
-                            Image(systemName: issue.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
-                                .font(.caption2)
-                                .foregroundStyle(issue.severity == .error ? .red : .orange)
-                            Text(issue.message)
-                                .font(.caption2)
-                                .foregroundStyle(issue.severity == .error ? .red : .orange)
-                        }
+                        ValidationIssueRow(
+                            isError: issue.severity == .error,
+                            message: issue.message,
+                            warningColor: .orange,
+                            colorText: true,
+                            spacing: 4,
+                            smallIcon: true
+                        )
                         .accessibilityElement(children: .combine)
                     }
                 }
