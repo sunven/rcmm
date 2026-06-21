@@ -103,13 +103,7 @@ final class ScriptInstallerService {
     ) -> ScriptSyncResult {
         guard isStillCurrent(scriptBackedEntry) else {
             logger.debug("跳过过期脚本同步结果: \(scriptBackedEntry.id, privacy: .public)")
-            return ScriptSyncResult(
-                entryID: scriptBackedEntry.id,
-                displayName: scriptBackedEntry.displayName,
-                fingerprint: scriptBackedEntry.fingerprint,
-                status: .stale,
-                errorSummary: nil
-            )
+            return staleResult(for: scriptBackedEntry)
         }
 
         let finalURL = scriptURL(for: scriptBackedEntry.id)
@@ -149,13 +143,7 @@ final class ScriptInstallerService {
         guard isStillCurrent(scriptBackedEntry) else {
             try? fileManager.removeItem(at: tempURL)
             logger.debug("丢弃过期脚本编译结果: \(scriptBackedEntry.id, privacy: .public)")
-            return ScriptSyncResult(
-                entryID: scriptBackedEntry.id,
-                displayName: scriptBackedEntry.displayName,
-                fingerprint: scriptBackedEntry.fingerprint,
-                status: .stale,
-                errorSummary: nil
-            )
+            return staleResult(for: scriptBackedEntry)
         }
 
         do {
@@ -280,6 +268,16 @@ final class ScriptInstallerService {
         }
     }
 
+    private func staleResult(for scriptBackedEntry: ScriptBackedMenuEntry) -> ScriptSyncResult {
+        ScriptSyncResult(
+            entryID: scriptBackedEntry.id,
+            displayName: scriptBackedEntry.displayName,
+            fingerprint: scriptBackedEntry.fingerprint,
+            status: .stale,
+            errorSummary: nil
+        )
+    }
+
     private func recordFailure(
         entry: MenuEntry,
         scriptBackedEntry: ScriptBackedMenuEntry,
@@ -287,13 +285,7 @@ final class ScriptInstallerService {
         kind: ErrorRecordKind
     ) -> ScriptSyncResult {
         guard isStillCurrent(scriptBackedEntry) else {
-            return ScriptSyncResult(
-                entryID: scriptBackedEntry.id,
-                displayName: scriptBackedEntry.displayName,
-                fingerprint: scriptBackedEntry.fingerprint,
-                status: .stale,
-                errorSummary: nil
-            )
+            return staleResult(for: scriptBackedEntry)
         }
 
         let summary = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)

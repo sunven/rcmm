@@ -133,13 +133,52 @@ final class AppState {
     // MARK: - Error Queue
 
     func loadErrors() {
-        // 委托给 AppCoordinator，它会处理自动修复逻辑
-        coordinator?.configStore.loadErrors()
+        errorRecords = errorQueue.loadAll()
+
+        guard !hasTriggeredAutoRepair else { return }
+
+        let hasScriptFileErrors = errorRecords.contains { record in
+            record.message.contains("脚本文件不存在") || record.message.contains("脚本文件无法加载")
+        }
+        if hasScriptFileErrors {
+            hasTriggeredAutoRepair = true
+            autoRepairMessage = "正在自动修复脚本文件…"
+
+            let entries = menuEntries
+            Self.syncQueue.async { [weak self] in
+                let installer = ScriptInstallerService()
+                let results = installer.syncScripts(with: entries)
+                DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
+                Task { @MainActor in
+                    guard let self else { return }
+                    let repairedNames = Set(
+                        results
+                            .filter { $0.status == .current }
+                            .map(\.displayName)
+                    )
+                    if !repairedNames.isEmpty {
+                        self.errorQueue.removeAll { record in
+                            repairedNames.contains(record.context ?? "")
+                                && Self.isScriptFileErrorMessage(record.message)
+                        }
+                    }
+                    self.errorRecords = self.errorQueue.loadAll()
+                    let didPublishAny = results.contains { $0.status == .current }
+                    self.autoRepairMessage = didPublishAny ? "已自动修复脚本文件" : "自动修复失败，请打开设置检查"
+                }
+            }
+        }
     }
 
     func dismissAllErrors() {
-        // 委托给 AppCoordinator
-        coordinator?.dismissAllErrors()
+        errorQueue.removeAll()
+        errorRecords = []
+        hasTriggeredAutoRepair = false
+        autoRepairMessage = nil
+    }
+
+    private static func isScriptFileErrorMessage(_ message: String) -> Bool {
+        message.contains("脚本文件不存在") || message.contains("脚本文件无法加载")
     }
 
     // MARK: - Extension Status
@@ -378,6 +417,10 @@ final class AppState {
             return "检查更新"
         }
 
+        return Self.primaryButtonTitle(for: eligibility)
+    }
+
+    private static func primaryButtonTitle(for eligibility: UpdateInstallEligibility) -> String {
         switch eligibility {
         case .inPlaceInstall:
             return "立即更新"
@@ -472,13 +515,7 @@ final class AppState {
         ActivationPolicyManager.activateAsRegularApp()
         shouldHideToMenuBarAfterUpdatePromptCloses = true
 
-        let primaryButtonTitle: String
-        switch eligibility {
-        case .inPlaceInstall:
-            primaryButtonTitle = "立即更新"
-        case .manualInstall:
-            primaryButtonTitle = "打开下载页"
-        }
+        let primaryButtonTitle = Self.primaryButtonTitle(for: eligibility)
 
         let contentView = UpdatePromptView(
             version: item.version.displayVersion,

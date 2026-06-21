@@ -325,7 +325,7 @@ public enum NewFileMenuValidator: Sendable {
     }
 
     private static func containsInvalidExtensionCharacters(_ value: String) -> Bool {
-        value.contains("/") || value.contains("\0") || value.rangeOfCharacter(from: .whitespacesAndNewlines) != nil
+        containsPathSeparator(value) || value.rangeOfCharacter(from: .whitespacesAndNewlines) != nil
     }
 
     private static func defaultFileInfo(path: String) -> NewFileTemplateFileInfo? {
