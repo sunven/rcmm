@@ -23,6 +23,8 @@
 3. **Install** — 将 `.scpt` 安装到 `~/Library/Application Scripts/{extension-bundle-id}/`
 4. **Publish State** — 记录编译结果和指纹（fingerprint）
 
+接口：调用方先保存配置，然后调用 `publishCurrentConfiguration()`。管线从已保存配置读取 Menu Entry，串行执行编译和发布，更新 Publish State 与错误队列，并发送 Cross-Process Sync 通知。
+
 ### Fingerprint（指纹）
 菜单项内容的哈希值，用于检测配置变更：
 - 配置更改 → 指纹变化 → 需要重新编译
@@ -43,9 +45,10 @@ App 和 Extension 运行在独立沙盒进程中，通过以下机制通信：
 
 协议：
 1. App 保存配置 → 写入 UserDefaults
-2. App 发送 Darwin Notification（`.configChanged`）
-3. Extension 收到通知 → 重新加载 UserDefaults
-4. Extension 根据 Publish State 过滤菜单项
+2. Script Compilation Pipeline 发布当前已保存配置
+3. App 发送 Darwin Notification（`.configChanged`）
+4. Extension 收到通知 → 重新加载 UserDefaults
+5. Extension 根据 Publish State 过滤菜单项
 
 ### Auto-Repair（自动修复）
 检测到特定错误时自动触发脚本重新同步：
@@ -65,9 +68,9 @@ App 和 Extension 运行在独立沙盒进程中，通过以下机制通信：
 负责特定领域的状态管理和业务逻辑编排：
 
 - **MenuConfigStore** — 领域模型，管理菜单配置、发布状态、错误记录
-- **ScriptSyncCoordinator** — 编排脚本编译管线、Darwin 通知、后台任务队列
+- **ScriptCompilationPipeline** — 深模块，读取已保存菜单配置，串行执行脚本编译管线，发布状态、错误记录和 Cross-Process Sync 通知
 - **WindowCoordinator** — 管理窗口生命周期、UI 流程（onboarding、settings、更新检查）、健康监控
-- **AppCoordinator** — 顶层编排器，持有三个独立的协调器，协调它们之间的交互
+- **AppCoordinator** — 顶层编排器，持有 MenuConfigStore、ScriptCompilationPipeline、WindowCoordinator，协调它们之间的交互
 
 ### Module Depth（模块深度）
 接口复杂度与实现复杂度的比值：

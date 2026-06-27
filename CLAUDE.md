@@ -20,6 +20,7 @@ xcodebuild -project rcmm.xcodeproj -scheme RCMMFinderExtension -configuration De
 
 # 运行测试（使用 Swift Testing 框架，非 XCTest）
 cd RCMMShared && swift test
+xcodebuild -project rcmm.xcodeproj -scheme rcmm -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO test
 
 # 在终端查看扩展日志
 log stream --predicate 'subsystem == "com.sunven.rcmm.FinderExtension"'
@@ -68,12 +69,13 @@ rcmm.xcodeproj
 
 ### 数据流
 
-1. 用户在设置中修改菜单 → `AppState.updateCustomCommand()`
-2. `SharedConfigService.save()` 将 JSON 写入 App Group UserDefaults
-3. `ScriptInstallerService.syncScripts()` 编译 AppleScript `.scpt` 文件至 `~/Library/Application Scripts/{extension-bundle-id}/`
-4. `DarwinNotificationCenter.post(.configChanged)` 通知扩展
-5. 下次右键 → `FinderSync.menu(for:)` 读取 UserDefaults，生成 `NSMenu`
-6. 用户点击菜单项 → `ScriptExecutor` 通过 `NSUserAppleScriptTask` 加载并执行 `.scpt`
+1. 用户在设置中修改菜单 → `AppCoordinator.saveAndSync()`
+2. `SharedConfigService.saveEntries()` 将 JSON 写入 App Group UserDefaults
+3. `ScriptCompilationPipeline.publishCurrentConfiguration()` 读取已保存配置并发布脚本
+4. `ScriptInstallerService.syncScripts()` 编译 AppleScript `.scpt` 文件至 `~/Library/Application Scripts/{extension-bundle-id}/`
+5. `DarwinNotificationCenter.post(.configChanged)` 通知扩展
+6. 下次右键 → `FinderSync.menu(for:)` 读取 UserDefaults，生成 `NSMenu`
+7. 用户点击菜单项 → `ScriptExecutor` 通过 `NSUserAppleScriptTask` 加载并执行 `.scpt`
 
 ### 关键文件
 
@@ -83,15 +85,16 @@ rcmm.xcodeproj
 | `RCMMApp/AppState.swift` | `@Observable @MainActor` 全局状态；健康监控、错误队列、配置同步 |
 | `RCMMFinderExtension/FinderSync.swift` | 上下文菜单生成与执行路由 |
 | `RCMMFinderExtension/ScriptExecutor.swift` | `NSUserAppleScriptTask` 封装，含错误队列记录 |
+| `RCMMApp/Services/ScriptCompilationPipeline.swift` | 已保存菜单配置到脚本发布状态的深模块；串行队列、通知、结果快照 |
 | `RCMMApp/Services/ScriptInstallerService.swift` | AppleScript 生成、`osacompile` 封装、脚本生命周期管理 |
-| `RCMMShared/Sources/Services/SharedConfigService.swift` | App Group UserDefaults 的 JSON 编解码，存取 `[MenuItemConfig]` |
+| `RCMMShared/Sources/Services/SharedConfigService.swift` | App Group UserDefaults 的 JSON 编解码，存取 `[MenuEntry]` |
 | `RCMMShared/Sources/Constants/` | App Group ID、`SharedKeys`、`NotificationNames` 的集中定义——禁止硬编码 |
 
 ### 并发模型
 
 - `AppState` 为 `@Observable @MainActor`，所有状态变更必须在主线程
 - Darwin Notifications 在后台线程接收，访问 `AppState` 前须派发到主线程
-- 脚本同步使用专用串行队列（`com.sunven.rcmm.scriptSync`）防止竞争
+- 脚本编译管线使用专用串行队列（`com.sunven.rcmm.scriptCompilation`）防止竞争
 - Swift 6 + `SWIFT_STRICT_CONCURRENCY=targeted`，跨进程共享类型须标注 `@Sendable`
 
 ### 已知问题与绕过方案

@@ -29,6 +29,7 @@ final class ScriptInstallerService {
     private let configService: SharedConfigService
     private let fileManager: FileManager
     private let extensionBundleID: String
+    private let scriptsDirectoryOverride: URL?
 
     init(
         compiler: AppleScriptCompiling = AppleScriptCompiler(),
@@ -37,7 +38,8 @@ final class ScriptInstallerService {
         errorQueue: SharedErrorQueue = SharedErrorQueue(),
         configService: SharedConfigService = SharedConfigService(),
         fileManager: FileManager = .default,
-        extensionBundleID: String = RuntimeConfiguration.finderExtensionBundleID
+        extensionBundleID: String = RuntimeConfiguration.finderExtensionBundleID,
+        scriptsDirectory: URL? = nil
     ) {
         self.compiler = compiler
         self.sourceGenerator = sourceGenerator
@@ -46,10 +48,15 @@ final class ScriptInstallerService {
         self.configService = configService
         self.fileManager = fileManager
         self.extensionBundleID = extensionBundleID
+        self.scriptsDirectoryOverride = scriptsDirectory
     }
 
     private var scriptsDirectory: URL {
-        fileManager.homeDirectoryForCurrentUser
+        if let scriptsDirectoryOverride {
+            return scriptsDirectoryOverride
+        }
+
+        return fileManager.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Scripts")
             .appendingPathComponent(extensionBundleID)
     }

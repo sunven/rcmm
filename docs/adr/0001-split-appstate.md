@@ -4,6 +4,8 @@
 
 已接受 (Accepted) - 2026-06-15
 
+注：其中 `ScriptSyncCoordinator` 的形状已被 [ADR-0002](0002-deepen-script-compilation-pipeline.md) 覆盖；当前脚本发布模块为 `ScriptCompilationPipeline`。
+
 ## 背景
 
 当前 `AppState.swift` 承担了过多职责（1207 行）：

@@ -2,14 +2,14 @@ import Foundation
 import RCMMShared
 import Observation
 
-/// 顶层编排器：组合三个独立的协调器
+/// 顶层编排器：组合配置、脚本发布、窗口三个模块
 ///
-/// AppCoordinator 持有三个协调器并协调它们之间的交互。
-/// 采用扁平组合：三个协调器彼此独立，依赖关系只存在于这里。
+/// AppCoordinator 持有 MenuConfigStore、ScriptCompilationPipeline、WindowCoordinator，
+/// 并协调它们之间的交互。采用扁平组合：三个模块彼此独立，依赖关系只存在于这里。
 ///
 /// 职责：
-/// - 持有并初始化三个协调器
-/// - 编排自动修复逻辑（观察错误队列，触发脚本同步）
+/// - 持有并初始化配置、脚本发布、窗口模块
+/// - 编排自动修复逻辑（观察错误队列，触发脚本发布）
 /// - 提供统一的 saveAndSync 接口（供 UI 调用）
 @Observable
 @MainActor
@@ -17,7 +17,7 @@ final class AppCoordinator {
     // MARK: - Coordinators
 
     let configStore: MenuConfigStore
-    let syncCoordinator: ScriptSyncCoordinator
+    private let scriptCompilationPipeline: ScriptCompilationPipeline
     let windowCoordinator: WindowCoordinator
 
     // MARK: - Auto-Repair State
@@ -29,7 +29,7 @@ final class AppCoordinator {
 
     init(forPreview: Bool = false) {
         self.configStore = MenuConfigStore()
-        self.syncCoordinator = ScriptSyncCoordinator()
+        self.scriptCompilationPipeline = ScriptCompilationPipeline()
         self.windowCoordinator = WindowCoordinator(forPreview: forPreview)
 
         guard !forPreview else { return }
@@ -55,12 +55,11 @@ final class AppCoordinator {
         hasTriggeredAutoRepair = true
         autoRepairMessage = "正在自动修复脚本文件…"
 
-        let entries = configStore.menuEntries
-        syncCoordinator.syncScriptsInBackground(entries: entries) { [weak self] results in
+        publishCurrentConfigurationInBackground { [weak self] outcome in
             guard let self else { return }
 
             let repairedNames = Set(
-                results
+                outcome.results
                     .filter { $0.status == .current }
                     .map(\.displayName)
             )
@@ -69,10 +68,7 @@ final class AppCoordinator {
                 self.configStore.clearScriptFileErrors(repairedNames: repairedNames)
             }
 
-            // 更新发布状态（从 ScriptPublishStore 重新加载）
-            self.configStore.loadPublishStates()
-
-            let didPublishAny = results.contains { $0.status == .current }
+            let didPublishAny = outcome.results.contains { $0.status == .current }
             self.autoRepairMessage = didPublishAny ? "已自动修复脚本文件" : "自动修复失败，请打开设置检查"
         }
     }
@@ -86,18 +82,25 @@ final class AppCoordinator {
     }
 
     private func syncScriptsInBackground() {
-        let entries = configStore.menuEntries
-        syncCoordinator.syncScriptsInBackground(entries: entries) { [weak self] results in
+        publishCurrentConfigurationInBackground { [weak self] _ in
             guard let self else { return }
-
-            // 更新发布状态和错误记录
-            self.configStore.loadPublishStates()
-            self.configStore.loadErrors()
 
             // 检查是否需要触发自动修复（配置变更后可能产生新错误）
             if !self.hasTriggeredAutoRepair && self.configStore.hasScriptFileErrors {
                 self.checkAndTriggerAutoRepair()
             }
+        }
+    }
+
+    private func publishCurrentConfigurationInBackground(
+        onComplete: @escaping (ScriptCompilationOutcome) -> Void
+    ) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let outcome = await self.scriptCompilationPipeline.publishCurrentConfiguration()
+            self.configStore.scriptPublishStates = outcome.publishStates
+            self.configStore.errorRecords = outcome.errorRecords
+            onComplete(outcome)
         }
     }
 

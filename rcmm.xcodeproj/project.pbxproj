@@ -23,6 +23,13 @@
 			remoteGlobalIDString = A1000201;
 			remoteInfo = RCMMFinderExtension;
 		};
+		A1000904 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000100 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1000300;
+			remoteInfo = rcmm;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -44,6 +51,7 @@
 		A1000200 /* rcmm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = rcmm.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000202 /* RCMMFinderExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RCMMFinderExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000600 /* FinderSync.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = FinderSync.framework; path = System/Library/Frameworks/FinderSync.framework; sourceTree = SDKROOT; };
+		A1000903 /* RCMMAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RCMMAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -80,6 +88,11 @@
 			path = RCMMFinderExtension;
 			sourceTree = "<group>";
 		};
+		A1000906 /* RCMMAppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RCMMAppTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -99,6 +112,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000003 /* RCMMShared in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000911 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -126,6 +146,7 @@
 			children = (
 				A1000200 /* rcmm.app */,
 				A1000202 /* RCMMFinderExtension.appex */,
+				A1000903 /* RCMMAppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -135,6 +156,7 @@
 			children = (
 				A1000040 /* RCMMApp */,
 				A1000041 /* RCMMFinderExtension */,
+				A1000906 /* RCMMAppTests */,
 				74DD7C922F46FF95003EE810 /* Frameworks */,
 				A1000060 /* Products */,
 				749556C72F9C48DF009C9968 /* Recovered References */,
@@ -194,6 +216,29 @@
 			productReference = A1000200 /* rcmm.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A1000900 /* RCMMAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000913 /* Build configuration list for PBXNativeTarget "RCMMAppTests" */;
+			buildPhases = (
+				A1000910 /* Sources */,
+				A1000911 /* Frameworks */,
+				A1000912 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1000905 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A1000906 /* RCMMAppTests */,
+			);
+			name = RCMMAppTests;
+			packageProductDependencies = (
+			);
+			productName = RCMMAppTests;
+			productReference = A1000903 /* RCMMAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -208,6 +253,9 @@
 						CreatedOnToolsVersion = 16.2;
 					};
 					A1000300 = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					A1000900 = {
 						CreatedOnToolsVersion = 16.2;
 					};
 				};
@@ -233,6 +281,7 @@
 			targets = (
 				A1000300 /* rcmm */,
 				A1000201 /* RCMMFinderExtension */,
+				A1000900 /* RCMMAppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -246,6 +295,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		A1000081 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000912 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -269,6 +325,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1000910 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -276,6 +339,11 @@
 			isa = PBXTargetDependency;
 			target = A1000201 /* RCMMFinderExtension */;
 			targetProxy = A1000010 /* PBXContainerItemProxy */;
+		};
+		A1000905 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1000300 /* rcmm */;
+			targetProxy = A1000904 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -538,6 +606,50 @@
 			};
 			name = Release;
 		};
+		A1000914 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = K65J6JBW5K;
+				ENABLE_TESTING_SEARCH_PATHS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sunven.rcmm.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/rcmm.app/Contents/MacOS/rcmm";
+			};
+			name = Debug;
+		};
+		A1000915 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = K65J6JBW5K;
+				ENABLE_TESTING_SEARCH_PATHS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sunven.rcmm.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/rcmm.app/Contents/MacOS/rcmm";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -564,6 +676,15 @@
 			buildConfigurations = (
 				A1000500 /* Debug */,
 				A1000501 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000913 /* Build configuration list for PBXNativeTarget "RCMMAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000914 /* Debug */,
+				A1000915 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
