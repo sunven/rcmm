@@ -154,6 +154,33 @@ bash scripts/resolve-packages.sh
 bash scripts/resolve-packages.sh --reset
 ```
 
+#### 根因：代理未被 Xcode 继承
+
+如果你用代理（如 Clash，`127.0.0.1:7890`）访问 GitHub，这个卡住通常**不是项目问题**，而是环境问题：
+
+- 终端里 `git ls-remote https://github.com/...` 能秒通，因为 shell 有 `http_proxy` / `https_proxy` / `all_proxy`。
+- 但从 Dock/Finder 启动的 Xcode 是 GUI 应用，**只继承 launchd 环境，不读 `.zshrc`**，所以 SPM 解析走直连 → 拉 `Sparkle` / `SettingsAccess` 被墙 → 一直 `resolving…`。
+- 因此每次需要重新解析（清缓存、改依赖、`Package.resolved` 变动）都会再卡一次。
+
+修复（A + B 组合，按需替换端口）：
+
+```bash
+# A. 给 git 全局配代理，SPM 调用 git 拉取时也会走代理
+git config --global http.proxy http://127.0.0.1:7890
+git config --global https.proxy http://127.0.0.1:7890
+
+# B. 让 GUI 应用（含 Xcode）继承代理环境变量
+launchctl setenv http_proxy http://127.0.0.1:7890
+launchctl setenv https_proxy http://127.0.0.1:7890
+launchctl setenv all_proxy socks5://127.0.0.1:7890
+```
+
+执行后**完全退出并重开 Xcode** 才会生效。注意：
+
+- `launchctl setenv` 重启后失效，需要时重设或放进登录脚本。
+- git 全局代理在**代理未开启**时会导致拉取失败，届时用 `git config --global --unset http.proxy`（及 `https.proxy`）取消。
+- 更一劳永逸的办法：开启 Clash 的 Tun Mode / 系统级代理，让所有进程（含 Xcode）都走代理。
+
 ### Building
 
 ```bash
