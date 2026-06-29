@@ -9,133 +9,9 @@ A macOS Finder context menu manager that allows users to open any directory dire
 - Support for custom launch commands
 - Menu bar application for easy configuration
 
-## 开发版发布
-
-项目通过 GitHub Actions 生成内部开发版 DMG、ZIP 更新包，以及 Sparkle appcast。
-
-### 创建新的开发版
-
-1. 确保要发布的改动已经提交到目标分支，并且这次发布对应的是一个新的 commit SHA
-2. 创建并推送版本 tag：
-   ```bash
-   git tag v1.0.0-dev.1
-   git push origin v1.0.0-dev.1
-   ```
-3. GitHub Actions 会自动：
-   - 构建保留 Finder Sync entitlements 的开发签名版本
-   - 生成开发版 `.dmg` 安装包
-   - 生成开发版 `.zip` 更新包
-   - 为 ZIP 生成 Sparkle 签名
-   - 将 `dev.xml` 发布到 GitHub Pages
-   - 创建 GitHub prerelease
-
-### 准备签名 secrets
-
-GitHub Actions 需要下面 5 个 secrets 才能产出可继续使用 Finder 扩展的开发版包：
-
-- `APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64`
-- `APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD`
-- `RCMM_APP_PROVISION_PROFILE_BASE64`
-- `RCMM_EXTENSION_PROVISION_PROFILE_BASE64`
-- `KEYCHAIN_PASSWORD`
-
-缺少这些 secrets 时，workflow 会直接失败，而不是退回 ad-hoc 签名。因为 ad-hoc 包会让自动更新后的 Finder 扩展失效。
-
-建议按下面方式准备：
-
-1. `APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64`
-   从“钥匙串访问”导出 `Apple Development` 证书为 `.p12`，再执行：
-   ```bash
-   base64 -i rcmm-dev-cert.p12 | tr -d '\n'
-   ```
-2. `APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD`
-   导出 `.p12` 时设置的密码。
-3. `RCMM_APP_PROVISION_PROFILE_BASE64`
-   主应用 `com.sunven.rcmm` 对应的 provisioning profile 做 base64：
-   ```bash
-   base64 -i rcmm-app.provisionprofile | tr -d '\n'
-   ```
-4. `RCMM_EXTENSION_PROVISION_PROFILE_BASE64`
-   Finder 扩展 `com.sunven.rcmm.FinderExtension` 对应的 provisioning profile 做 base64：
-   ```bash
-   base64 -i rcmm-extension.provisionprofile | tr -d '\n'
-   ```
-5. `KEYCHAIN_PASSWORD`
-   workflow 里临时 keychain 使用的任意强密码即可。
-
-证书和两个 provisioning profile 都必须属于 Team ID `K65J6JBW5K`，并且 bundle identifier 要分别匹配主应用和 Finder 扩展。
-
-### 开发版发布操作规约
-
-- 当前 GitHub Pages 的 workflow 发布模式下，如果两个 `v*-dev*` tag 指向同一个提交，公开 `dev.xml` 可能继续返回上一个版本。
-- 当前操作规约：每个开发版 tag 都必须对应一个新的 commit。不要对同一提交连续发布多个开发版 tag，并期待 appcast 自动前进。
-- 如果只是重发或补发、没有代码变化，先创建空提交，再创建新的 tag：
-  ```bash
-  git commit --allow-empty -m "chore(release): prepare next dev tag"
-  git tag v1.0.0-dev.2
-  git push origin main
-  git push origin v1.0.0-dev.2
-  ```
-
-### 开发版自动更新
-
-- Feed URL: `https://sunven.github.io/rcmm/appcasts/dev.xml`
-- 手动安装包：DMG
-- 应用内更新包：ZIP
-
-### 验证更新流程
-
-1. 先把一个较旧的开发版安装到 `/Applications`
-2. 基于更新后的 commit 推送一个新的 `v*-dev*` tag
-3. 打开 rcmm > 设置 > 关于 > 检查更新
-4. 确认 `立即更新` 能正常下载、安装并重启应用
-
-### 下载
-
-可以在 [Releases 页面](https://github.com/sunven/rcmm/releases) 下载最新的开发版 DMG。
-
-### 安装
-
-1. 下载 `rcmm-dev-x.x.x.dmg`
-2. 打开 DMG
-3. 把 `rcmm.app` 拖到 `Applications` 目录
-4. 首次运行时，如果系统拦截，请右键应用后选择“打开”；这是内部开发签名包，不是已 notarize 的公开发布版
-5. 如果当前测试机仍然阻止启动，可执行：
-   ```bash
-   xattr -dr com.apple.quarantine /Applications/rcmm.app
-   ```
-
-### 本地构建开发版 DMG
-
-前置依赖：
-
-```bash
-brew install create-dmg
-```
-
-直接执行：
-
-```bash
-bash scripts/build-dev-dmg.sh
-```
-
-也可以显式指定版本号：
-
-```bash
-bash scripts/build-dev-dmg.sh 1.0.0-dev.1
-```
-
-只有在你明确需要回退时，才使用旧的 ad-hoc 模式：
-
-```bash
-bash scripts/build-dev-dmg.sh --unsigned 1.0.0-dev.1
-```
-
-输出文件会写到 `dist/` 目录。
-
 ## 正式版发布
 
-正式版通过单独的 GitHub Actions workflow 生成 DMG，并创建普通 GitHub Release。
+正式版通过 GitHub Actions workflow 生成 DMG，并创建普通 GitHub Release。
 
 这条链路当前不做 Developer ID 签名，也不做 notarization。CI 会使用 ad-hoc 签名产出 `rcmm-x.y.z.dmg`，应用内更新在正式版中关闭，用户通过 GitHub Releases 下载新版。
 
@@ -153,7 +29,7 @@ bash scripts/build-dev-dmg.sh --unsigned 1.0.0-dev.1
    - 创建 GitHub Release
    - 上传 `rcmm-x.y.z.dmg` 和 checksum
 
-正式版 tag 必须是 `vX.Y.Z` 形式，例如 `v1.0.0`。`v*-dev*` 仍然走开发版 workflow。
+正式版 tag 必须是 `vX.Y.Z` 形式，例如 `v1.0.0`。
 
 ### 本地构建正式版 DMG
 
@@ -193,27 +69,13 @@ bash scripts/build-release-dmg.sh --unsigned 1.0.0
 
 ### 解析 Swift Package 依赖
 
-如果 Xcode 卡在 `Package Dependencies`，一直显示正在解析或拉取 `Sparkle`，可以先用命令行解析依赖：
-
-```bash
-bash scripts/resolve-packages.sh
-```
-
-如果 Xcode 仍然卡住，先退出 Xcode，再重置这个项目的 Xcode DerivedData 包缓存：
-
-```bash
-bash scripts/resolve-packages.sh --reset
-```
-
-#### 根因：代理未被 Xcode 继承
-
 如果你用代理（如 Clash，`127.0.0.1:7890`）访问 GitHub，这个卡住通常**不是项目问题**，而是环境问题：
 
 - 终端里 `git ls-remote https://github.com/...` 能秒通，因为 shell 有 `http_proxy` / `https_proxy` / `all_proxy`。
 - 但从 Dock/Finder 启动的 Xcode 是 GUI 应用，**只继承 launchd 环境，不读 `.zshrc`**，所以 SPM 解析走直连 → 拉 `Sparkle` 被墙 → 一直 `resolving…`。
 - 因此每次需要重新解析（清缓存、改依赖、`Package.resolved` 变动）都会再卡一次。
 
-修复（A + B 组合，按需替换端口）：
+修复方式是让 git 和 GUI 应用都走代理（按需替换端口）：
 
 ```bash
 # A. 给 git 全局配代理，SPM 调用 git 拉取时也会走代理

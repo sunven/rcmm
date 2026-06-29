@@ -1,90 +1,38 @@
 # =============================================================================
-# Development Release Workflow
+# Release Workflow
 # =============================================================================
-# 自动化发布流程：当推送 v* 格式的 tag 时，自动构建 macOS 开发版应用并创建 GitHub Prerelease。
-#
-# 整体流程：
-#   推送 v* tag → 拉取代码 → 导入开发签名资产 → 构建已签名 .xcarchive
-#   → 提取 .app → 校验主应用和 Finder Extension 的签名/entitlements
-#   → 打包 .dmg/.zip → 生成校验和 → 创建 GitHub Prerelease 并上传附件
-#
-# 使用方式：
-#   git tag v1.0.0-dev.1
-#   git push origin v1.0.0-dev.1
+# 推送 vX.Y.Z tag 时构建正式版 DMG，并创建普通 GitHub Release。
+# 这条链路不做 Developer ID signing，也不做 notarization；产物是 ad-hoc
+# signed 的 DMG。首次运行时用户可能需要手动放行 quarantine。
 # =============================================================================
 
-name: Development Release Build
+name: Release Build
 
-# ---------------------------------------------------------------------------
-# 触发条件：仅当推送开发版 tag 时触发（如 v1.0.0-dev.1）
-# 普通的 commit push 或 PR 不会触发此工作流
-# ---------------------------------------------------------------------------
 on:
   push:
     tags:
-      - 'v*-dev*'
+      - 'v*.*.*'
 
-# ---------------------------------------------------------------------------
-# 权限配置：授予 GITHUB_TOKEN 对仓库内容的写权限
-# 创建 GitHub Release 和上传附件（DMG、checksums）需要写权限
-# ---------------------------------------------------------------------------
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
-# ---------------------------------------------------------------------------
-# 并发控制：
-#   - group: 按 tag 名称分组，同一个 tag 不会并行执行多次
-#   - cancel-in-progress: false — 不取消正在进行的构建
-#     对 release 构建来说至关重要，避免因重复触发而中断正在打包的构建
-# ---------------------------------------------------------------------------
 concurrency:
-  group: dev-release-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   build:
-    name: Build and Release Development Assets
-    # -----------------------------------------------------------------------
-    # 运行环境：GitHub 提供的最新 macOS runner
-    # 必须使用 macOS，因为 xcodebuild 只能在 macOS 上运行
-    # -----------------------------------------------------------------------
+    name: Build and Release DMG
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: macos-latest
-    # -----------------------------------------------------------------------
-    # 超时保护：最多运行 30 分钟，防止构建卡死浪费 CI 资源
-    # -----------------------------------------------------------------------
     timeout-minutes: 30
 
     steps:
-      # =====================================================================
-      # Step 1: 拉取代码
-      # =====================================================================
-      # fetch-depth: 0 拉取完整 git 历史（而非默认的浅克隆）
-      # 需要完整历史是因为后续 gh release create --generate-notes
-      # 会根据上次 release 到当前 tag 之间的 commit 自动生成变更说明
-      # =====================================================================
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      # =====================================================================
-      # Step 2: 缓存 SPM（Swift Package Manager）依赖
-      # =====================================================================
-      # 缓存路径：
-      #   - ~/Library/Developer/Xcode/DerivedData — Xcode 编译缓存
-      #   - .build — SPM 本地构建缓存
-      #
-      # 缓存策略：
-      #   - key: 基于 Package.resolved 文件的哈希值生成
-      #          依赖版本不变 → 哈希不变 → 命中精确缓存
-      #   - restore-keys: 模糊匹配的 fallback
-      #          即使 Package.resolved 变了，也尽量复用旧缓存加速构建
-      # =====================================================================
       - name: Cache SPM dependencies
         uses: actions/cache@v4
         with:
@@ -95,39 +43,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
-      # =====================================================================
-      # Step 3: 选择 Xcode 版本
-      # =====================================================================
-      # 优先选择 Xcode 15.4（与本地开发环境一致），找不到则 fallback 到默认 Xcode
-      # || 确保即使第一个路径不存在也不会导致步骤失败
-      # 最后打印 xcodebuild 版本号，方便在日志中确认实际使用的版本
-      # =====================================================================
       - name: Select Xcode version
         run: |
           sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || \
           sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           xcodebuild -version
 
-      # =====================================================================
-      # Step 4: 从 git tag 中提取版本号
-      # =====================================================================
-      # id: version — 给这个步骤命名，后续步骤通过
-      #   ${{ steps.version.outputs.version }} 引用提取的版本号
-      #
-      # 双重验证：
-      #   1. 检查 GITHUB_REF 是否以 refs/tags/v 开头（确保是 tag 触发）
-      #   2. 用正则验证去掉 v 后的部分是否符合开发版 semver 格式
-      #      合法示例：1.0.0-dev.1、1.2.3-dev、1.0.0-dev.2+build.123
-      #
-      # ${GITHUB_REF#refs/tags/v} — shell 参数扩展，去掉 "refs/tags/v" 前缀
-      #   例如 refs/tags/v1.0.0 → 1.0.0
-      #
-      # echo "version=$VERSION" >> $GITHUB_OUTPUT — 将版本号写入步骤输出
-      # =====================================================================
-      - name: Normalize version strings
+      - name: Normalize release version
         id: normalized
         run: |
-          eval "$(bash scripts/normalize-dev-version.sh "${GITHUB_REF#refs/tags/}")"
+          eval "$(bash scripts/normalize-release-version.sh "${GITHUB_REF#refs/tags/}")"
           echo "display_version=$DISPLAY_VERSION" >> "$GITHUB_OUTPUT"
           echo "short_version=$SHORT_VERSION" >> "$GITHUB_OUTPUT"
           echo "bundle_version=$BUNDLE_VERSION" >> "$GITHUB_OUTPUT"
@@ -143,454 +68,34 @@ jobs:
             -skipPackageUpdates \
             -clonedSourcePackagesDirPath build/SourcePackages
 
-      - name: Import Sparkle private key
-        env:
-          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
-        run: |
-          mkdir -p build/sparkle
-          printf '%s' "$SPARKLE_PRIVATE_ED_KEY" > build/sparkle/private_key.pem
-          build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys -f build/sparkle/private_key.pem
-
-      # =====================================================================
-      # Step 5: 校验并导入 CI 签名资产
-      # =====================================================================
-      # 自动更新后的 Finder 扩展能否继续工作，取决于发布产物是否保留
-      # Apple Development 签名，以及 team/application identifier +
-      # App Group / sandbox 这一整组 entitlements。
-      #
-      # 这里显式要求 5 个 secrets：
-      #   - APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64
-      #   - APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD
-      #   - RCMM_APP_PROVISION_PROFILE_BASE64
-      #   - RCMM_EXTENSION_PROVISION_PROFILE_BASE64
-      #   - KEYCHAIN_PASSWORD
-      #
-      # 证书导入到临时 keychain，描述文件写入 Xcode 的 Provisioning Profiles 目录。
-      # =====================================================================
-      - name: Validate signing secrets
-        env:
-          APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64 }}
-          APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD }}
-          RCMM_APP_PROVISION_PROFILE_BASE64: ${{ secrets.RCMM_APP_PROVISION_PROFILE_BASE64 }}
-          RCMM_EXTENSION_PROVISION_PROFILE_BASE64: ${{ secrets.RCMM_EXTENSION_PROVISION_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          missing=()
-          for name in \
-            APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64 \
-            APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD \
-            RCMM_APP_PROVISION_PROFILE_BASE64 \
-            RCMM_EXTENSION_PROVISION_PROFILE_BASE64 \
-            KEYCHAIN_PASSWORD
-          do
-            if [ -z "${!name:-}" ]; then
-              missing+=("$name")
-            fi
-          done
-
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::Missing required signing secrets: ${missing[*]}"
-            exit 1
-          fi
-
-      - name: Install signing assets
-        id: signing_assets
-        env:
-          APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64 }}
-          APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD }}
-          RCMM_APP_PROVISION_PROFILE_BASE64: ${{ secrets.RCMM_APP_PROVISION_PROFILE_BASE64 }}
-          RCMM_EXTENSION_PROVISION_PROFILE_BASE64: ${{ secrets.RCMM_EXTENSION_PROVISION_PROFILE_BASE64 }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          set -euo pipefail
-
-          keychain_path="$RUNNER_TEMP/rcmm-signing.keychain-db"
-          xcode_profiles_dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
-          mobiledevice_profiles_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
-          cert_path="$RUNNER_TEMP/rcmm-dev-cert.p12"
-
-          decode_base64() {
-            if base64 --help 2>&1 | grep -q -- '--decode'; then
-              base64 --decode
-            else
-              base64 -D
-            fi
-          }
-
-          mkdir -p "$xcode_profiles_dir" "$mobiledevice_profiles_dir"
-          printf '%s' "$APPLE_DEVELOPMENT_CERTIFICATE_P12_BASE64" | decode_base64 > "$cert_path"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
-          security set-keychain-settings -lut 21600 "$keychain_path"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain_path"
-          security import "$cert_path" \
-            -k "$keychain_path" \
-            -P "$APPLE_DEVELOPMENT_CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security \
-            -T /usr/bin/xcodebuild
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "$KEYCHAIN_PASSWORD" \
-            "$keychain_path"
-          security list-keychains -d user -s "$keychain_path"
-          security default-keychain -d user -s "$keychain_path"
-
-          if ! identity_output="$(security find-identity -v -p codesigning "$keychain_path" 2>&1)"; then
-            printf '%s\n' "$identity_output"
-            echo "::error::Failed to inspect imported signing identities"
-            exit 1
-          fi
-          printf '%s\n' "$identity_output"
-          if ! printf '%s\n' "$identity_output" | grep -q 'Apple Development:'; then
-            echo "::error::Imported keychain does not contain an Apple Development signing identity"
-            exit 1
-          fi
-
-          install_profile() {
-            local output_prefix="$1"
-            local base64_value="$2"
-            local expected_identifier="$3"
-            local temp_profile="$RUNNER_TEMP/$(uuidgen).provisionprofile"
-            local profile_plist="$RUNNER_TEMP/$(uuidgen).plist"
-            local uuid
-            local profile_name
-            local application_identifier
-            local team_identifier
-
-            printf '%s' "$base64_value" | decode_base64 > "$temp_profile"
-            security cms -D -i "$temp_profile" > "$profile_plist"
-            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$profile_plist")"
-            profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$profile_plist")"
-            application_identifier="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$profile_plist")"
-            team_identifier="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.team-identifier' "$profile_plist")"
-
-            if [ "$team_identifier" != "K65J6JBW5K" ]; then
-              echo "::error::Provisioning profile team mismatch: expected K65J6JBW5K, got $team_identifier"
-              exit 1
-            fi
-            if [ "$application_identifier" != "$expected_identifier" ]; then
-              echo "::error::Provisioning profile bundle mismatch: expected $expected_identifier, got $application_identifier"
-              exit 1
-            fi
-
-            cp "$temp_profile" "$xcode_profiles_dir/$uuid.provisionprofile"
-            cp "$temp_profile" "$mobiledevice_profiles_dir/$uuid.provisionprofile"
-            echo "Installed provisioning profile $uuid ($profile_name) for $application_identifier"
-            {
-              echo "${output_prefix}_profile_uuid=$uuid"
-              echo "${output_prefix}_profile_name=$profile_name"
-            } >> "$GITHUB_OUTPUT"
-          }
-
-          install_profile "app" "$RCMM_APP_PROVISION_PROFILE_BASE64" "K65J6JBW5K.com.sunven.rcmm"
-          install_profile "extension" "$RCMM_EXTENSION_PROVISION_PROFILE_BASE64" "K65J6JBW5K.com.sunven.rcmm.FinderExtension"
-
-          echo "keychain_path=$keychain_path" >> "$GITHUB_OUTPUT"
-
-          ls -la "$xcode_profiles_dir"
-          ls -la "$mobiledevice_profiles_dir"
-
-      # =====================================================================
-      # Step 6: 构建已签名 Xcode Archive
-      # =====================================================================
-      # 这里使用 Xcode automatic signing，并依赖前一步导入的开发证书
-      # 和 provisioning profiles。不要在 CI 里做 ad-hoc deep re-sign。
-      # 目标是让 archive 产出的主 app 和 Finder extension 从一开始就保留
-      # 正常的 Apple Development 签名和 entitlements。
-      # =====================================================================
-      - name: Build signed archive
-        env:
-          RCMM_SIGNING_KEYCHAIN_PATH: ${{ steps.signing_assets.outputs.keychain_path }}
-        run: |
-          set -euo pipefail
-
-          # Create build directory
-          mkdir -p build
-
-          xcodebuild archive \
-            -project rcmm.xcodeproj \
-            -scheme rcmm \
-            -configuration Release \
-            -destination 'generic/platform=macOS' \
-            -archivePath build/rcmm.xcarchive \
-            -onlyUsePackageVersionsFromResolvedFile \
-            -skipPackageUpdates \
-            -clonedSourcePackagesDirPath build/SourcePackages \
-            MARKETING_VERSION=${{ steps.normalized.outputs.short_version }} \
-            CURRENT_PROJECT_VERSION=${{ steps.normalized.outputs.bundle_version }} \
-            RCMM_DISPLAY_VERSION=${{ steps.normalized.outputs.display_version }} \
-            -allowProvisioningUpdates \
-            CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="Apple Development" \
-            DEVELOPMENT_TEAM=K65J6JBW5K \
-            PROVISIONING_PROFILE="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            OTHER_CODE_SIGN_FLAGS="--keychain $RCMM_SIGNING_KEYCHAIN_PATH" \
-            | tee build/xcodebuild.log
-
-          # Verify archive was created
-          if [ ! -d "build/rcmm.xcarchive" ]; then
-            echo "::error::Archive creation failed - build/rcmm.xcarchive not found"
-            ls -la build/ || echo "build/ directory not found"
-            exit 1
-          fi
-
-          echo "✓ Archive created successfully at build/rcmm.xcarchive"
-
-      # =====================================================================
-      # Step 7: 从 Archive 中提取 .app 并验证签名完整性
-      # =====================================================================
-      # 这个步骤会验证两层条件：
-      #   1. 主应用和 Finder Extension 都是非 ad-hoc 的 Apple Development 签名
-      #   2. Finder Extension 的签名 entitlements 里仍然保留
-      #      team/application identifier + sandbox + app group
-      #
-      # 这条护栏是本次修复的关键：之前 ad-hoc deep re-sign 会让 appex 丢掉
-      # entitlements，导致自动更新后的 Finder 右键菜单消失。
-      # =====================================================================
-      - name: Extract and verify signed .app
-        run: |
-          set -euo pipefail
-          cp -R build/rcmm.xcarchive/Products/Applications/rcmm.app build/rcmm.app
-
-          if [ ! -d "build/rcmm.app" ]; then
-            echo "::error::Main app bundle not found"
-            ls -la build/ || echo "build/ directory not found"
-            exit 1
-          fi
-          if [ ! -d "build/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex" ]; then
-            echo "::error::Finder extension not found in app bundle"
-            ls -la build/rcmm.app/Contents/PlugIns/ || echo "PlugIns directory not found"
-            exit 1
-          fi
-          if [ ! -f "build/rcmm.app/Contents/Info.plist" ]; then
-            echo "::error::Info.plist not found in app bundle"
-            ls -la build/rcmm.app/Contents/ || echo "Contents directory not found"
-            exit 1
-          fi
-
-          codesign --verify --deep --strict --verbose=4 build/rcmm.app
-
-          app_sign="$(codesign -dvvv build/rcmm.app 2>&1)"
-          appex_sign="$(codesign -dvvv build/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex 2>&1)"
-          appex_entitlements="$(codesign -d --entitlements :- build/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex 2>/dev/null)"
-
-          printf '%s\n' "$app_sign" | grep -q 'Authority=Apple Development:'
-          printf '%s\n' "$app_sign" | grep -q 'TeamIdentifier=K65J6JBW5K'
-          if printf '%s\n' "$app_sign" | grep -q 'Signature=adhoc'; then
-            echo "::error::Main app unexpectedly fell back to ad-hoc signing"
-            exit 1
-          fi
-
-          printf '%s\n' "$appex_sign" | grep -q 'Authority=Apple Development:'
-          printf '%s\n' "$appex_sign" | grep -q 'TeamIdentifier=K65J6JBW5K'
-          if printf '%s\n' "$appex_sign" | grep -q 'Signature=adhoc'; then
-            echo "::error::Finder extension unexpectedly fell back to ad-hoc signing"
-            exit 1
-          fi
-
-          printf '%s\n' "$appex_entitlements" | grep -q 'com.apple.application-identifier'
-          printf '%s\n' "$appex_entitlements" | grep -q 'K65J6JBW5K.com.sunven.rcmm.FinderExtension'
-          printf '%s\n' "$appex_entitlements" | grep -q 'com.apple.developer.team-identifier'
-          printf '%s\n' "$appex_entitlements" | grep -q 'K65J6JBW5K'
-          printf '%s\n' "$appex_entitlements" | grep -q 'com.apple.security.app-sandbox'
-          printf '%s\n' "$appex_entitlements" | grep -q 'group.com.sunven.rcmm'
-
-          echo "✓ Signed app and Finder extension verified"
-
-      # =====================================================================
-      # Step 8: 准备 DMG staging 目录
-      # =====================================================================
-      # create-dmg 会把传入目录中的内容全部放进镜像。
-      # 不能直接传 build/，否则会把 xcarchive、日志等调试产物一起打进 DMG。
-      # =====================================================================
-      - name: Prepare DMG staging directory
-        run: |
-          set -e
-          rm -rf build/dmg-root
-          mkdir -p build/dmg-root
-          cp -R build/rcmm.app build/dmg-root/rcmm.app
-          echo "✓ DMG staging directory prepared"
-
-      # =====================================================================
-      # Step 9: 安装 create-dmg 工具
-      # =====================================================================
-      # create-dmg 是一个命令行工具，用于创建带有自定义外观的 .dmg 磁盘映像
-      # macOS runner 预装了 Homebrew，可以直接使用 brew install
-      # GitHub: https://github.com/create-dmg/create-dmg
-      # =====================================================================
       - name: Install create-dmg
         run: brew install create-dmg
 
-      # =====================================================================
-      # Step 10: 创建 DMG 磁盘映像
-      # =====================================================================
-      # .dmg 是 macOS 标准的应用分发格式，用户双击挂载后看到的界面由以下参数控制：
-      #
-      #   --volname "rcmm"           — 挂载后 Finder 中显示的卷名
-      #   --window-pos 200 120       — DMG 窗口在屏幕上的位置 (x=200, y=120)
-      #   --window-size 800 400      — DMG 窗口的尺寸 (宽800 × 高400)
-      #   --icon-size 100            — 图标显示大小 100×100 像素
-      #   --icon "rcmm.app" 200 190  — 应用图标在窗口中的位置（左侧 x=200）
-      #   --hide-extension "rcmm.app"— 隐藏 .app 扩展名，显示更简洁
-      #   --app-drop-link 600 185    — "Applications" 文件夹快捷方式位置（右侧 x=600）
-      #                                用户将 app 拖拽到这里即完成安装
-      #
-      # 最终布局示意：
-      #   +------------------------------------------+
-      #   |                                          |
-      #   |    [rcmm]          →    [Applications]   |
-      #   |   (x=200)               (x=600)          |
-      #   +------------------------------------------+
-      #
-      # 输出文件名包含版本号，如 rcmm-dev-1.0.0.dmg
-      # 仅将 build/dmg-root/ 中的 rcmm.app 放进 DMG，避免调试产物泄露给用户
-      # =====================================================================
-      - name: Create DMG
+      - name: Build release DMG without notarization
         run: |
-          set -e
-          create-dmg \
-            --volname "rcmm" \
-            --skip-jenkins \
-            --window-pos 200 120 \
-            --window-size 800 400 \
-            --icon-size 100 \
-            --icon "rcmm.app" 200 190 \
-            --hide-extension "rcmm.app" \
-            --app-drop-link 600 185 \
-            "rcmm-dev-${{ steps.normalized.outputs.display_version }}.dmg" \
-            "build/dmg-root/"
+          bash scripts/build-release-dmg.sh --unsigned "${{ steps.normalized.outputs.display_version }}"
 
-          # Verify DMG was created
-          if [ ! -f "rcmm-dev-${{ steps.normalized.outputs.display_version }}.dmg" ]; then
-            echo "::error::DMG creation failed"
-            ls -la . || echo "Current directory listing failed"
-            exit 1
-          fi
-          echo "✓ DMG created successfully"
-
-      - name: Create ZIP update archive
-        run: |
-          ditto -c -k --sequesterRsrc --keepParent \
-            build/rcmm.app \
-            rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip
-
-      - name: Sign ZIP update archive
-        id: sparkle_signature
-        run: |
-          signature="$(
-            build/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update \
-              --ed-key-file build/sparkle/private_key.pem \
-              -p \
-              rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip
-          )"
-          echo "signature=$signature" >> "$GITHUB_OUTPUT"
-
-      - name: Generate checksums
-        run: |
-          shasum -a 256 rcmm-dev-${{ steps.normalized.outputs.display_version }}.dmg > checksums.txt
-          shasum -a 256 rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip >> checksums.txt
-          cat checksums.txt
-          echo "✓ Checksum generated"
-
-      - name: Build appcast payload
-        run: |
-          mkdir -p build/pages/appcasts
-          archive_url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip"
-          notes_url="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
-          archive_length="$(stat -f%z "rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip")"
-          bash scripts/render-dev-appcast.sh \
-            "${{ steps.normalized.outputs.display_version }}" \
-            "${{ steps.normalized.outputs.bundle_version }}" \
-            "$archive_url" \
-            "$archive_length" \
-            "${{ steps.sparkle_signature.outputs.signature }}" \
-            "$notes_url" > build/pages/appcasts/dev.xml
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: build/pages
-
-      # =====================================================================
-      # Step 12: 创建 GitHub Development Prerelease
-      # =====================================================================
-      # 使用 gh CLI（GitHub 官方命令行工具）创建 Release
-      #
-      # GH_TOKEN: gh CLI 认证所需的 token，使用 Actions 自动提供的 github.token
-      #
-      # 两种场景：
-      #   1. Release 已存在（比如手动创建过或重新运行 workflow）：
-      #      → gh release upload --clobber 上传/覆盖附件
-      #        --clobber 表示如果同名附件已存在则覆盖
-      #
-      #   2. Release 不存在（首次发布）：
-      #      → gh release create 创建新 Release
-      #        --title  "rcmm dev 1.0.0" — Release 标题
-      #        --prerelease — 标记为开发版预发布
-      #        --generate-notes — 自动根据上次 Release 到当前 tag
-      #          之间的 commit 生成变更说明（这也是 Step 1 需要完整历史的原因）
-      #
-      # 上传的附件：
-      #   - rcmm-dev-{version}.dmg — 开发版应用安装包
-      #   - checksums.txt          — SHA-256 校验和
-      # =====================================================================
-      - name: Create GitHub Prerelease
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view ${{ github.ref_name }} &>/dev/null; then
-            echo "Release already exists, uploading assets..."
-            gh release upload ${{ github.ref_name }} \
-              rcmm-dev-${{ steps.normalized.outputs.display_version }}.dmg \
-              rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip \
-              checksums.txt \
-              --clobber
+          dmg="dist/rcmm-${{ steps.normalized.outputs.display_version }}.dmg"
+          checksum="$dmg.sha256"
+
+          if gh release view "${{ github.ref_name }}" &>/dev/null; then
+            gh release upload "${{ github.ref_name }}" "$dmg" "$checksum" --clobber
           else
-            gh release create ${{ github.ref_name }} \
-              rcmm-dev-${{ steps.normalized.outputs.display_version }}.dmg \
-              rcmm-dev-${{ steps.normalized.outputs.display_version }}.zip \
-              checksums.txt \
-              --title "rcmm dev ${{ steps.normalized.outputs.display_version }}" \
-              --prerelease \
+            gh release create "${{ github.ref_name }}" "$dmg" "$checksum" \
+              --title "rcmm ${{ steps.normalized.outputs.display_version }}" \
               --generate-notes
           fi
 
-      # =====================================================================
-      # Step 13: 失败时上传构建日志（仅在前面任何步骤失败时执行）
-      # =====================================================================
-      # if: failure() — GitHub Actions 条件表达式，仅当前面步骤失败时才运行
-      #
-      # 上传以下目录作为 artifact：
-      #   - build/       — 包含 xcodebuild.log 和中间构建产物
-      #   - DerivedData/ — Xcode 编译缓存，可能包含详细的编译错误信息
-      #
-      # retention-days: 7 — 保留 7 天后自动删除，避免占用存储空间
-      #
-      # 用途：构建失败后，开发者可以从 GitHub Actions 页面下载这些日志，
-      #       在本地离线分析具体的构建错误原因
-      # =====================================================================
       - name: Upload build logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs
+          name: release-build-logs
           path: |
             build/
-            DerivedData/
+            dist/
           retention-days: 7
-
-  deploy_pages:
-    name: Deploy Appcast to GitHub Pages
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
