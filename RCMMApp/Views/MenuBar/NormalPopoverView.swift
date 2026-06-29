@@ -1,5 +1,4 @@
 import RCMMShared
-import SettingsAccess
 import SwiftUI
 
 /// 正常状态弹出窗口，展示扩展状态 + 错误信息 + 打开设置 + 退出按钮
@@ -22,14 +21,17 @@ struct NormalPopoverView: View {
 
             Divider()
 
-            SettingsLink {
+            OpenSettingsButton(
+                preAction: {
+                    ActivationPolicyManager.activateAsRegularApp()
+                },
+                postAction: {
+                    dismiss()
+                    ActivationPolicyManager.refocusSettingsAfterMenuAction()
+                }
+            ) {
                 Text("打开设置…")
                     .frame(maxWidth: .infinity, alignment: .leading)
-            } preAction: {
-                ActivationPolicyManager.activateAsRegularApp()
-            } postAction: {
-                dismiss()
-                ActivationPolicyManager.refocusSettingsAfterMenuAction()
             }
             .buttonStyle(MenuItemButtonStyle())
             .environment(\.isHovered, settingsHovered)

@@ -28,14 +28,14 @@ struct AppInstallContext: Sendable {
             return nil
         }
 
-        guard
-            let normalizedPath = value?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .nilIfEmpty?
-                .normalizedPath,
-            (normalizedPath as NSString).isAbsolutePath,
-            FileManager.default.directoryExists(atPath: normalizedPath)
-        else {
+        guard let path = value?.nilIfBlank else {
+            return nil
+        }
+
+        let expandedPath = (path as NSString).expandingTildeInPath
+        let normalizedPath = (expandedPath as NSString).standardizingPath
+        guard (normalizedPath as NSString).isAbsolutePath,
+              FileManager.default.directoryExists(atPath: normalizedPath) else {
             return nil
         }
 
@@ -52,17 +52,6 @@ struct AppInstallContext: Sendable {
         }
 
         return displayVersion.localizedCaseInsensitiveContains("dev")
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        isEmpty ? nil : self
-    }
-
-    var normalizedPath: String {
-        let expandedPath = (self as NSString).expandingTildeInPath
-        return (expandedPath as NSString).standardizingPath
     }
 }
 

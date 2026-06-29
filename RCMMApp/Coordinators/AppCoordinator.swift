@@ -2,13 +2,13 @@ import Foundation
 import RCMMShared
 import Observation
 
-/// 顶层编排器：组合配置、脚本发布、窗口三个模块
+/// 顶层编排器：组合配置和脚本发布模块
 ///
-/// AppCoordinator 持有 MenuConfigStore、ScriptCompilationPipeline、WindowCoordinator，
+/// AppCoordinator 持有 MenuConfigStore、ScriptCompilationPipeline，
 /// 并协调它们之间的交互。采用扁平组合：三个模块彼此独立，依赖关系只存在于这里。
 ///
 /// 职责：
-/// - 持有并初始化配置、脚本发布、窗口模块
+/// - 持有并初始化配置、脚本发布模块
 /// - 编排自动修复逻辑（观察错误队列，触发脚本发布）
 /// - 提供统一的 saveAndSync 接口（供 UI 调用）
 @Observable
@@ -18,7 +18,6 @@ final class AppCoordinator {
 
     let configStore: MenuConfigStore
     private let scriptCompilationPipeline: ScriptCompilationPipeline
-    let windowCoordinator: WindowCoordinator
 
     // MARK: - Auto-Repair State
 
@@ -30,7 +29,6 @@ final class AppCoordinator {
     init(forPreview: Bool = false) {
         self.configStore = MenuConfigStore()
         self.scriptCompilationPipeline = ScriptCompilationPipeline()
-        self.windowCoordinator = WindowCoordinator(forPreview: forPreview)
 
         guard !forPreview else { return }
 

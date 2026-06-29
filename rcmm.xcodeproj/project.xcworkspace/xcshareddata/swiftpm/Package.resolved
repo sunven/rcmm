@@ -1,15 +1,6 @@
 {
-  "originHash" : "d723d36f01a8a932970c8d7ab19deee31f12505b28bacb908e9a33bffb5989f7",
+  "originHash" : "4b1204572b86d0c5374db9c36ad2c121036f82a7b57c90f0094e9f4762414c96",
   "pins" : [
-    {
-      "identity" : "settingsaccess",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/orchetect/SettingsAccess",
-      "state" : {
-        "revision" : "08e80c35501f273afa2f5d6f737429bbe395ff81",
-        "version" : "2.1.0"
-      }
-    },
     {
       "identity" : "sparkle",
       "kind" : "remoteSourceControl",

@@ -1,5 +1,4 @@
 import RCMMShared
-import SettingsAccess
 import SwiftUI
 
 /// 错误展示横幅，在弹出窗口中显示最近的执行错误和恢复建议
@@ -78,14 +77,17 @@ struct ErrorBannerView: View {
 
     private var actionBar: some View {
         HStack(spacing: 8) {
-            SettingsLink {
+            OpenSettingsButton(
+                preAction: {
+                    ActivationPolicyManager.activateAsRegularApp()
+                },
+                postAction: {
+                    dismiss()
+                    ActivationPolicyManager.refocusSettingsAfterMenuAction()
+                }
+            ) {
                 Text("打开设置")
                     .frame(maxWidth: .infinity)
-            } preAction: {
-                ActivationPolicyManager.activateAsRegularApp()
-            } postAction: {
-                dismiss()
-                ActivationPolicyManager.refocusSettingsAfterMenuAction()
             }
             .buttonStyle(AppPrimaryButtonStyle())
             .controlSize(.small)

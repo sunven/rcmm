@@ -142,7 +142,7 @@ bash scripts/build-dev-dmg.sh --unsigned 1.0.0-dev.1
 
 ### 解析 Swift Package 依赖
 
-如果 Xcode 卡在 `Package Dependencies`，一直显示正在解析或拉取 `Sparkle` / `SettingsAccess`，可以先用命令行解析依赖：
+如果 Xcode 卡在 `Package Dependencies`，一直显示正在解析或拉取 `Sparkle`，可以先用命令行解析依赖：
 
 ```bash
 bash scripts/resolve-packages.sh
@@ -159,7 +159,7 @@ bash scripts/resolve-packages.sh --reset
 如果你用代理（如 Clash，`127.0.0.1:7890`）访问 GitHub，这个卡住通常**不是项目问题**，而是环境问题：
 
 - 终端里 `git ls-remote https://github.com/...` 能秒通，因为 shell 有 `http_proxy` / `https_proxy` / `all_proxy`。
-- 但从 Dock/Finder 启动的 Xcode 是 GUI 应用，**只继承 launchd 环境，不读 `.zshrc`**，所以 SPM 解析走直连 → 拉 `Sparkle` / `SettingsAccess` 被墙 → 一直 `resolving…`。
+- 但从 Dock/Finder 启动的 Xcode 是 GUI 应用，**只继承 launchd 环境，不读 `.zshrc`**，所以 SPM 解析走直连 → 拉 `Sparkle` 被墙 → 一直 `resolving…`。
 - 因此每次需要重新解析（清缓存、改依赖、`Package.resolved` 变动）都会再卡一次。
 
 修复（A + B 组合，按需替换端口）：

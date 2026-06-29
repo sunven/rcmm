@@ -1,6 +1,7 @@
 import Foundation
 import os.log
 import RCMMShared
+import Sparkle
 import SwiftUI
 
 enum AppUpdateState: Equatable {
@@ -79,7 +80,7 @@ final class AppState {
     @ObservationIgnored private var dismissedUpdateDisplayVersion: String?
     @ObservationIgnored private var hasScheduledStartupUpdateCheck = false
     @ObservationIgnored private var shouldHideToMenuBarAfterUpdatePromptCloses = true
-    @ObservationIgnored private var sparkleUpdater: SparkleUpdaterService?
+    @ObservationIgnored private var sparkleUpdater: SPUStandardUpdaterController?
     @ObservationIgnored private let updateFeedClient = UpdateFeedClient()
     @ObservationIgnored private let extensionCleanupService = ExtensionCleanupService()
     @ObservationIgnored private var extensionCleanupPlanningRequestID: UInt64 = 0
@@ -113,10 +114,12 @@ final class AppState {
         if let bundleInfo = try? AppBundleUpdateInfo.current() {
             currentDisplayVersion = bundleInfo.displayVersion
         }
-        sparkleUpdater = SparkleUpdaterService()
+        sparkleUpdater = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
 
-        // 注意：loadMenuPresentationMode() 和 loadMenuEntries() 现在由 AppCoordinator 处理
-        // 只保留 UI 相关的初始化
         checkExtensionStatus()
         startHealthMonitoring()
 
@@ -402,7 +405,7 @@ final class AppState {
             shouldHideToMenuBarAfterUpdatePromptCloses = false
             closeUpdatePromptWindow()
             updateState = .installing(item)
-            sparkleUpdater?.beginInteractiveUpdate()
+            sparkleUpdater?.checkForUpdates(nil)
         case .manualInstall(_, let fallbackURL):
             shouldHideToMenuBarAfterUpdatePromptCloses = true
             closeUpdatePromptWindow()
@@ -634,21 +637,6 @@ final class AppState {
     }
 
     // MARK: - Menu Items
-
-    func loadMenuPresentationMode() {
-        // 委托给 AppCoordinator
-        coordinator?.configStore.loadMenuPresentationMode()
-    }
-
-    /// 从 SharedConfigService 加载已配置菜单项；首次启动时创建默认 Terminal 配置
-    ///
-    /// 注意: 每次启动都调用 syncScriptsInBackground() 是有意为之，确保脚本文件
-    /// 与配置保持一致（防止脚本被手动删除或损坏的情况）。
-    /// 优化建议: 未来可改为仅校验脚本文件是否存在，而非每次都重新编译。
-    func loadMenuEntries() {
-        // 委托给 AppCoordinator，它在 init 时已经处理
-        // 这个方法保留是为了兼容性
-    }
 
     var primaryNewFileMenu: NewFileMenuConfig? {
         coordinator?.configStore.primaryNewFileMenu
@@ -1109,8 +1097,4 @@ final class AppState {
         coordinator?.saveAndSync()
     }
 
-    private func syncScriptsInBackground() {
-        // 委托给 AppCoordinator
-        coordinator?.saveAndSync()
-    }
 }

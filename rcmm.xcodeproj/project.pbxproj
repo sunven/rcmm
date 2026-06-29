@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		74DD7C942F46FF96003EE810 /* SettingsAccess in Frameworks */ = {isa = PBXBuildFile; productRef = 74DD7C932F46FF96003EE810 /* SettingsAccess */; };
 		84A0A0012F50000100AA0001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 84A0A0022F50000100AA0001 /* Sparkle */; };
 		A1000001 /* RCMMShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000002 /* RCMMShared */; };
 		A1000003 /* RCMMShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1000004 /* RCMMShared */; };
@@ -102,7 +101,6 @@
 			files = (
 				A1000001 /* RCMMShared in Frameworks */,
 				84A0A0012F50000100AA0001 /* Sparkle in Frameworks */,
-				74DD7C942F46FF96003EE810 /* SettingsAccess in Frameworks */,
 				A1000601 /* FinderSync.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -210,7 +208,6 @@
 			packageProductDependencies = (
 				A1000002 /* RCMMShared */,
 				84A0A0022F50000100AA0001 /* Sparkle */,
-				74DD7C932F46FF96003EE810 /* SettingsAccess */,
 			);
 			productName = rcmm;
 			productReference = A1000200 /* rcmm.app */;
@@ -272,7 +269,6 @@
 			packageReferences = (
 				A1000005 /* XCLocalSwiftPackageReference "RCMMShared" */,
 				84A0A0032F50000100AA0001 /* XCRemoteSwiftPackageReference "Sparkle" */,
-				74DD7C912F46FD15003EE810 /* XCRemoteSwiftPackageReference "SettingsAccess" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A1000060 /* Products */;
@@ -699,14 +695,6 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		74DD7C912F46FD15003EE810 /* XCRemoteSwiftPackageReference "SettingsAccess" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/orchetect/SettingsAccess";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.1.0;
-			};
-		};
 		84A0A0032F50000100AA0001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
@@ -718,11 +706,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		74DD7C932F46FF96003EE810 /* SettingsAccess */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 74DD7C912F46FD15003EE810 /* XCRemoteSwiftPackageReference "SettingsAccess" */;
-			productName = SettingsAccess;
-		};
 		84A0A0022F50000100AA0001 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 84A0A0032F50000100AA0001 /* XCRemoteSwiftPackageReference "Sparkle" */;
