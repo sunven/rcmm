@@ -8,6 +8,7 @@ Usage:
   bash scripts/build-dev-dmg.sh [options] [version]
 
 Options:
+  --release     Build a stable DMG: rcmm-{version}.dmg, no appcast update feed.
   --signed      Build with local Xcode automatic signing. This is the default.
   --unsigned    Build without Xcode signing, then apply ad-hoc signing.
   -h, --help    Show this help message.
@@ -17,12 +18,13 @@ Behavior:
   - Extracts rcmm.app from the archive
   - In signed mode, keeps the Xcode-produced local development signature
   - In unsigned mode, applies ad-hoc signing as a fallback
-  - Creates a clean development DMG containing only rcmm.app
+  - Creates a clean DMG containing only rcmm.app
   - Writes the DMG and SHA-256 checksum into ./dist
 
 Examples:
   bash scripts/build-dev-dmg.sh
   bash scripts/build-dev-dmg.sh 1.0.0-dev.1
+  bash scripts/build-dev-dmg.sh --release --unsigned 1.0.0
   bash scripts/build-dev-dmg.sh --unsigned 1.0.0-dev.1
 EOF
 }
@@ -34,6 +36,15 @@ require_cmd() {
     echo "Error: missing required command: $cmd" >&2
     exit 1
   fi
+}
+
+expand_entitlements() {
+  local input_path="$1"
+  local output_path="$2"
+
+  sed \
+    -e "s|\$(RCMM_APP_GROUP_IDENTIFIER)|group.com.sunven.rcmm|g" \
+    "$input_path" > "$output_path"
 }
 
 default_version() {
@@ -55,6 +66,7 @@ build_archive_signed() {
     -configuration Release \
     -archivePath "$ARCHIVE_PATH" \
     -allowProvisioningUpdates \
+    "${XCODEBUILD_VERSION_SETTINGS[@]}" \
     CODE_SIGN_STYLE=Automatic \
     PROVISIONING_PROFILE="" \
     PROVISIONING_PROFILE_SPECIFIER="" \
@@ -67,6 +79,7 @@ build_archive_unsigned() {
     -scheme rcmm \
     -configuration Release \
     -archivePath "$ARCHIVE_PATH" \
+    "${XCODEBUILD_VERSION_SETTINGS[@]}" \
     CODE_SIGN_IDENTITY="" \
     CODE_SIGNING_REQUIRED=NO \
     CODE_SIGNING_ALLOWED=NO \
@@ -93,11 +106,48 @@ print_signing_summary() {
   echo
 }
 
+adhoc_sign_app() {
+  local app_entitlements="$BUILD_DIR/rcmm.entitlements"
+  local extension_entitlements="$BUILD_DIR/RCMMFinderExtension.entitlements"
+  local sparkle_framework="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+  local sparkle_version="$sparkle_framework/Versions/B"
+
+  expand_entitlements "$ROOT_DIR/RCMMApp/rcmm.entitlements" "$app_entitlements"
+  expand_entitlements "$ROOT_DIR/RCMMFinderExtension/RCMMFinderExtension.entitlements" "$extension_entitlements"
+
+  if [[ -d "$sparkle_version" ]]; then
+    codesign --force --sign - "$sparkle_version/XPCServices/Downloader.xpc"
+    codesign --force --sign - "$sparkle_version/XPCServices/Installer.xpc"
+    codesign --force --sign - "$sparkle_version/Updater.app"
+    codesign --force --sign - "$sparkle_version/Autoupdate"
+    codesign --force --sign - "$sparkle_version"
+  elif [[ -d "$sparkle_framework" ]]; then
+    codesign --force --sign - "$sparkle_framework"
+  fi
+
+  codesign \
+    --force \
+    --sign - \
+    --entitlements "$extension_entitlements" \
+    "$APP_PATH/Contents/PlugIns/RCMMFinderExtension.appex"
+
+  codesign \
+    --force \
+    --sign - \
+    --entitlements "$app_entitlements" \
+    "$APP_PATH"
+}
+
 SIGNING_MODE="signed"
+CHANNEL="dev"
 POSITIONAL_VERSION=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --release)
+      CHANNEL="release"
+      shift
+      ;;
     --signed)
       SIGNING_MODE="signed"
       shift
@@ -128,7 +178,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="$ROOT_DIR/build/dev-release"
+BUILD_DIR="$ROOT_DIR/build/$CHANNEL-release"
 ARCHIVE_PATH="$BUILD_DIR/rcmm.xcarchive"
 APP_PATH="$BUILD_DIR/rcmm.app"
 STAGING_DIR="$BUILD_DIR/dmg-root"
@@ -149,10 +199,36 @@ if [[ ! "$VERSION" =~ ^[A-Za-z0-9._+-]+$ ]]; then
   exit 1
 fi
 
-DMG_NAME="rcmm-dev-${VERSION}.dmg"
+XCODEBUILD_VERSION_SETTINGS=()
+case "$CHANNEL" in
+  dev)
+    DMG_NAME="rcmm-dev-${VERSION}.dmg"
+    ;;
+  release)
+    if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "Error: stable release version must look like 1.2.3: $VERSION" >&2
+      exit 1
+    fi
+    DMG_NAME="rcmm-${VERSION}.dmg"
+    XCODEBUILD_VERSION_SETTINGS=(
+      MARKETING_VERSION="$VERSION"
+      CURRENT_PROJECT_VERSION="$VERSION.0"
+      RCMM_SHORT_VERSION="$VERSION"
+      RCMM_BUILD_NUMBER="0"
+      RCMM_BUNDLE_VERSION="$VERSION.0"
+      RCMM_DISPLAY_VERSION="$VERSION"
+      RCMM_SU_FEED_URL=
+      RCMM_UPDATES_ENABLED=NO
+    )
+    ;;
+  *)
+    echo "Error: unsupported channel: $CHANNEL" >&2
+    exit 1
+    ;;
+esac
 CHECKSUM_NAME="${DMG_NAME}.sha256"
 
-echo "Building development DMG for version: $VERSION"
+echo "Building $CHANNEL DMG for version: $VERSION"
 echo "Signing mode: $SIGNING_MODE"
 
 rm -rf "$BUILD_DIR"
@@ -177,7 +253,7 @@ verify_extension_bundle
 if [[ "$SIGNING_MODE" == "signed" ]]; then
   codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 else
-  codesign --force --deep --sign - "$APP_PATH"
+  adhoc_sign_app
   codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 fi
 
@@ -191,6 +267,7 @@ rm -f "$DIST_DIR/$DMG_NAME" "$DIST_DIR/$CHECKSUM_NAME"
 
 create-dmg \
   --volname "rcmm" \
+  --skip-jenkins \
   --window-pos 200 120 \
   --window-size 800 400 \
   --icon-size 100 \
@@ -209,7 +286,17 @@ shasum -a 256 "$DIST_DIR/$DMG_NAME" > "$DIST_DIR/$CHECKSUM_NAME"
 
 popd >/dev/null
 
-if [[ "$SIGNING_MODE" == "signed" ]]; then
+if [[ "$CHANNEL" == "release" ]]; then
+  cat <<EOF
+Release DMG created successfully.
+
+DMG:      $DIST_DIR/$DMG_NAME
+Checksum: $DIST_DIR/$CHECKSUM_NAME
+
+This build is not notarized. First launch may require a manual Gatekeeper
+override or removing the quarantine attribute after installation.
+EOF
+elif [[ "$SIGNING_MODE" == "signed" ]]; then
   cat <<EOF
 Development DMG created successfully.
 

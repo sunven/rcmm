@@ -133,6 +133,57 @@ bash scripts/build-dev-dmg.sh --unsigned 1.0.0-dev.1
 
 输出文件会写到 `dist/` 目录。
 
+## 正式版发布
+
+正式版通过单独的 GitHub Actions workflow 生成 DMG，并创建普通 GitHub Release。
+
+这条链路当前不做 Developer ID 签名，也不做 notarization。CI 会使用 ad-hoc 签名产出 `rcmm-x.y.z.dmg`，应用内更新在正式版中关闭，用户通过 GitHub Releases 下载新版。
+
+### 创建新的正式版
+
+1. 确保要发布的改动已经提交到目标分支
+2. 创建并推送稳定版本 tag：
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+3. GitHub Actions 会自动：
+   - 构建正式版 `.dmg`
+   - 生成 SHA-256 checksum
+   - 创建 GitHub Release
+   - 上传 `rcmm-x.y.z.dmg` 和 checksum
+
+正式版 tag 必须是 `vX.Y.Z` 形式，例如 `v1.0.0`。`v*-dev*` 仍然走开发版 workflow。
+
+### 本地构建正式版 DMG
+
+前置依赖：
+
+```bash
+brew install create-dmg
+```
+
+执行：
+
+```bash
+bash scripts/build-release-dmg.sh --unsigned 1.0.0
+```
+
+输出文件会写到 `dist/` 目录，例如 `dist/rcmm-1.0.0.dmg`。
+
+### 安装和首次运行
+
+1. 下载 `rcmm-x.y.z.dmg`
+2. 打开 DMG
+3. 把 `rcmm.app` 拖到 `Applications` 目录
+4. 如果 macOS 拦截启动，先尝试右键应用后选择“打开”
+5. 如果仍然阻止启动，可执行：
+   ```bash
+   xattr -rd com.apple.quarantine /Applications/rcmm.app
+   ```
+
+这是未 notarize 的分发包。只要不加入 Apple Developer Program 并配置 Developer ID + notarization，用户首次运行时就可能看到 Gatekeeper 拦截，需要手动放行。
+
 ## Development
 
 ### Prerequisites

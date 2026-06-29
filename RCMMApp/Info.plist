@@ -16,6 +16,8 @@
 		<string>$(RCMM_FINDER_EXTENSION_BUNDLE_IDENTIFIER)</string>
 		<key>RCMMReleasePageURL</key>
 		<string>$(RCMM_RELEASE_PAGE_URL)</string>
+		<key>RCMMUpdatesEnabled</key>
+		<string>$(RCMM_UPDATES_ENABLED)</string>
 	<key>RCMMRepositoryRoot</key>
 	<string>$(SRCROOT)</string>
 	<key>LSUIElement</key>

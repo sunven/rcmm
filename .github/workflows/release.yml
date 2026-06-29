@@ -454,6 +454,7 @@ jobs:
           set -e
           create-dmg \
             --volname "rcmm" \
+            --skip-jenkins \
             --window-pos 200 120 \
             --window-size 800 400 \
             --icon-size 100 \

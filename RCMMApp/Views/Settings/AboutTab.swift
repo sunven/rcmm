@@ -41,8 +41,10 @@ struct AboutTab: View {
                     .multilineTextAlignment(.center)
 
                 HStack(spacing: 10) {
-                    Button("检查更新") {
-                        appState.checkForUpdatesManually()
+                    if appState.canCheckForUpdates {
+                        Button("检查更新") {
+                            appState.checkForUpdatesManually()
+                        }
                     }
 
                     if appState.canPerformUpdatePrimaryAction {

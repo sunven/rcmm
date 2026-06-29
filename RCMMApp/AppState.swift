@@ -9,6 +9,7 @@ enum AppUpdateState: Equatable {
     case checking
     case current(lastCheckedAt: Date)
     case available(DevAppcastItem, UpdateInstallEligibility)
+    case disabled(URL)
     case failed(String)
     case installing(DevAppcastItem)
 }
@@ -111,14 +112,21 @@ final class AppState {
 
         guard !forPreview else { return }
 
+        var shouldStartSparkleUpdater = true
         if let bundleInfo = try? AppBundleUpdateInfo.current() {
             currentDisplayVersion = bundleInfo.displayVersion
+            if !bundleInfo.updatesEnabled {
+                updateState = .disabled(bundleInfo.releasePageURL)
+                shouldStartSparkleUpdater = false
+            }
         }
-        sparkleUpdater = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
-        )
+        if shouldStartSparkleUpdater {
+            sparkleUpdater = SPUStandardUpdaterController(
+                startingUpdater: true,
+                updaterDelegate: nil,
+                userDriverDelegate: nil
+            )
+        }
 
         checkExtensionStatus()
         startHealthMonitoring()
@@ -361,6 +369,8 @@ final class AppState {
             case .manualInstall(let reason, _):
                 return "发现新版本 \(item.version.displayVersion)。\(reason)"
             }
+        case .disabled:
+            return "这个构建暂未启用应用内更新，请从 Releases 页面下载新版。"
         case .failed(let message):
             return message
         case .installing(let item):
@@ -368,14 +378,28 @@ final class AppState {
         }
     }
 
+    var canCheckForUpdates: Bool {
+        if case .disabled = updateState {
+            return false
+        }
+        return true
+    }
+
     var canPerformUpdatePrimaryAction: Bool {
         if case .available = updateState {
+            return true
+        }
+        if case .disabled = updateState {
             return true
         }
         return false
     }
 
     var updatePrimaryActionTitle: String {
+        if case .disabled = updateState {
+            return "打开下载页"
+        }
+
         guard case .available(_, let eligibility) = updateState else {
             return "检查更新"
         }
@@ -393,12 +417,19 @@ final class AppState {
     }
 
     func checkForUpdatesManually() {
+        guard canCheckForUpdates else { return }
+
         Task {
             await performUpdateCheck(silent: false)
         }
     }
 
     func performUpdatePrimaryAction() {
+        if case .disabled(let fallbackURL) = updateState {
+            NSWorkspace.shared.open(fallbackURL)
+            return
+        }
+
         guard case .available(let item, let eligibility) = updateState else { return }
         switch eligibility {
         case .inPlaceInstall:
@@ -419,8 +450,12 @@ final class AppState {
         do {
             let bundleInfo = try AppBundleUpdateInfo.current()
             currentDisplayVersion = bundleInfo.displayVersion
+            guard bundleInfo.updatesEnabled, let feedURL = bundleInfo.feedURL else {
+                updateState = .disabled(bundleInfo.releasePageURL)
+                return
+            }
 
-            let latestItem = try await updateFeedClient.fetchLatestItem(feedURL: bundleInfo.feedURL)
+            let latestItem = try await updateFeedClient.fetchLatestItem(feedURL: feedURL)
             let eligibility = UpdatePolicy.installEligibility(
                 bundlePath: bundleInfo.bundlePath,
                 releasePageURL: bundleInfo.releasePageURL
@@ -440,6 +475,9 @@ final class AppState {
 
     private func scheduleStartupUpdateCheckIfNeeded() {
         guard !hasScheduledStartupUpdateCheck, isOnboardingCompleted else { return }
+        if let bundleInfo = try? AppBundleUpdateInfo.current(), !bundleInfo.updatesEnabled {
+            return
+        }
         guard UpdatePolicy.allowsStartupAutomaticCheck(isDebugBuild: Self.isDebugBuild) else { return }
         hasScheduledStartupUpdateCheck = true
 
@@ -452,7 +490,12 @@ final class AppState {
     private func performStartupUpdateCheck() async {
         do {
             let bundleInfo = try AppBundleUpdateInfo.current()
-            let latestItem = try await updateFeedClient.fetchLatestItem(feedURL: bundleInfo.feedURL)
+            guard bundleInfo.updatesEnabled, let feedURL = bundleInfo.feedURL else {
+                updateState = .disabled(bundleInfo.releasePageURL)
+                return
+            }
+
+            let latestItem = try await updateFeedClient.fetchLatestItem(feedURL: feedURL)
             let decision = UpdatePolicy.startupDecision(
                 latestItem: latestItem,
                 currentVersion: bundleInfo.currentVersion,
