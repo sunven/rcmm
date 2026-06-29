@@ -101,8 +101,8 @@ verify_extension_bundle() {
 print_signing_summary() {
   echo
   echo "Signing summary:"
-  codesign -dv --verbose=2 "$APP_PATH" 2>&1 | rg 'Authority=|TeamIdentifier=|Signature=' || true
-  codesign -dv --verbose=2 "$APP_PATH/Contents/PlugIns/RCMMFinderExtension.appex" 2>&1 | rg 'Authority=|TeamIdentifier=|Signature=' || true
+  codesign -dv --verbose=2 "$APP_PATH" 2>&1 | grep -E 'Authority=|TeamIdentifier=|Signature=' || true
+  codesign -dv --verbose=2 "$APP_PATH/Contents/PlugIns/RCMMFinderExtension.appex" 2>&1 | grep -E 'Authority=|TeamIdentifier=|Signature=' || true
   echo
 }
 
@@ -190,7 +190,6 @@ require_cmd xcodebuild
 require_cmd codesign
 require_cmd create-dmg
 require_cmd shasum
-require_cmd rg
 
 VERSION="${POSITIONAL_VERSION:-$(default_version)}"
 
