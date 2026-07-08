@@ -18,10 +18,9 @@ A macOS Finder context menu manager that allows users to open any directory dire
 ### 创建新的正式版
 
 1. 确保要发布的改动已经提交到目标分支
-2. 创建并推送稳定版本 tag：
+2. 自动生成下一个稳定版本 tag 并推送：
    ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
+   bash scripts/publish-next-release-tag.sh
    ```
 3. GitHub Actions 会自动：
    - 构建正式版 `.dmg`
@@ -29,7 +28,13 @@ A macOS Finder context menu manager that allows users to open any directory dire
    - 创建 GitHub Release
    - 上传 `rcmm-x.y.z.dmg` 和 checksum
 
-正式版 tag 必须是 `vX.Y.Z` 形式，例如 `v1.0.0`。
+正式版 tag 必须是 `vX.Y.Z` 形式，例如 `v1.0.0`。脚本只会读取稳定版 tag，并按 patch 递增；例如当前最大稳定版是 `v0.0.6` 时，下一个 tag 会是 `v0.0.7`。
+
+如果只想查看下一个版本号，不创建或推送 tag：
+
+```bash
+bash scripts/publish-next-release-tag.sh --dry-run
+```
 
 ### 本地构建正式版 DMG
 
