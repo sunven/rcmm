@@ -33,7 +33,7 @@ public enum UpdatePolicy {
     ) -> UpdateStartupDecision {
         guard let latestItem else { return .none }
         guard latestItem.version > currentVersion else { return .none }
-        guard latestItem.version.displayVersion != dismissedDisplayVersion else { return .none }
+        guard latestItem.displayVersion != dismissedDisplayVersion else { return .none }
 
         return .present(
             latestItem,

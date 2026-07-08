@@ -16,7 +16,8 @@ Behavior:
   - Extracts rcmm.app from the archive
   - Applies ad-hoc signing
   - Creates a clean DMG containing only rcmm.app
-  - Writes the DMG and SHA-256 checksum into ./dist
+  - Creates a ZIP archive for Sparkle updates
+  - Writes release assets and SHA-256 checksums into ./dist
 
 Example:
   bash scripts/build-release-dmg.sh --unsigned 1.0.0
@@ -124,6 +125,7 @@ XCODEBUILD_LOG="$BUILD_DIR/xcodebuild.log"
 require_cmd xcodebuild
 require_cmd codesign
 require_cmd create-dmg
+require_cmd ditto
 require_cmd shasum
 
 VERSION="$POSITIONAL_VERSION"
@@ -141,6 +143,9 @@ fi
 
 DMG_NAME="rcmm-${VERSION}.dmg"
 CHECKSUM_NAME="${DMG_NAME}.sha256"
+ZIP_NAME="rcmm-${VERSION}.zip"
+ZIP_CHECKSUM_NAME="${ZIP_NAME}.sha256"
+STABLE_FEED_URL="https://github.com/sunven/rcmm/releases/latest/download/stable.xml"
 
 echo "Building release DMG for version: $VERSION"
 echo "Signing mode: ad-hoc"
@@ -161,8 +166,8 @@ xcodebuild archive \
   RCMM_BUILD_NUMBER="0" \
   RCMM_BUNDLE_VERSION="$VERSION.0" \
   RCMM_DISPLAY_VERSION="$VERSION" \
-  RCMM_SU_FEED_URL= \
-  RCMM_UPDATES_ENABLED=NO \
+  RCMM_SU_FEED_URL="$STABLE_FEED_URL" \
+  RCMM_UPDATES_ENABLED=YES \
   CODE_SIGN_IDENTITY="" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO \
@@ -182,7 +187,11 @@ rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
 cp -R "$APP_PATH" "$STAGING_DIR/rcmm.app"
 
-rm -f "$DIST_DIR/$DMG_NAME" "$DIST_DIR/$CHECKSUM_NAME"
+rm -f \
+  "$DIST_DIR/$DMG_NAME" \
+  "$DIST_DIR/$CHECKSUM_NAME" \
+  "$DIST_DIR/$ZIP_NAME" \
+  "$DIST_DIR/$ZIP_CHECKSUM_NAME"
 
 create-dmg \
   --volname "rcmm" \
@@ -203,13 +212,26 @@ fi
 
 shasum -a 256 "$DIST_DIR/$DMG_NAME" > "$DIST_DIR/$CHECKSUM_NAME"
 
+pushd "$BUILD_DIR" >/dev/null
+ditto -c -k --sequesterRsrc --keepParent "rcmm.app" "$DIST_DIR/$ZIP_NAME"
+popd >/dev/null
+
+if [[ ! -f "$DIST_DIR/$ZIP_NAME" ]]; then
+  echo "Error: ZIP was not created at $DIST_DIR/$ZIP_NAME" >&2
+  exit 1
+fi
+
+shasum -a 256 "$DIST_DIR/$ZIP_NAME" > "$DIST_DIR/$ZIP_CHECKSUM_NAME"
+
 popd >/dev/null
 
 cat <<EOF
 Release DMG created successfully.
 
-DMG:      $DIST_DIR/$DMG_NAME
-Checksum: $DIST_DIR/$CHECKSUM_NAME
+DMG:          $DIST_DIR/$DMG_NAME
+DMG checksum: $DIST_DIR/$CHECKSUM_NAME
+ZIP:          $DIST_DIR/$ZIP_NAME
+ZIP checksum: $DIST_DIR/$ZIP_CHECKSUM_NAME
 
 This build is not notarized. First launch may require a manual Gatekeeper
 override or removing the quarantine attribute after installation.

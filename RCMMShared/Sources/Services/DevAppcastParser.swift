@@ -56,6 +56,7 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
         else { return }
 
         currentItem?.version = version
+        currentItem?.displayVersion = attributeDict["sparkle:shortVersionString"]
         currentItem?.archiveURL = url
         currentItem?.archiveLength = length
         currentItem?.signature = signature
@@ -96,6 +97,7 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
 
 private struct PendingItem {
     var version: DevBuildVersion?
+    var displayVersion: String?
     var archiveURL: URL?
     var releaseNotesURL: URL?
     var archiveLength: Int?
@@ -111,6 +113,7 @@ private struct PendingItem {
 
         return DevAppcastItem(
             version: version,
+            displayVersion: displayVersion,
             archiveURL: archiveURL,
             releaseNotesURL: releaseNotesURL,
             archiveLength: archiveLength,

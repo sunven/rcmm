@@ -11,9 +11,11 @@ A macOS Finder context menu manager that allows users to open any directory dire
 
 ## 正式版发布
 
-正式版通过 GitHub Actions workflow 生成 DMG，并创建普通 GitHub Release。
+正式版通过 GitHub Actions workflow 生成 DMG、Sparkle ZIP 和 `stable.xml` appcast，并创建普通 GitHub Release。
 
-这条链路当前不做 Developer ID 签名，也不做 notarization。CI 会使用 ad-hoc 签名产出 `rcmm-x.y.z.dmg`，应用内更新在正式版中关闭，用户通过 GitHub Releases 下载新版。
+这条链路当前不做 Developer ID 签名，也不做 notarization。CI 会使用 ad-hoc 签名产出 `rcmm-x.y.z.dmg` 供首次安装，同时上传 `rcmm-x.y.z.zip` 和 `stable.xml` 供 Sparkle 应用内更新使用。
+
+发布 workflow 需要仓库 secret `SPARKLE_PRIVATE_ED_KEY`。它必须和应用内 `SUPublicEDKey` 对应，否则 Sparkle 会拒绝安装更新。
 
 ### 创建新的正式版
 
@@ -24,9 +26,12 @@ A macOS Finder context menu manager that allows users to open any directory dire
    ```
 3. GitHub Actions 会自动：
    - 构建正式版 `.dmg`
+   - 构建正式版 `.zip`
+   - 用 Sparkle EdDSA 私钥签名 `.zip`
+   - 生成并上传 `stable.xml` appcast
    - 生成 SHA-256 checksum
    - 创建 GitHub Release
-   - 上传 `rcmm-x.y.z.dmg` 和 checksum
+   - 上传 DMG、ZIP、`stable.xml` 和 checksum
 
 正式版 tag 必须是 `vX.Y.Z` 形式，例如 `v1.0.0`。脚本只会读取稳定版 tag，并按 patch 递增；例如当前最大稳定版是 `v0.0.6` 时，下一个 tag 会是 `v0.0.7`。
 
@@ -50,7 +55,7 @@ brew install create-dmg
 bash scripts/build-release-dmg.sh --unsigned 1.0.0
 ```
 
-输出文件会写到 `dist/` 目录，例如 `dist/rcmm-1.0.0.dmg`。
+输出文件会写到 `dist/` 目录，例如 `dist/rcmm-1.0.0.dmg` 和 `dist/rcmm-1.0.0.zip`。
 
 ### 安装和首次运行
 
@@ -63,7 +68,7 @@ bash scripts/build-release-dmg.sh --unsigned 1.0.0
    xattr -rd com.apple.quarantine /Applications/rcmm.app
    ```
 
-这是未 notarize 的分发包。只要不加入 Apple Developer Program 并配置 Developer ID + notarization，用户首次运行时就可能看到 Gatekeeper 拦截，需要手动放行。
+这是未 notarize 的分发包。只要不加入 Apple Developer Program 并配置 Developer ID + notarization，用户首次运行时就可能看到 Gatekeeper 拦截，需要手动放行。后续正式版会在启动后自动检查更新，也可以在“关于”页手动检查。
 
 ## Development
 

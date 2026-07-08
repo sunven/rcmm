@@ -1,9 +1,9 @@
 # =============================================================================
 # Release Workflow
 # =============================================================================
-# 推送 vX.Y.Z tag 时构建正式版 DMG，并创建普通 GitHub Release。
+# 推送 vX.Y.Z tag 时构建正式版 DMG、Sparkle ZIP 和稳定版 appcast。
 # 这条链路不做 Developer ID signing，也不做 notarization；产物是 ad-hoc
-# signed 的 DMG。首次运行时用户可能需要手动放行 quarantine。
+# signed。首次运行时用户可能需要手动放行 quarantine。
 # =============================================================================
 
 name: Release Build
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build and Release DMG
+    name: Build and Release Assets
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: macos-latest
     timeout-minutes: 30
@@ -71,21 +71,88 @@ jobs:
       - name: Install create-dmg
         run: brew install create-dmg
 
-      - name: Build release DMG without notarization
+      - name: Build release assets without notarization
         run: |
           bash scripts/build-release-dmg.sh --unsigned "${{ steps.normalized.outputs.display_version }}"
+
+      - name: Sign Sparkle update ZIP
+        id: sparkle
+        env:
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        run: |
+          if [[ -z "${SPARKLE_PRIVATE_ED_KEY:-}" ]]; then
+            echo "Missing required secret: SPARKLE_PRIVATE_ED_KEY" >&2
+            exit 1
+          fi
+
+          sign_update="build/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update"
+          if [[ ! -x "$sign_update" ]]; then
+            echo "Missing Sparkle sign_update tool at $sign_update" >&2
+            find build/SourcePackages -name sign_update -print >&2
+            exit 1
+          fi
+
+          mkdir -p build/sparkle
+          private_key_file="build/sparkle/private_key.pem"
+          printf '%s' "$SPARKLE_PRIVATE_ED_KEY" > "$private_key_file"
+          chmod 600 "$private_key_file"
+
+          zip_path="dist/rcmm-${{ steps.normalized.outputs.display_version }}.zip"
+          signature_output="$("$sign_update" --ed-key-file "$private_key_file" "$zip_path")"
+          signature="$(printf '%s\n' "$signature_output" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p' | head -n 1)"
+          length="$(printf '%s\n' "$signature_output" | sed -n 's/.*length="\([^"]*\)".*/\1/p' | head -n 1)"
+
+          if [[ -z "$signature" || -z "$length" ]]; then
+            echo "Unable to parse Sparkle signature output:" >&2
+            printf '%s\n' "$signature_output" >&2
+            exit 1
+          fi
+
+          rm -f "$private_key_file"
+          echo "signature=$signature" >> "$GITHUB_OUTPUT"
+          echo "length=$length" >> "$GITHUB_OUTPUT"
+
+      - name: Build stable appcast
+        run: |
+          archive_url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/rcmm-${{ steps.normalized.outputs.display_version }}.zip"
+          notes_url="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+
+          bash scripts/render-appcast.sh \
+            "${{ steps.normalized.outputs.display_version }}" \
+            "${{ steps.normalized.outputs.bundle_version }}" \
+            "$archive_url" \
+            "${{ steps.sparkle.outputs.length }}" \
+            "${{ steps.sparkle.outputs.signature }}" \
+            "$notes_url" \
+            > dist/stable.xml
+
+          xmllint --noout dist/stable.xml
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           dmg="dist/rcmm-${{ steps.normalized.outputs.display_version }}.dmg"
-          checksum="$dmg.sha256"
+          dmg_checksum="$dmg.sha256"
+          zip="dist/rcmm-${{ steps.normalized.outputs.display_version }}.zip"
+          zip_checksum="$zip.sha256"
+          appcast="dist/stable.xml"
 
           if gh release view "${{ github.ref_name }}" &>/dev/null; then
-            gh release upload "${{ github.ref_name }}" "$dmg" "$checksum" --clobber
+            gh release upload "${{ github.ref_name }}" \
+              "$dmg" \
+              "$dmg_checksum" \
+              "$zip" \
+              "$zip_checksum" \
+              "$appcast" \
+              --clobber
           else
-            gh release create "${{ github.ref_name }}" "$dmg" "$checksum" \
+            gh release create "${{ github.ref_name }}" \
+              "$dmg" \
+              "$dmg_checksum" \
+              "$zip" \
+              "$zip_checksum" \
+              "$appcast" \
               --title "rcmm ${{ steps.normalized.outputs.display_version }}" \
               --generate-notes
           fi

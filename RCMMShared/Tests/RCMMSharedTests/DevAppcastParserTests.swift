@@ -39,6 +39,7 @@ struct DevAppcastParserTests {
         let item = try DevAppcastParser.latestItem(from: Data(xml.utf8))
 
         #expect(item.version.displayVersion == "1.2.3-dev.10")
+        #expect(item.displayVersion == "1.2.3-dev.10")
         #expect(item.archiveURL.absoluteString.contains("1.2.3-dev.10.zip"))
         #expect(item.releaseNotesURL?.absoluteString.contains("v1.2.3-dev.10") == true)
     }
@@ -73,6 +74,7 @@ struct DevAppcastParserTests {
         let item = try DevAppcastParser.latestItem(from: Data(xml.utf8))
 
         #expect(item.version.displayVersion == "1.2.3-dev.10")
+        #expect(item.displayVersion == "1.2.3-dev.10")
         #expect(item.releaseNotesURL == nil)
     }
 
@@ -98,6 +100,33 @@ struct DevAppcastParserTests {
         let item = try DevAppcastParser.latestItem(from: Data(xml.utf8))
 
         #expect(item.version.displayVersion == "1.2.3-dev.10")
+        #expect(item.displayVersion == "1.2.3-dev.10")
         #expect(item.releaseNotesURL?.absoluteString.contains("v1.2.3-dev.10") == true)
+    }
+
+    @Test("稳定版 appcast 使用 shortVersionString 作为展示版本")
+    func parsesStableDisplayVersion() throws {
+        let xml = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+          <channel>
+            <item>
+              <sparkle:releaseNotesLink>https://github.com/sunven/rcmm/releases/tag/v1.2.3</sparkle:releaseNotesLink>
+              <enclosure
+                url="https://github.com/sunven/rcmm/releases/download/v1.2.3/rcmm-1.2.3.zip"
+                sparkle:version="1.2.3.0"
+                sparkle:shortVersionString="1.2.3"
+                length="67890"
+                type="application/octet-stream"
+                sparkle:edSignature="sig-stable" />
+            </item>
+          </channel>
+        </rss>
+        """
+
+        let item = try DevAppcastParser.latestItem(from: Data(xml.utf8))
+
+        #expect(item.version.bundleVersion == "1.2.3.0")
+        #expect(item.displayVersion == "1.2.3")
     }
 }

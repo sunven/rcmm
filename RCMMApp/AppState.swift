@@ -360,16 +360,16 @@ final class AppState {
         case .available(let item, let eligibility):
             switch eligibility {
             case .inPlaceInstall:
-                return "发现新版本 \(item.version.displayVersion)，可以直接安装。"
+                return "发现新版本 \(item.displayVersion)，可以直接安装。"
             case .manualInstall(let reason, _):
-                return "发现新版本 \(item.version.displayVersion)。\(reason)"
+                return "发现新版本 \(item.displayVersion)。\(reason)"
             }
         case .disabled:
             return "这个构建暂未启用应用内更新，请从 Releases 页面下载新版。"
         case .failed(let message):
             return message
         case .installing(let item):
-            return "正在准备安装 \(item.version.displayVersion)…"
+            return "正在准备安装 \(item.displayVersion)…"
         }
     }
 
@@ -519,7 +519,7 @@ final class AppState {
         let primaryButtonTitle = Self.primaryButtonTitle(for: eligibility)
 
         let contentView = UpdatePromptView(
-            version: item.version.displayVersion,
+            version: item.displayVersion,
             releaseNotesURL: item.releaseNotesURL,
             primaryButtonTitle: primaryButtonTitle,
             onPrimaryAction: { [weak self] in
@@ -557,7 +557,7 @@ final class AppState {
 
     func dismissAvailableUpdateForSession() {
         if case .available(let item, _) = updateState {
-            dismissedUpdateDisplayVersion = item.version.displayVersion
+            dismissedUpdateDisplayVersion = item.displayVersion
         }
         shouldHideToMenuBarAfterUpdatePromptCloses = true
         closeUpdatePromptWindow()
