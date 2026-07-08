@@ -74,7 +74,7 @@ rcmm.xcodeproj
 3. `ScriptCompilationPipeline.publishCurrentConfiguration()` 读取已保存配置并发布脚本
 4. `ScriptInstallerService.syncScripts()` 编译 AppleScript `.scpt` 文件至 `~/Library/Application Scripts/{extension-bundle-id}/`
 5. `DarwinNotificationCenter.post(.configChanged)` 通知扩展
-6. 下次右键 → `FinderSync.menu(for:)` 读取 UserDefaults，生成 `NSMenu`
+6. 下次右键 → `FinderSync.menu(for:)` 使用已缓存的菜单快照生成 `NSMenu`，并通过 plist mtime/TTL 兜底检查漏掉的通知
 7. 用户点击菜单项 → `ScriptExecutor` 通过 `NSUserAppleScriptTask` 加载并执行 `.scpt`
 
 ### 关键文件
@@ -100,7 +100,7 @@ rcmm.xcodeproj
 ### 已知问题与绕过方案
 
 - **MenuBarExtra → Settings 窗口：** `ActivationPolicyManager` 通过切换 `NSApplication.activationPolicy` 解决 SwiftUI 的 bug（从 MenuBarExtra 应用打开 Settings 窗口无法聚焦）。
-- **扩展菜单状态：** 每次右键都从 UserDefaults 重新读取菜单项（不缓存），以应对扩展多实例问题。
+- **扩展菜单状态：** FinderSync 缓存菜单快照以保证右键响应速度；Darwin notification 会即时刷新，`menu(for:)` 还会用共享 plist mtime/TTL 做便宜兜底，避免漏通知后长期 stale。
 - **脚本编译超时：** `osacompile` 包裹了 10 秒异步超时保护，防止挂起。
 
 ## 架构参考文档

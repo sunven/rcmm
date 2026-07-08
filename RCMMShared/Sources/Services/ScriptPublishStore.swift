@@ -7,6 +7,10 @@ public final class ScriptPublishStore: @unchecked Sendable {
         preferences = SharedPreferencesStore(defaults: defaults)
     }
 
+    public init(preferences: SharedPreferencesStore) {
+        self.preferences = preferences
+    }
+
     public func loadAll() -> [String: ScriptPublishState] {
         guard let data = preferences.data(forKey: SharedKeys.scriptPublishStates) else {
             return [:]

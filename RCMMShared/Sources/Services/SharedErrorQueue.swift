@@ -8,6 +8,10 @@ public final class SharedErrorQueue: @unchecked Sendable {
         preferences = SharedPreferencesStore(defaults: defaults)
     }
 
+    public init(preferences: SharedPreferencesStore) {
+        self.preferences = preferences
+    }
+
     /// Note: This method is not atomic across processes. If the main app and extension
     /// call append() simultaneously, one write may be lost. This is acceptable given the
     /// low frequency of error events and the non-critical nature of the error queue.

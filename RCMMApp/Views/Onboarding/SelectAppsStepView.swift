@@ -65,20 +65,22 @@ struct SelectAppsStepView: View {
 }
 
 #Preview("加载中") {
+    let appModel = AppModel(forPreview: true)
+
     SelectAppsStepView(selectedAppIds: .constant([]))
-        .environment(AppState())
+        .environment(appModel.appState)
         .frame(width: 480, height: 500)
 }
 
 #Preview("列表状态") {
-    let appState = AppState()
-    appState.discoveredApps = [
+    let appModel = AppModel(forPreview: true)
+    appModel.appState.discoveredApps = [
         AppInfo(name: "Terminal", bundleId: "com.apple.Terminal", path: "/System/Applications/Utilities/Terminal.app", category: .terminal),
         AppInfo(name: "iTerm", bundleId: "com.googlecode.iterm2", path: "/Applications/iTerm.app", category: .terminal),
         AppInfo(name: "Visual Studio Code", bundleId: "com.microsoft.VSCode", path: "/Applications/Visual Studio Code.app", category: .editor),
     ]
-    let sampleId = appState.discoveredApps.first!.id
+    let sampleId = appModel.appState.discoveredApps.first!.id
     return SelectAppsStepView(selectedAppIds: .constant([sampleId]))
-        .environment(appState)
+        .environment(appModel.appState)
         .frame(width: 480, height: 500)
 }

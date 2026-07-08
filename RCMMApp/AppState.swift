@@ -27,28 +27,28 @@ enum ExtensionCleanupFlowState: Equatable {
 final class AppState {
     // MARK: - 领域模型（委托给 AppCoordinator）
 
-    private weak var coordinator: AppCoordinator?
+    private let coordinator: AppCoordinator
 
     var menuEntries: [MenuEntry] {
-        get { coordinator?.configStore.menuEntries ?? [] }
-        set { coordinator?.configStore.menuEntries = newValue }
+        get { coordinator.configStore.menuEntries }
+        set { coordinator.configStore.menuEntries = newValue }
     }
 
     var menuPresentationMode: MenuPresentationMode {
-        get { coordinator?.configStore.menuPresentationMode ?? .flat }
-        set { coordinator?.configStore.menuPresentationMode = newValue }
+        get { coordinator.configStore.menuPresentationMode }
+        set { coordinator.configStore.menuPresentationMode = newValue }
     }
 
     var scriptPublishStates: [String: ScriptPublishState] {
-        get { coordinator?.configStore.scriptPublishStates ?? [:] }
+        get { coordinator.configStore.scriptPublishStates }
     }
 
     var errorRecords: [ErrorRecord] {
-        get { coordinator?.configStore.errorRecords ?? [] }
+        get { coordinator.configStore.errorRecords }
     }
 
     var autoRepairMessage: String? {
-        get { coordinator?.autoRepairMessage }
+        get { coordinator.autoRepairMessage }
     }
 
     // MARK: - UI 状态（AppState 保留）
@@ -100,13 +100,8 @@ final class AppState {
     private static let isDebugBuild = false
 #endif
 
-    // MARK: - Coordinator Integration
-
-    func setCoordinator(_ coordinator: AppCoordinator) {
-        self.coordinator = coordinator
-    }
-
-    init(forPreview: Bool = false) {
+    init(coordinator: AppCoordinator? = nil, forPreview: Bool = false) {
+        self.coordinator = coordinator ?? AppCoordinator(forPreview: forPreview)
         isOnboardingCompleted = SharedPreferencesStore()
             .bool(forKey: SharedKeys.onboardingCompleted)
 
@@ -145,11 +140,11 @@ final class AppState {
 
     func loadErrors() {
         // 委托给 AppCoordinator：configStore 负责加载错误，coordinator 负责触发自动修复
-        coordinator?.configStore.loadErrors()
+        coordinator.configStore.loadErrors()
     }
 
     func dismissAllErrors() {
-        coordinator?.dismissAllErrors()
+        coordinator.dismissAllErrors()
     }
 
     // MARK: - Extension Status
@@ -682,51 +677,28 @@ final class AppState {
     // MARK: - Menu Items
 
     var primaryNewFileMenu: NewFileMenuConfig? {
-        coordinator?.configStore.primaryNewFileMenu
+        coordinator.configStore.primaryNewFileMenu
     }
 
     @discardableResult
     func ensureNewFileMenu() -> UUID {
-        coordinator?.configStore.ensureNewFileMenu() ?? UUID()
+        coordinator.configStore.ensureNewFileMenu()
     }
 
     /// 从 AppInfo 创建 MenuItemConfig 并添加到菜单
     @discardableResult
     func addMenuItem(from appInfo: AppInfo) -> UUID? {
-        guard !containsCustomMenuItem(matching: appInfo) else { return nil }
-        let newItem = MenuItemConfig(
-            appName: appInfo.name,
-            bundleId: appInfo.bundleId,
-            appPath: appInfo.path
-        )
-        menuEntries.append(.custom(newItem))
-        saveAndSync()
-        return newItem.id
+        coordinator.addMenuItem(from: appInfo)
     }
 
     @discardableResult
     func addEmptyCompositeCommand() -> UUID {
-        let composite = CompositeMenuItemConfig(
-            name: "新组合命令",
-            iconName: "rectangle.stack.badge.play",
-            steps: []
-        )
-        menuEntries.append(.composite(composite))
-        saveAndSync()
-        return composite.id
+        coordinator.addEmptyCompositeCommand()
     }
 
     @discardableResult
     func addGitPullCommand() -> UUID {
-        let item = MenuItemConfig(
-            appName: "Git Pull",
-            appPath: "",
-            customCommand: "git pull",
-            executionMode: .currentDirectory
-        )
-        menuEntries.append(.custom(item))
-        saveAndSync()
-        return item.id
+        coordinator.addGitPullCommand()
     }
 
     func addEditorTerminalPreset(onCreated: ((UUID) -> Void)? = nil) {
@@ -782,61 +754,15 @@ final class AppState {
                 ),
             ]
         )
-        menuEntries.append(.composite(composite))
+        let id = coordinator.addCompositeCommand(composite)
         compositePresetMessage = nil
-        saveAndSync()
-        onCreated?(composite.id)
+        onCreated?(id)
     }
 
     /// 批量添加多个应用到菜单（只触发一次 saveAndSync）
     @discardableResult
     func addMenuItems(from appInfos: [AppInfo]) -> [UUID] {
-        var existingBundleIds = Set<String>()
-        var existingPaths = Set<String>()
-        var addedIDs: [UUID] = []
-        for entry in menuEntries {
-            guard case .custom(let item) = entry else { continue }
-            if let bundleId = item.bundleId {
-                existingBundleIds.insert(bundleId)
-            }
-            existingPaths.insert(item.appPath)
-        }
-
-        for appInfo in appInfos {
-            if let bundleId = appInfo.bundleId, existingBundleIds.contains(bundleId) {
-                continue
-            }
-            guard !existingPaths.contains(appInfo.path) else { continue }
-
-            let newItem = MenuItemConfig(
-                appName: appInfo.name,
-                bundleId: appInfo.bundleId,
-                appPath: appInfo.path
-            )
-            menuEntries.append(.custom(newItem))
-            if let bundleId = appInfo.bundleId {
-                existingBundleIds.insert(bundleId)
-            }
-            existingPaths.insert(appInfo.path)
-            addedIDs.append(newItem.id)
-        }
-        if !addedIDs.isEmpty {
-            saveAndSync()
-        }
-        return addedIDs
-    }
-
-    private func containsCustomMenuItem(matching appInfo: AppInfo) -> Bool {
-        for entry in menuEntries {
-            guard case .custom(let item) = entry else { continue }
-            if let bundleId = appInfo.bundleId, item.bundleId == bundleId {
-                return true
-            }
-            if item.appPath == appInfo.path {
-                return true
-            }
-        }
-        return false
+        coordinator.addMenuItems(from: appInfos)
     }
 
     private func preferredDiscoveredApp(
@@ -861,49 +787,24 @@ final class AppState {
 
     /// 移动菜单项到新位置（拖拽排序）
     func moveEntry(from source: IndexSet, to destination: Int, sync: Bool = true) {
-        menuEntries.move(fromOffsets: source, toOffset: destination)
         if sync {
-            saveAndSync()
+            coordinator.moveEntry(from: source, to: destination)
+        } else {
+            coordinator.configStore.moveEntry(from: source, to: destination, save: false)
         }
     }
 
     /// 删除指定位置的菜单项
     func removeEntry(at offsets: IndexSet) {
-        let removableOffsets = offsets.filter { index in
-            switch menuEntries[index] {
-            case .custom, .composite:
-                return true
-            case .builtIn, .newFile:
-                return false
-            }
-        }
-        menuEntries.remove(atOffsets: IndexSet(removableOffsets))
-        saveAndSync()
+        coordinator.removeEntry(at: offsets)
     }
 
     func updateNewFileMenuName(for menuID: UUID, name: String) {
-        updateNewFileMenu(for: menuID) { config in
-            config.name = uniqueNewFileMenuName(
-                preferredName: name,
-                excluding: menuID
-            )
-        }
+        coordinator.updateNewFileMenuName(for: menuID, name: name)
     }
 
     func addNewFileTemplate(to menuID: UUID) {
-        updateNewFileMenu(for: menuID) { config in
-            let displayName = uniqueNewFileTemplateName(
-                preferredName: "txt",
-                existingTemplates: config.templates
-            )
-            config.templates.append(
-                NewFileTemplateConfig(
-                    displayName: displayName,
-                    fileExtension: "txt",
-                    creationMode: .emptyFile
-                )
-            )
-        }
+        coordinator.addNewFileTemplate(to: menuID)
     }
 
     func updateNewFileTemplate(
@@ -917,108 +818,25 @@ final class AppState {
         initialContent: String?,
         isEnabled: Bool
     ) {
-        updateNewFileMenu(for: menuID) { config in
-            guard let index = config.templates.firstIndex(where: { $0.id == templateID }) else {
-                return
-            }
-            let normalizedTemplatePath = creationMode == .copyTemplate ? templatePath : nil
-            let normalizedInitialContent = creationMode == .textContent ? initialContent : nil
-            config.templates[index].displayName = displayName
-            config.templates[index].baseName = baseName
-            config.templates[index].fileExtension = fileExtension
-            config.templates[index].creationMode = creationMode
-            config.templates[index].templatePath = normalizedTemplatePath
-            config.templates[index].templateFingerprint = NewFileTemplateFingerprint.fileFingerprint(
-                at: normalizedTemplatePath
-            )
-            config.templates[index].initialContent = normalizedInitialContent
-            config.templates[index].isEnabled = isEnabled
-        }
+        coordinator.updateNewFileTemplate(
+            menuID: menuID,
+            templateID: templateID,
+            displayName: displayName,
+            baseName: baseName,
+            fileExtension: fileExtension,
+            creationMode: creationMode,
+            templatePath: templatePath,
+            initialContent: initialContent,
+            isEnabled: isEnabled
+        )
     }
 
     func removeNewFileTemplate(menuID: UUID, templateID: UUID) {
-        updateNewFileMenu(for: menuID) { config in
-            config.templates.removeAll { $0.id == templateID }
-        }
+        coordinator.removeNewFileTemplate(menuID: menuID, templateID: templateID)
     }
 
     func moveNewFileTemplate(menuID: UUID, from source: IndexSet, to destination: Int) {
-        updateNewFileMenu(for: menuID) { config in
-            config.templates.move(fromOffsets: source, toOffset: destination)
-        }
-    }
-
-    private func updateNewFileMenu(
-        for menuID: UUID,
-        mutate: (inout NewFileMenuConfig) -> Void
-    ) {
-        guard let index = menuEntries.firstIndex(where: {
-            if case .newFile(let config) = $0 { return config.id == menuID }
-            return false
-        }) else { return }
-        guard case .newFile(var config) = menuEntries[index] else { return }
-        mutate(&config)
-        menuEntries[index] = .newFile(config)
-        saveAndSync()
-    }
-
-    private func uniqueNewFileTemplateName(
-        preferredName: String,
-        existingTemplates: [NewFileTemplateConfig]
-    ) -> String {
-        let existingNames = Set(
-            existingTemplates
-                .map { $0.displayName.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-        )
-        return uniqueName(
-            preferredName: preferredName,
-            fallbackName: "模板",
-            existingNames: existingNames
-        )
-    }
-
-    private func uniqueNewFileMenuName(
-        preferredName: String,
-        excluding menuID: UUID? = nil
-    ) -> String {
-        let existingNames = Set(
-            menuEntries.compactMap { entry -> String? in
-                guard case .newFile(let config) = entry,
-                      config.id != menuID else {
-                    return nil
-                }
-                let trimmed = config.name.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty ? nil : trimmed
-            }
-        )
-        return uniqueName(
-            preferredName: preferredName,
-            fallbackName: "新建",
-            existingNames: existingNames
-        )
-    }
-
-    private func uniqueName(
-        preferredName: String,
-        fallbackName: String,
-        existingNames: Set<String>
-    ) -> String {
-        let trimmedPreferredName = preferredName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseName = trimmedPreferredName.isEmpty ? fallbackName : trimmedPreferredName
-
-        guard existingNames.contains(baseName) else {
-            return baseName
-        }
-
-        var index = 2
-        while true {
-            let candidate = "\(baseName) \(index)"
-            if !existingNames.contains(candidate) {
-                return candidate
-            }
-            index += 1
-        }
+        coordinator.moveNewFileTemplate(menuID: menuID, from: source, to: destination)
     }
 
     func updateCustomCommand(
@@ -1027,27 +845,16 @@ final class AppState {
         command: String?,
         executionMode: CustomCommandExecutionMode? = nil
     ) {
-        guard let index = menuEntries.firstIndex(where: {
-            if case .custom(let config) = $0 { return config.id == itemId }
-            return false
-        }) else { return }
-        if case .custom(var config) = menuEntries[index] {
-            if let name {
-                config.appName = name
-            }
-            config.customCommand = command
-            if let executionMode {
-                config.executionMode = executionMode
-            }
-            menuEntries[index] = .custom(config)
-        }
-        saveAndSync()
+        coordinator.updateCustomCommand(
+            for: itemId,
+            name: name,
+            command: command,
+            executionMode: executionMode
+        )
     }
 
     func updateCompositeName(for compositeId: UUID, name: String) {
-        updateComposite(for: compositeId) { config in
-            config.name = name
-        }
+        coordinator.updateCompositeName(for: compositeId, name: name)
     }
 
     func updateCompositeStep(
@@ -1059,85 +866,41 @@ final class AppState {
         bundleId: String?,
         isEnabled: Bool
     ) {
-        updateComposite(for: compositeId) { config in
-            guard let stepIndex = config.steps.firstIndex(where: { $0.id == stepId }) else {
-                return
-            }
-            config.steps[stepIndex].name = name
-            config.steps[stepIndex].commandTemplate = commandTemplate
-            config.steps[stepIndex].appPath = appPath
-            config.steps[stepIndex].bundleId = bundleId
-            config.steps[stepIndex].isEnabled = isEnabled
-        }
+        coordinator.updateCompositeStep(
+            compositeID: compositeId,
+            stepID: stepId,
+            name: name,
+            commandTemplate: commandTemplate,
+            appPath: appPath,
+            bundleID: bundleId,
+            isEnabled: isEnabled
+        )
     }
 
     func addShellStep(to compositeId: UUID) {
-        updateComposite(for: compositeId) { config in
-            config.steps.append(
-                CompositeCommandStep(
-                    kind: .shell,
-                    name: "Shell",
-                    commandTemplate: "open -a Terminal {path}"
-                )
-            )
-        }
+        coordinator.addShellStep(to: compositeId)
     }
 
     func removeCompositeStep(compositeId: UUID, stepId: UUID) {
-        updateComposite(for: compositeId) { config in
-            config.steps.removeAll { $0.id == stepId }
-        }
+        coordinator.removeCompositeStep(compositeID: compositeId, stepID: stepId)
     }
 
     func moveCompositeStep(compositeId: UUID, from source: IndexSet, to destination: Int) {
-        updateComposite(for: compositeId) { config in
-            config.steps.move(fromOffsets: source, toOffset: destination)
-        }
-    }
-
-    private func updateComposite(
-        for compositeId: UUID,
-        mutate: (inout CompositeMenuItemConfig) -> Void
-    ) {
-        guard let index = menuEntries.firstIndex(where: {
-            if case .composite(let config) = $0 { return config.id == compositeId }
-            return false
-        }) else { return }
-        guard case .composite(var config) = menuEntries[index] else { return }
-        mutate(&config)
-        menuEntries[index] = .composite(config)
-        saveAndSync()
+        coordinator.moveCompositeStep(compositeID: compositeId, from: source, to: destination)
     }
 
     /// 切换菜单项的启用/禁用状态
     func toggleEntry(for entryId: String, isEnabled: Bool) {
-        guard let index = menuEntries.firstIndex(where: { $0.id == entryId }) else { return }
-        switch menuEntries[index] {
-        case .builtIn(var item):
-            item.isEnabled = isEnabled
-            menuEntries[index] = .builtIn(item)
-        case .custom(var config):
-            config.isEnabled = isEnabled
-            menuEntries[index] = .custom(config)
-        case .composite(var config):
-            config.isEnabled = isEnabled
-            menuEntries[index] = .composite(config)
-        case .newFile(var config):
-            config.isEnabled = isEnabled
-            menuEntries[index] = .newFile(config)
-        }
-        saveAndSync()
+        coordinator.toggleEntry(for: entryId, isEnabled: isEnabled)
     }
 
     func updateMenuPresentationMode(_ mode: MenuPresentationMode) {
-        guard menuPresentationMode != mode else { return }
-        coordinator?.configStore.saveMenuPresentationMode(mode)
-        DarwinNotificationCenter.shared.post(NotificationNames.configChanged)
+        coordinator.updateMenuPresentationMode(mode)
     }
 
     /// 保存配置 + 同步脚本 + 发送 Darwin Notification
     func saveAndSync() {
-        coordinator?.saveAndSync()
+        coordinator.saveAndSync()
     }
 
 }

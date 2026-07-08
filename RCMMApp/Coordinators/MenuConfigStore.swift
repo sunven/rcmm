@@ -24,13 +24,20 @@ final class MenuConfigStore {
 
     // MARK: - Dependencies
 
-    private let configService = SharedConfigService()
-    private let publishStore = ScriptPublishStore()
-    private let errorQueue = SharedErrorQueue()
+    private let configService: SharedConfigService
+    private let publishStore: ScriptPublishStore
+    private let errorQueue: SharedErrorQueue
 
     // MARK: - Initialization
 
-    init() {
+    init(
+        configService: SharedConfigService = SharedConfigService(),
+        publishStore: ScriptPublishStore = ScriptPublishStore(),
+        errorQueue: SharedErrorQueue = SharedErrorQueue()
+    ) {
+        self.configService = configService
+        self.publishStore = publishStore
+        self.errorQueue = errorQueue
         loadMenuPresentationMode()
         loadMenuEntries()
         loadPublishStates()
@@ -145,15 +152,35 @@ final class MenuConfigStore {
     }
 
     @discardableResult
+    func addMenuItems(from appInfos: [AppInfo]) -> [UUID] {
+        var addedIDs: [UUID] = []
+
+        for appInfo in appInfos {
+            guard !containsCustomMenuItem(matching: appInfo) else { continue }
+
+            let newItem = MenuItemConfig(
+                appName: appInfo.name,
+                bundleId: appInfo.bundleId,
+                appPath: appInfo.path
+            )
+            menuEntries.append(.custom(newItem))
+            addedIDs.append(newItem.id)
+        }
+
+        if !addedIDs.isEmpty {
+            saveEntries()
+        }
+        return addedIDs
+    }
+
+    @discardableResult
     func addEmptyCompositeCommand() -> UUID {
         let composite = CompositeMenuItemConfig(
             name: "新组合命令",
             iconName: "rectangle.stack.badge.play",
             steps: []
         )
-        menuEntries.append(.composite(composite))
-        saveEntries()
-        return composite.id
+        return addCompositeCommand(composite)
     }
 
     @discardableResult
@@ -169,18 +196,47 @@ final class MenuConfigStore {
         return item.id
     }
 
+    @discardableResult
+    func addCompositeCommand(_ composite: CompositeMenuItemConfig) -> UUID {
+        menuEntries.append(.composite(composite))
+        saveEntries()
+        return composite.id
+    }
+
     private func containsCustomMenuItem(matching appInfo: AppInfo) -> Bool {
         menuEntries.contains { entry in
             guard case .custom(let config) = entry else { return false }
-            return config.bundleId == appInfo.bundleId
+            return customMenuItem(config, matches: appInfo)
         }
+    }
+
+    private func customMenuItem(_ item: MenuItemConfig, matches appInfo: AppInfo) -> Bool {
+        if let bundleID = normalizedNonEmpty(appInfo.bundleId) {
+            return normalizedNonEmpty(item.bundleId) == bundleID
+        }
+
+        return normalizedPath(item.appPath) == normalizedPath(appInfo.path)
+    }
+
+    private func normalizedNonEmpty(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
+    }
+
+    private func normalizedPath(_ path: String) -> String {
+        path.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Update Menu Items
 
-    func moveEntry(from source: IndexSet, to destination: Int) {
+    func moveEntry(from source: IndexSet, to destination: Int, save: Bool = true) {
         menuEntries.move(fromOffsets: source, toOffset: destination)
-        saveEntries()
+        if save {
+            saveEntries()
+        }
     }
 
     func removeEntry(at offsets: IndexSet) {
@@ -394,12 +450,13 @@ final class MenuConfigStore {
                 guard case .newFile(let config) = entry, config.id != menuID else {
                     return nil
                 }
-                return config.name
+                let trimmed = config.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
             }
         )
         return uniqueName(
             preferredName: preferredName,
-            fallbackName: "新建文件",
+            fallbackName: "新建",
             existingNames: existingNames
         )
     }
@@ -408,10 +465,14 @@ final class MenuConfigStore {
         preferredName: String,
         existingTemplates: [NewFileTemplateConfig]
     ) -> String {
-        let existingNames = Set(existingTemplates.map(\.displayName))
+        let existingNames = Set(
+            existingTemplates
+                .map { $0.displayName.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        )
         return uniqueName(
             preferredName: preferredName,
-            fallbackName: "txt",
+            fallbackName: "模板",
             existingNames: existingNames
         )
     }

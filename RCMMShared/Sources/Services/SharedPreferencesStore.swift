@@ -2,6 +2,9 @@ import Darwin
 import Foundation
 
 public final class SharedPreferencesStore: @unchecked Sendable {
+    private static let propertyListLockRegistryLock = NSLock()
+    nonisolated(unsafe) private static var propertyListLocks: [String: NSLock] = [:]
+
     private enum Backend {
         case userDefaults(UserDefaults)
         case propertyList(URL)
@@ -9,7 +12,6 @@ public final class SharedPreferencesStore: @unchecked Sendable {
 
     private let backend: Backend
     private let fileManager: FileManager
-    private let lock = NSLock()
 
     public convenience init(defaults: UserDefaults? = nil) {
         if let defaults {
@@ -48,6 +50,16 @@ public final class SharedPreferencesStore: @unchecked Sendable {
             .appendingPathExtension("plist")
     }
 
+    public static func propertyListModificationDate(
+        at url: URL,
+        fileManager: FileManager = .default
+    ) -> Date? {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path) else {
+            return nil
+        }
+        return attributes[.modificationDate] as? Date
+    }
+
     public func data(forKey key: String) -> Data? {
         value(forKey: key) as? Data
     }
@@ -62,6 +74,15 @@ public final class SharedPreferencesStore: @unchecked Sendable {
 
     public func object(forKey key: String) -> Any? {
         value(forKey: key)
+    }
+
+    public func modificationDate() -> Date? {
+        switch backend {
+        case .userDefaults:
+            return nil
+        case .propertyList(let url):
+            return Self.propertyListModificationDate(at: url, fileManager: fileManager)
+        }
     }
 
     public func set(_ value: Any, forKey key: String) {
@@ -96,18 +117,17 @@ public final class SharedPreferencesStore: @unchecked Sendable {
     }
 
     private func updatePropertyList(_ mutate: (inout [String: Any]) -> Void) {
-        lock.lock()
-        defer { lock.unlock() }
-
-        var values = loadPropertyListUnlocked()
-        mutate(&values)
-        savePropertyListUnlocked(values)
+        withLockedPropertyList {
+            var values = loadPropertyListUnlocked()
+            mutate(&values)
+            savePropertyListUnlocked(values)
+        }
     }
 
     private func loadPropertyList() -> [String: Any] {
-        lock.lock()
-        defer { lock.unlock() }
-        return loadPropertyListUnlocked()
+        withLockedPropertyList {
+            loadPropertyListUnlocked()
+        }
     }
 
     private func loadPropertyListUnlocked() -> [String: Any] {
@@ -141,6 +161,53 @@ public final class SharedPreferencesStore: @unchecked Sendable {
         } catch {
             assertionFailure("Failed to write shared preferences: \(error)")
         }
+    }
+
+    private func withLockedPropertyList<T>(_ body: () -> T) -> T {
+        guard case .propertyList(let url) = backend else {
+            return body()
+        }
+
+        let inProcessLock = Self.propertyListLock(for: url)
+        inProcessLock.lock()
+        defer { inProcessLock.unlock() }
+
+        let descriptor = openLockFile(for: url)
+        if descriptor >= 0 {
+            flock(descriptor, LOCK_EX)
+        }
+        defer {
+            if descriptor >= 0 {
+                flock(descriptor, LOCK_UN)
+                close(descriptor)
+            }
+        }
+
+        return body()
+    }
+
+    private static func propertyListLock(for url: URL) -> NSLock {
+        let key = url.standardizedFileURL.path
+
+        propertyListLockRegistryLock.lock()
+        defer { propertyListLockRegistryLock.unlock() }
+
+        if let lock = propertyListLocks[key] {
+            return lock
+        }
+
+        let lock = NSLock()
+        propertyListLocks[key] = lock
+        return lock
+    }
+
+    private func openLockFile(for url: URL) -> Int32 {
+        let lockURL = url.appendingPathExtension("lock")
+        try? fileManager.createDirectory(
+            at: lockURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        return open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
     }
 
     private static func realHomeDirectory() -> URL {

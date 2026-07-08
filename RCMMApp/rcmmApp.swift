@@ -3,30 +3,21 @@ import RCMMShared
 
 @main
 struct rcmmApp: App {
-    @State private var appState = AppState()
-    @State private var appCoordinator = AppCoordinator()
-
-    init() {
-        // 在 init 中连接两者（Settings 场景不支持 onAppear）
-    }
+    @State private var appModel = AppModel()
 
     var body: some Scene {
         MenuBarExtra {
             PopoverContainerView()
-                .environment(appState)
-                .environment(appCoordinator)
-                .onAppear {
-                    // 连接 AppState 和 AppCoordinator
-                    appState.setCoordinator(appCoordinator)
-                }
+                .environment(appModel.appState)
+                .environment(appModel.appCoordinator)
         } label: {
-            MenuBarStatusIcon(status: appState.extensionStatus)
+            MenuBarStatusIcon(status: appModel.appState.extensionStatus)
         }
         .menuBarExtraStyle(.window)
         Settings {
             SettingsView()
-                .environment(appState)
-                .environment(appCoordinator)
+                .environment(appModel.appState)
+                .environment(appModel.appCoordinator)
                 .onDisappear {
                     ActivationPolicyManager.hideToMenuBar()
                 }

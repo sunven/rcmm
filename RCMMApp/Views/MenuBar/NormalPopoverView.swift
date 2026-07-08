@@ -56,22 +56,23 @@ struct NormalPopoverView: View {
 }
 
 #Preview {
+    let appModel = AppModel(forPreview: true)
+
     NormalPopoverView()
-        .environment(AppState(forPreview: true))
+        .environment(appModel.appState)
+        .environment(appModel.appCoordinator)
         .frame(width: 220)
 }
 
 #Preview("有错误") {
-    let coordinator = AppCoordinator(forPreview: true)
-    let state = AppState(forPreview: true)
-    state.setCoordinator(coordinator)
+    let appModel = AppModel(forPreview: true)
 
-    coordinator.configStore.errorRecords = [
+    appModel.appCoordinator.configStore.errorRecords = [
         ErrorRecord(source: "ScriptExecutor", message: "脚本执行失败: exit code 1", context: "VS Code"),
     ]
 
     return NormalPopoverView()
-        .environment(state)
-        .environment(coordinator)
+        .environment(appModel.appState)
+        .environment(appModel.appCoordinator)
         .frame(width: 220)
 }

@@ -188,6 +188,73 @@ struct SharedConfigServiceTests {
         cleanup()
     }
 
+    @Test("合并新建文件模板 fingerprint 时不覆盖当前用户配置")
+    func mergeNewFileTemplateFingerprintsPreservesCurrentEntries() {
+        let menuID = UUID(uuidString: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")!
+        let matchingTemplateID = UUID(uuidString: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")!
+        let deletedTemplateID = UUID(uuidString: "cccccccc-cccc-cccc-cccc-cccccccccccc")!
+        let fingerprint = NewFileTemplateFingerprint(
+            path: "/tmp/template.docx",
+            fileSize: 10,
+            modificationTime: 20
+        )
+        let currentEntries: [MenuEntry] = [
+            .newFile(NewFileMenuConfig(
+                id: menuID,
+                name: "用户已改名",
+                templates: [
+                    NewFileTemplateConfig(
+                        id: matchingTemplateID,
+                        displayName: "word",
+                        fileExtension: "docx",
+                        creationMode: .copyTemplate,
+                        templatePath: "/tmp/template.docx"
+                    ),
+                ]
+            )),
+            .custom(MenuItemConfig(appName: "用户新增", appPath: "/Applications/User.app")),
+        ]
+        let staleRefreshedEntries: [MenuEntry] = [
+            .newFile(NewFileMenuConfig(
+                id: menuID,
+                name: "旧名称",
+                templates: [
+                    NewFileTemplateConfig(
+                        id: matchingTemplateID,
+                        displayName: "word",
+                        fileExtension: "docx",
+                        creationMode: .copyTemplate,
+                        templatePath: "/tmp/template.docx",
+                        templateFingerprint: fingerprint
+                    ),
+                    NewFileTemplateConfig(
+                        id: deletedTemplateID,
+                        displayName: "旧模板",
+                        fileExtension: "docx",
+                        creationMode: .copyTemplate,
+                        templatePath: "/tmp/template.docx",
+                        templateFingerprint: fingerprint
+                    ),
+                ]
+            )),
+        ]
+        service.saveEntries(currentEntries)
+
+        let didMerge = service.mergeNewFileTemplateFingerprints(from: staleRefreshedEntries)
+
+        #expect(didMerge)
+        let loaded = service.loadEntries()
+        #expect(loaded.map(\.displayName) == ["用户已改名", "用户新增"])
+        guard case .newFile(let config) = loaded.first else {
+            Issue.record("Expected new file menu")
+            cleanup()
+            return
+        }
+        #expect(config.templates.map(\.id) == [matchingTemplateID])
+        #expect(config.templates.first?.templateFingerprint == fingerprint)
+        cleanup()
+    }
+
     @Test("未知 unified entries 不触发 legacy 迁移")
     func unknownUnifiedEntriesDoNotMigrateLegacyKeys() throws {
         let legacyItems = [

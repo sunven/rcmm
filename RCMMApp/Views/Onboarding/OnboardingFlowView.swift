@@ -223,6 +223,8 @@ struct OnboardingFlowView: View {
 }
 
 #Preview {
+    let appModel = AppModel(forPreview: true)
+
     OnboardingFlowView()
-        .environment(AppState())
+        .environment(appModel.appState)
 }

@@ -119,47 +119,42 @@ struct ErrorBannerView: View {
 }
 
 #Preview("有错误") {
-    let coordinator = AppCoordinator(forPreview: true)
-    let state = AppState(forPreview: true)
-    state.setCoordinator(coordinator)
+    let appModel = AppModel(forPreview: true)
 
     // 直接设置到 configStore
-    coordinator.configStore.errorRecords = [
+    appModel.appCoordinator.configStore.errorRecords = [
         ErrorRecord(source: "extension", message: "脚本执行失败: exit code 1", context: "VS Code"),
         ErrorRecord(source: "extension", message: "脚本文件不存在或无法加载: vscode.scpt", context: "VS Code"),
     ]
 
     return ErrorBannerView()
-        .environment(state)
-        .environment(coordinator)
+        .environment(appModel.appState)
+        .environment(appModel.appCoordinator)
         .frame(width: 196)
         .padding()
 }
 
 #Preview("有自动修复消息") {
-    let coordinator = AppCoordinator(forPreview: true)
-    let state = AppState(forPreview: true)
-    state.setCoordinator(coordinator)
+    let appModel = AppModel(forPreview: true)
 
-    coordinator.configStore.errorRecords = [
+    appModel.appCoordinator.configStore.errorRecords = [
         ErrorRecord(source: "extension", message: "脚本文件不存在或无法加载: vscode.scpt", context: "VS Code"),
     ]
-    coordinator.autoRepairMessage = "已自动修复脚本文件"
+    appModel.appCoordinator.autoRepairMessage = "已自动修复脚本文件"
 
     return ErrorBannerView()
-        .environment(state)
-        .environment(coordinator)
+        .environment(appModel.appState)
+        .environment(appModel.appCoordinator)
         .frame(width: 196)
         .padding()
 }
 
 #Preview("无错误") {
-    let coordinator = AppCoordinator(forPreview: true)
-    let state = AppState(forPreview: true)
-    state.setCoordinator(coordinator)
+    let appModel = AppModel(forPreview: true)
 
     return ErrorBannerView()
-        .environment(state)
+        .environment(appModel.appState)
+        .environment(appModel.appCoordinator)
         .frame(width: 196)
         .padding()
 }

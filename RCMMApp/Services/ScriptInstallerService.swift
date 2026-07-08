@@ -64,12 +64,18 @@ final class ScriptInstallerService {
     /// 同步脚本文件：删除多余脚本，编译当前脚本，并写入 Finder 可读的发布状态。
     @discardableResult
     func syncScripts(with entries: [MenuEntry]) -> [ScriptSyncResult] {
-        let entriesToSync = configService.hasSavedEntriesData
+        let hadSavedEntriesData = configService.hasSavedEntriesData
+        let entriesToSync = hadSavedEntriesData
             ? configService.loadEntries()
             : entries
-        let refreshedEntries = refreshNewFileTemplateFingerprints(in: entriesToSync)
+        let refreshedEntries = NewFileTemplateMetadataPolicy.refreshingTemplateFingerprints(
+            in: entriesToSync
+        )
         if refreshedEntries != entriesToSync {
-            configService.saveEntries(refreshedEntries)
+            persistRefreshedNewFileTemplateFingerprints(
+                refreshedEntries,
+                hadSavedEntriesData: hadSavedEntriesData
+            )
         }
         let scriptBackedEntries = refreshedEntries.flatMap { entry -> [(MenuEntry, ScriptBackedMenuEntry)] in
             MenuEntryScriptPolicy.scriptBackedEntries(for: entry).map { scriptBackedEntry in
@@ -77,6 +83,7 @@ final class ScriptInstallerService {
             }
         }
         let expectedIDs = Set(scriptBackedEntries.map(\.1.id))
+        let currencyValidator = ScriptCurrencyValidator(configService: configService)
 
         do {
             try fileManager.createDirectory(
@@ -91,7 +98,8 @@ final class ScriptInstallerService {
                     entry: entry,
                     scriptBackedEntry: scriptBackedEntry,
                     error: error,
-                    kind: .scriptPublish
+                    kind: .scriptPublish,
+                    currencyValidator: currencyValidator
                 )
             }
         }
@@ -100,15 +108,20 @@ final class ScriptInstallerService {
         publishStore.removeAll(except: expectedIDs)
 
         return scriptBackedEntries.map { entry, scriptBackedEntry in
-            syncScript(for: entry, scriptBackedEntry: scriptBackedEntry)
+            syncScript(
+                for: entry,
+                scriptBackedEntry: scriptBackedEntry,
+                currencyValidator: currencyValidator
+            )
         }
     }
 
     private func syncScript(
         for entry: MenuEntry,
-        scriptBackedEntry: ScriptBackedMenuEntry
+        scriptBackedEntry: ScriptBackedMenuEntry,
+        currencyValidator: ScriptCurrencyValidator
     ) -> ScriptSyncResult {
-        guard isStillCurrent(scriptBackedEntry) else {
+        guard currencyValidator.isStillCurrent(scriptBackedEntry) else {
             logger.debug("跳过过期脚本同步结果: \(scriptBackedEntry.id, privacy: .public)")
             return staleResult(for: scriptBackedEntry)
         }
@@ -127,12 +140,13 @@ final class ScriptInstallerService {
         } catch {
             try? fileManager.removeItem(at: finalURL)
             return recordFailure(
-                entry: entry,
-                scriptBackedEntry: scriptBackedEntry,
-                error: error,
-                kind: .scriptCompile
-            )
-        }
+                    entry: entry,
+                    scriptBackedEntry: scriptBackedEntry,
+                    error: error,
+                    kind: .scriptCompile,
+                    currencyValidator: currencyValidator
+                )
+            }
 
         do {
             try compiler.compile(source: source, outputURL: tempURL)
@@ -140,14 +154,15 @@ final class ScriptInstallerService {
             try? fileManager.removeItem(at: tempURL)
             try? fileManager.removeItem(at: finalURL)
             return recordFailure(
-                entry: entry,
-                scriptBackedEntry: scriptBackedEntry,
-                error: error,
-                kind: .scriptCompile
-            )
-        }
+                    entry: entry,
+                    scriptBackedEntry: scriptBackedEntry,
+                    error: error,
+                    kind: .scriptCompile,
+                    currencyValidator: currencyValidator
+                )
+            }
 
-        guard isStillCurrent(scriptBackedEntry) else {
+        guard currencyValidator.isStillCurrent(scriptBackedEntry) else {
             try? fileManager.removeItem(at: tempURL)
             logger.debug("丢弃过期脚本编译结果: \(scriptBackedEntry.id, privacy: .public)")
             return staleResult(for: scriptBackedEntry)
@@ -184,7 +199,8 @@ final class ScriptInstallerService {
                 entry: entry,
                 scriptBackedEntry: scriptBackedEntry,
                 error: error,
-                kind: .scriptPublish
+                kind: .scriptPublish,
+                currencyValidator: currencyValidator
             )
         }
     }
@@ -289,9 +305,10 @@ final class ScriptInstallerService {
         entry: MenuEntry,
         scriptBackedEntry: ScriptBackedMenuEntry,
         error: Error,
-        kind: ErrorRecordKind
+        kind: ErrorRecordKind,
+        currencyValidator: ScriptCurrencyValidator
     ) -> ScriptSyncResult {
-        guard isStillCurrent(scriptBackedEntry) else {
+        guard currencyValidator.isStillCurrent(scriptBackedEntry) else {
             return staleResult(for: scriptBackedEntry)
         }
 
@@ -386,32 +403,14 @@ final class ScriptInstallerService {
             .appendingPathExtension("scpt")
     }
 
-    private func isStillCurrent(_ scriptBackedEntry: ScriptBackedMenuEntry) -> Bool {
-        refreshNewFileTemplateFingerprints(in: configService.loadEntries())
-            .flatMap(MenuEntryScriptPolicy.scriptBackedEntries)
-            .contains { current in
-                current.id == scriptBackedEntry.id
-                    && current.fingerprint == scriptBackedEntry.fingerprint
-            }
-    }
-
-    private func refreshNewFileTemplateFingerprints(in entries: [MenuEntry]) -> [MenuEntry] {
-        entries.map { entry in
-            guard case .newFile(var config) = entry else {
-                return entry
-            }
-
-            for index in config.templates.indices {
-                guard config.templates[index].creationMode == .copyTemplate else {
-                    config.templates[index].templatePath = nil
-                    config.templates[index].templateFingerprint = nil
-                    continue
-                }
-                config.templates[index].templateFingerprint = NewFileTemplateFingerprint
-                    .fileFingerprint(at: config.templates[index].templatePath)
-            }
-
-            return .newFile(config)
+    private func persistRefreshedNewFileTemplateFingerprints(
+        _ refreshedEntries: [MenuEntry],
+        hadSavedEntriesData: Bool
+    ) {
+        if hadSavedEntriesData || configService.hasSavedEntriesData {
+            configService.mergeNewFileTemplateFingerprints(from: refreshedEntries)
+        } else {
+            configService.saveEntries(refreshedEntries)
         }
     }
 
@@ -453,4 +452,46 @@ private struct PendingTemplateResource {
     let tempURL: URL
     let finalURL: URL
     let resourceName: String
+}
+
+private final class ScriptCurrencyValidator {
+    private let configService: SharedConfigService
+    private var cachedModificationDate: Date?
+    private var cachedCurrentScripts: Set<ScriptCurrencyKey> = []
+
+    init(configService: SharedConfigService) {
+        self.configService = configService
+    }
+
+    func isStillCurrent(_ scriptBackedEntry: ScriptBackedMenuEntry) -> Bool {
+        refreshCacheIfNeeded()
+        return cachedCurrentScripts.contains(
+            ScriptCurrencyKey(
+                id: scriptBackedEntry.id,
+                fingerprint: scriptBackedEntry.fingerprint
+            )
+        )
+    }
+
+    private func refreshCacheIfNeeded() {
+        let modificationDate = configService.modificationDate()
+        if let modificationDate,
+           cachedModificationDate == modificationDate {
+            return
+        }
+
+        cachedCurrentScripts = Set(
+            NewFileTemplateMetadataPolicy.refreshingTemplateFingerprints(
+                in: configService.loadEntries()
+            )
+                .flatMap(MenuEntryScriptPolicy.scriptBackedEntries)
+                .map { ScriptCurrencyKey(id: $0.id, fingerprint: $0.fingerprint) }
+        )
+        cachedModificationDate = modificationDate
+    }
+}
+
+private struct ScriptCurrencyKey: Hashable {
+    let id: String
+    let fingerprint: String
 }

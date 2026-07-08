@@ -7,6 +7,10 @@ public final class SharedConfigService: @unchecked Sendable {
         preferences = SharedPreferencesStore(defaults: defaults)
     }
 
+    public init(preferences: SharedPreferencesStore) {
+        self.preferences = preferences
+    }
+
     public func saveEntries(_ entries: [MenuEntry]) {
         let unknownEnvelopes = loadEntryEnvelopes().filter(\.isUnknown)
         let envelopes = entries.map(MenuEntryEnvelope.init(entry:)) + unknownEnvelopes
@@ -16,6 +20,22 @@ public final class SharedConfigService: @unchecked Sendable {
         }
         preferences.set(data, forKey: SharedKeys.menuEntries)
         mirrorLegacyKeys(from: entries)
+    }
+
+    @discardableResult
+    public func mergeNewFileTemplateFingerprints(from refreshedEntries: [MenuEntry]) -> Bool {
+        let currentEntries = loadEntries()
+        let mergedEntries = NewFileTemplateMetadataPolicy.mergingTemplateFingerprints(
+            from: refreshedEntries,
+            into: currentEntries
+        )
+
+        guard mergedEntries != currentEntries else {
+            return false
+        }
+
+        saveEntries(mergedEntries)
+        return true
     }
 
     public func loadEntries() -> [MenuEntry] {
@@ -52,6 +72,10 @@ public final class SharedConfigService: @unchecked Sendable {
 
     public var hasSavedEntriesData: Bool {
         preferences.data(forKey: SharedKeys.menuEntries) != nil
+    }
+
+    public func modificationDate() -> Date? {
+        preferences.modificationDate()
     }
 
     public func saveMenuPresentationMode(_ mode: MenuPresentationMode) {

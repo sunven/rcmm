@@ -4,6 +4,43 @@ import RCMMShared
 import os.log
 
 class FinderSync: FIFinderSync {
+    private struct MenuSnapshot {
+        let entries: [MenuEntry]
+        let publishStates: [String: ScriptPublishState]
+        let presentationMode: MenuPresentationMode
+        let visibleEntries: [MenuEntry]
+
+        static let empty = MenuSnapshot(
+            entries: [],
+            publishStates: [:],
+            presentationMode: .flat
+        )
+
+        init(
+            entries: [MenuEntry],
+            publishStates: [String: ScriptPublishState],
+            presentationMode: MenuPresentationMode
+        ) {
+            self.entries = entries
+            self.publishStates = publishStates
+            self.presentationMode = presentationMode
+            self.visibleEntries = FinderMenuPresenter.visibleEntries(
+                entries: self.entries,
+                publishStates: self.publishStates
+            )
+        }
+
+        var customAppPaths: Set<String> {
+            Set(visibleEntries.compactMap { entry in
+                guard case .custom(let config) = entry,
+                      FinderMenuIconPolicy.shouldPreloadApplicationIcon(for: config) else {
+                    return nil
+                }
+                return config.appPath.trimmingCharacters(in: .whitespacesAndNewlines)
+            })
+        }
+    }
+
     private let logger = Logger(
         subsystem: RuntimeConfiguration.finderExtensionBundleID,
         category: "menu"
@@ -11,6 +48,14 @@ class FinderSync: FIFinderSync {
     private let configService = SharedConfigService()
     private let publishStore = ScriptPublishStore()
     private let scriptExecutor = ScriptExecutor()
+    private let preferencesURL = SharedPreferencesStore.appGroupPreferencesURL()
+    private let menuSnapshotLock = NSLock()
+    private let iconCacheLock = NSLock()
+    private let iconLoadQueue = DispatchQueue(label: "com.sunven.rcmm.finder-icon-cache", qos: .utility)
+    private var menuSnapshot = MenuSnapshot.empty
+    private var menuCacheMetadata: FinderMenuCacheMetadata?
+    private var iconCache: [String: NSImage] = [:]
+    private var pendingIconLoads: Set<String> = []
     private var configObservation: DarwinObservation?
     private var currentMenuKind: FIMenuKind?
 
@@ -19,10 +64,13 @@ class FinderSync: FIFinderSync {
         let monitoredURLs = Self.monitoredDirectoryURLs()
         FIFinderSyncController.default().directoryURLs = monitoredURLs
 
+        reloadMenuSnapshot()
+
         configObservation = DarwinNotificationCenter.shared.addObserver(
             name: NotificationNames.configChanged
         ) { [weak self] in
-            self?.logger.info("收到配置变更通知，下次右键将使用最新配置")
+            self?.reloadMenuSnapshot()
+            self?.logger.info("收到配置变更通知，已刷新 Finder 菜单缓存")
         }
 
         logger.info(
@@ -62,14 +110,12 @@ class FinderSync: FIFinderSync {
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
         currentMenuKind = menuKind
         let menu = NSMenu(title: "")
-        let entries = FinderMenuPresenter.visibleEntries(
-            entries: configService.loadEntries(),
-            publishStates: publishStore.loadAll()
-        )
-        let presentationMode = configService.loadMenuPresentationMode()
+        refreshMenuSnapshotIfNeeded()
+        let snapshot = currentMenuSnapshot()
+        let entries = snapshot.visibleEntries
 
         logger.debug(
-            "开始构建 Finder 菜单，menuKind=\(String(describing: menuKind), privacy: .public)，启用项数量=\(entries.count)，展示方式=\(presentationMode.rawValue, privacy: .public)"
+            "开始构建 Finder 菜单，menuKind=\(String(describing: menuKind), privacy: .public)，启用项数量=\(entries.count)，展示方式=\(snapshot.presentationMode.rawValue, privacy: .public)"
         )
 
         guard !entries.isEmpty else {
@@ -77,9 +123,13 @@ class FinderSync: FIFinderSync {
             return menu
         }
 
-        switch presentationMode {
+        switch snapshot.presentationMode {
         case .flat:
-            addMenuItems(for: entries, to: menu)
+            addMenuItems(
+                for: entries,
+                publishStates: snapshot.publishStates,
+                to: menu
+            )
         case .nestedUnderRCMM:
             let parentItem = NSMenuItem(title: "RCMM", action: nil, keyEquivalent: "")
             parentItem.image = makeMenuSymbolImage(
@@ -88,7 +138,11 @@ class FinderSync: FIFinderSync {
             )
 
             let submenu = NSMenu(title: "RCMM")
-            addMenuItems(for: entries, to: submenu)
+            addMenuItems(
+                for: entries,
+                publishStates: snapshot.publishStates,
+                to: submenu
+            )
             parentItem.submenu = submenu
             menu.addItem(parentItem)
         }
@@ -96,9 +150,12 @@ class FinderSync: FIFinderSync {
         return menu
     }
 
-    private func addMenuItems(for entries: [MenuEntry], to menu: NSMenu) {
+    private func addMenuItems(
+        for entries: [MenuEntry],
+        publishStates: [String: ScriptPublishState],
+        to menu: NSMenu
+    ) {
         var customIndex = 0
-        let publishStates = publishStore.loadAll()
         for entry in entries {
             switch entry {
             case .builtIn(let item):
@@ -159,13 +216,17 @@ class FinderSync: FIFinderSync {
 
         if config.executionMode == .currentDirectory {
             menuItem.image = makeMenuSymbolImage(
-                named: "terminal",
+                named: FinderMenuIconPolicy.placeholderSymbolName(for: config),
                 accessibilityDescription: config.appName
             )
-        } else {
-            let icon = NSWorkspace.shared.icon(forFile: config.appPath)
-            icon.size = NSSize(width: 16, height: 16)
+        } else if let icon = cachedAppIcon(forFile: config.appPath) {
             menuItem.image = icon
+        } else {
+            menuItem.image = makeMenuSymbolImage(
+                named: FinderMenuIconPolicy.placeholderSymbolName(for: config),
+                accessibilityDescription: config.appName
+            )
+            prewarmIconCache(forFile: config.appPath)
         }
 
         return menuItem
@@ -300,10 +361,7 @@ class FinderSync: FIFinderSync {
     }
 
     private func resolveScriptBackedEntry(_ sender: NSMenuItem) -> ScriptBackedMenuEntry? {
-        let visibleEntries = FinderMenuPresenter.visibleEntries(
-            entries: configService.loadEntries(),
-            publishStates: publishStore.loadAll()
-        )
+        let visibleEntries = currentMenuSnapshot().visibleEntries
         let scriptBackedEntries = visibleEntries.flatMap(MenuEntryScriptPolicy.scriptBackedEntries)
 
         let customItems = visibleEntries.compactMap { entry -> MenuItemConfig? in
@@ -329,6 +387,113 @@ class FinderSync: FIFinderSync {
             title: sender.title,
             parentMenuTitle: parentMenuTitle(for: sender)
         )
+    }
+
+    private func currentMenuSnapshot() -> MenuSnapshot {
+        menuSnapshotLock.lock()
+        defer { menuSnapshotLock.unlock() }
+        return menuSnapshot
+    }
+
+    private func currentMenuCacheMetadata() -> FinderMenuCacheMetadata? {
+        menuSnapshotLock.lock()
+        defer { menuSnapshotLock.unlock() }
+        return menuCacheMetadata
+    }
+
+    private func refreshMenuSnapshotIfNeeded() {
+        let now = Date()
+        let modificationDate = preferencesModificationDate()
+        guard FinderMenuCacheInvalidationPolicy.shouldReload(
+            metadata: currentMenuCacheMetadata(),
+            currentPreferencesModificationDate: modificationDate,
+            now: now
+        ) else {
+            return
+        }
+
+        reloadMenuSnapshot(
+            preferencesModificationDate: modificationDate,
+            loadedAt: now
+        )
+        logger.info("Finder 菜单缓存兜底刷新完成")
+    }
+
+    private func reloadMenuSnapshot() {
+        reloadMenuSnapshot(
+            preferencesModificationDate: preferencesModificationDate(),
+            loadedAt: Date()
+        )
+    }
+
+    private func reloadMenuSnapshot(
+        preferencesModificationDate: Date?,
+        loadedAt: Date
+    ) {
+        let snapshot = MenuSnapshot(
+            entries: configService.loadEntries(),
+            publishStates: publishStore.loadAll(),
+            presentationMode: configService.loadMenuPresentationMode()
+        )
+
+        menuSnapshotLock.lock()
+        menuSnapshot = snapshot
+        menuCacheMetadata = FinderMenuCacheMetadata(
+            preferencesModificationDate: preferencesModificationDate,
+            loadedAt: loadedAt
+        )
+        menuSnapshotLock.unlock()
+
+        pruneIconCache(keeping: snapshot.customAppPaths)
+        prewarmIconCache(for: snapshot.customAppPaths)
+    }
+
+    private func preferencesModificationDate() -> Date? {
+        SharedPreferencesStore.propertyListModificationDate(at: preferencesURL)
+    }
+
+    private func pruneIconCache(keeping paths: Set<String>) {
+        iconCacheLock.lock()
+        defer { iconCacheLock.unlock() }
+        iconCache = iconCache.filter { paths.contains($0.key) }
+        pendingIconLoads = pendingIconLoads.filter { paths.contains($0) }
+    }
+
+    private func cachedAppIcon(forFile path: String) -> NSImage? {
+        let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        iconCacheLock.lock()
+        defer { iconCacheLock.unlock() }
+        return iconCache[trimmedPath]
+    }
+
+    private func prewarmIconCache(for paths: Set<String>) {
+        for path in paths {
+            prewarmIconCache(forFile: path)
+        }
+    }
+
+    private func prewarmIconCache(forFile path: String) {
+        let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPath.isEmpty else { return }
+
+        iconCacheLock.lock()
+        if iconCache[trimmedPath] != nil || pendingIconLoads.contains(trimmedPath) {
+            iconCacheLock.unlock()
+            return
+        }
+        pendingIconLoads.insert(trimmedPath)
+        iconCacheLock.unlock()
+
+        iconLoadQueue.async { [weak self] in
+            guard let self else { return }
+            let icon = NSWorkspace.shared.icon(forFile: trimmedPath)
+            icon.size = NSSize(width: 16, height: 16)
+
+            self.iconCacheLock.lock()
+            self.iconCache[trimmedPath] = icon
+            self.pendingIconLoads.remove(trimmedPath)
+            self.iconCacheLock.unlock()
+        }
     }
 
     private func parentMenuTitle(for sender: NSMenuItem) -> String? {

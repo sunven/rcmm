@@ -25,6 +25,9 @@ struct PopoverContainerView: View {
 }
 
 #Preview {
+    let appModel = AppModel(forPreview: true)
+
     PopoverContainerView()
-        .environment(AppState(forPreview: true))
+        .environment(appModel.appState)
+        .environment(appModel.appCoordinator)
 }
