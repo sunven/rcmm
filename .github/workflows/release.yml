@@ -112,10 +112,19 @@ jobs:
           echo "signature=$signature" >> "$GITHUB_OUTPUT"
           echo "length=$length" >> "$GITHUB_OUTPUT"
 
+      - name: Generate release notes
+        run: |
+          mkdir -p build
+          bash scripts/render-release-notes.sh \
+            "${{ steps.normalized.outputs.display_version }}" \
+            "${{ github.ref_name }}" \
+            "https://github.com/${{ github.repository }}" \
+            > build/release-notes.md
+
       - name: Build stable appcast
         run: |
           archive_url="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/rcmm-${{ steps.normalized.outputs.display_version }}.zip"
-          notes_url="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          release_page_url="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
 
           bash scripts/render-appcast.sh \
             "${{ steps.normalized.outputs.display_version }}" \
@@ -123,7 +132,8 @@ jobs:
             "$archive_url" \
             "${{ steps.sparkle.outputs.length }}" \
             "${{ steps.sparkle.outputs.signature }}" \
-            "$notes_url" \
+            "$release_page_url" \
+            build/release-notes.md \
             > dist/stable.xml
 
           xmllint --noout dist/stable.xml
@@ -146,6 +156,9 @@ jobs:
               "$zip_checksum" \
               "$appcast" \
               --clobber
+            gh release edit "${{ github.ref_name }}" \
+              --title "rcmm ${{ steps.normalized.outputs.display_version }}" \
+              --notes-file build/release-notes.md
           else
             gh release create "${{ github.ref_name }}" \
               "$dmg" \
@@ -154,7 +167,7 @@ jobs:
               "$zip_checksum" \
               "$appcast" \
               --title "rcmm ${{ steps.normalized.outputs.display_version }}" \
-              --generate-notes
+              --notes-file build/release-notes.md
           fi
 
       - name: Upload build logs on failure

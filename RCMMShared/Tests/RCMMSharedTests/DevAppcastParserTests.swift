@@ -44,6 +44,37 @@ struct DevAppcastParserTests {
         #expect(item.releaseNotesURL?.absoluteString.contains("v1.2.3-dev.10") == true)
     }
 
+    @Test("没有 releaseNotesLink 时使用 fullReleaseNotesLink 作为外部发布说明链接")
+    func parsesFullReleaseNotesLinkWhenReleaseNotesLinkIsAbsent() throws {
+        let xml = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+          <channel>
+            <item>
+              <description sparkle:descriptionFormat="markdown"><![CDATA[
+        ## Changes
+
+        - Fixed the update prompt notes.
+              ]]></description>
+              <sparkle:fullReleaseNotesLink>https://github.com/sunven/rcmm/releases/tag/v1.2.3</sparkle:fullReleaseNotesLink>
+              <enclosure
+                url="https://github.com/sunven/rcmm/releases/download/v1.2.3/rcmm-1.2.3.zip"
+                sparkle:version="1.2.3.0"
+                sparkle:shortVersionString="1.2.3"
+                length="67890"
+                type="application/octet-stream"
+                sparkle:edSignature="sig-stable" />
+            </item>
+          </channel>
+        </rss>
+        """
+
+        let item = try DevAppcastParser.latestItem(from: Data(xml.utf8))
+
+        #expect(item.displayVersion == "1.2.3")
+        #expect(item.releaseNotesURL?.absoluteString == "https://github.com/sunven/rcmm/releases/tag/v1.2.3")
+    }
+
     @Test("缺少 release notes 的后续条目不会复用前一个 item 的链接")
     func doesNotLeakReleaseNotesAcrossItems() throws {
         let xml = """

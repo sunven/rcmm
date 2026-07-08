@@ -22,7 +22,7 @@ public enum DevAppcastParser {
 private final class ParserDelegate: NSObject, XMLParserDelegate {
     private var currentItem: PendingItem?
     private var currentValue = ""
-    private var insideReleaseNotesLink = false
+    private var currentLinkKind: ReleaseNotesLinkKind?
 
     var items: [DevAppcastItem] = []
 
@@ -37,8 +37,8 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
             currentItem = PendingItem()
         }
 
-        if isReleaseNotesLink(elementName: elementName, qualifiedName: qName) {
-            insideReleaseNotesLink = true
+        if let linkKind = releaseNotesLinkKind(elementName: elementName, qualifiedName: qName) {
+            currentLinkKind = linkKind
             currentValue = ""
         }
 
@@ -63,7 +63,7 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
-        guard insideReleaseNotesLink else { return }
+        guard currentLinkKind != nil else { return }
         currentValue += string
     }
 
@@ -73,10 +73,15 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
         namespaceURI: String?,
         qualifiedName qName: String?
     ) {
-        if isReleaseNotesLink(elementName: elementName, qualifiedName: qName) {
-            insideReleaseNotesLink = false
+        if let linkKind = releaseNotesLinkKind(elementName: elementName, qualifiedName: qName) {
             let releaseNotesValue = currentValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            currentItem?.releaseNotesURL = URL(string: releaseNotesValue)
+            switch linkKind {
+            case .releaseNotes:
+                currentItem?.releaseNotesURL = URL(string: releaseNotesValue)
+            case .fullReleaseNotes:
+                currentItem?.fullReleaseNotesURL = URL(string: releaseNotesValue)
+            }
+            currentLinkKind = nil
             currentValue = ""
             return
         }
@@ -88,11 +93,29 @@ private final class ParserDelegate: NSObject, XMLParserDelegate {
         items.append(item)
     }
 
-    private func isReleaseNotesLink(elementName: String, qualifiedName: String?) -> Bool {
-        qualifiedName == "sparkle:releaseNotesLink"
+    private func releaseNotesLinkKind(
+        elementName: String,
+        qualifiedName: String?
+    ) -> ReleaseNotesLinkKind? {
+        if qualifiedName == "sparkle:releaseNotesLink"
             || elementName == "releaseNotesLink"
-            || elementName == "sparkle:releaseNotesLink"
+            || elementName == "sparkle:releaseNotesLink" {
+            return .releaseNotes
+        }
+
+        if qualifiedName == "sparkle:fullReleaseNotesLink"
+            || elementName == "fullReleaseNotesLink"
+            || elementName == "sparkle:fullReleaseNotesLink" {
+            return .fullReleaseNotes
+        }
+
+        return nil
     }
+}
+
+private enum ReleaseNotesLinkKind {
+    case releaseNotes
+    case fullReleaseNotes
 }
 
 private struct PendingItem {
@@ -100,6 +123,7 @@ private struct PendingItem {
     var displayVersion: String?
     var archiveURL: URL?
     var releaseNotesURL: URL?
+    var fullReleaseNotesURL: URL?
     var archiveLength: Int?
     var signature: String?
 
@@ -115,7 +139,7 @@ private struct PendingItem {
             version: version,
             displayVersion: displayVersion,
             archiveURL: archiveURL,
-            releaseNotesURL: releaseNotesURL,
+            releaseNotesURL: releaseNotesURL ?? fullReleaseNotesURL,
             archiveLength: archiveLength,
             signature: signature
         )

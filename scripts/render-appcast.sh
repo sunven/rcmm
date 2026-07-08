@@ -5,10 +5,10 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/render-appcast.sh display_version bundle_version archive_url archive_length signature release_notes_url
+  bash scripts/render-appcast.sh display_version bundle_version archive_url archive_length signature release_page_url [release_notes_file]
 
 Example:
-  bash scripts/render-appcast.sh 1.2.3 1.2.3.0 https://example.com/rcmm-1.2.3.zip 12345 sig https://example.com/releases/tag/v1.2.3
+  bash scripts/render-appcast.sh 1.2.3 1.2.3.0 https://example.com/rcmm-1.2.3.zip 12345 sig https://example.com/releases/tag/v1.2.3 notes.md
 EOF
 }
 
@@ -22,7 +22,11 @@ xml_escape() {
       -e 's/>/\&gt;/g'
 }
 
-if [[ $# -ne 6 ]]; then
+cdata_escape() {
+  printf '%s' "$1" | sed 's/]]>/]]]]><![CDATA[>/g'
+}
+
+if [[ $# -ne 6 && $# -ne 7 ]]; then
   usage >&2
   exit 1
 fi
@@ -32,7 +36,8 @@ bundle_version="$2"
 archive_url="$3"
 archive_length="$4"
 signature="$5"
-release_notes_url="$6"
+release_page_url="$6"
+release_notes_file="${7:-}"
 
 if [[ ! "$bundle_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Error: bundle_version must look like 1.2.3.0: $bundle_version" >&2
@@ -44,9 +49,24 @@ if [[ ! "$archive_length" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-if [[ -z "$display_version" || -z "$archive_url" || -z "$signature" || -z "$release_notes_url" ]]; then
-  echo "Error: display_version, archive_url, signature, and release_notes_url are required" >&2
+if [[ -z "$display_version" || -z "$archive_url" || -z "$signature" || -z "$release_page_url" ]]; then
+  echo "Error: display_version, archive_url, signature, and release_page_url are required" >&2
   exit 1
+fi
+
+release_notes_markdown=""
+if [[ -n "$release_notes_file" ]]; then
+  if [[ ! -f "$release_notes_file" ]]; then
+    echo "Error: release_notes_file does not exist: $release_notes_file" >&2
+    exit 1
+  fi
+  release_notes_markdown="$(< "$release_notes_file")"
+fi
+
+if [[ -z "${release_notes_markdown//[[:space:]]/}" ]]; then
+  release_notes_markdown="$(printf 'rcmm %s is available.\n\nOpen the GitHub release page for the full changelog:\n%s' "$display_version" "$release_page_url")"
+else
+  release_notes_markdown="$(printf '%s\n\nFull release: %s' "$release_notes_markdown" "$release_page_url")"
 fi
 
 pub_date="$(LC_ALL=C TZ=UTC date '+%a, %d %b %Y %H:%M:%S +0000')"
@@ -60,7 +80,10 @@ cat <<EOF
     <language>zh-CN</language>
     <item>
       <title>Version $(xml_escape "$display_version")</title>
-      <sparkle:releaseNotesLink>$(xml_escape "$release_notes_url")</sparkle:releaseNotesLink>
+      <description sparkle:descriptionFormat="markdown"><![CDATA[
+$(cdata_escape "$release_notes_markdown")
+      ]]></description>
+      <sparkle:fullReleaseNotesLink>$(xml_escape "$release_page_url")</sparkle:fullReleaseNotesLink>
       <pubDate>$pub_date</pubDate>
       <enclosure
         url="$(xml_escape "$archive_url")"
