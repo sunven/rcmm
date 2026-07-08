@@ -73,9 +73,13 @@ public enum MenuItemResolver: Sendable {
     }
 
     public static func appName(fromMenuTitle title: String) -> String? {
-        let prefix = "用 "
-        let suffix = " 打开"
+        if let appName = parseTitle(title, prefix: "用 ", suffix: " 打开") {
+            return appName
+        }
+        return parseTitle(title, prefix: "运行 ", suffix: "")
+    }
 
+    private static func parseTitle(_ title: String, prefix: String, suffix: String) -> String? {
         guard title.hasPrefix(prefix), title.hasSuffix(suffix) else {
             return nil
         }
@@ -86,7 +90,12 @@ public enum MenuItemResolver: Sendable {
             return nil
         }
 
-        return String(title[start..<end])
+        let value = String(title[start..<end])
+        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+
+        return value
     }
 
     private static func item(

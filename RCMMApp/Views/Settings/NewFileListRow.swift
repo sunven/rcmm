@@ -13,22 +13,22 @@ struct NewFileListRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: config.iconName ?? "document.badge.plus")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 17, height: 17)
-                .foregroundStyle(config.isEnabled ? .primary : .secondary)
-                .frame(width: 28, height: 28)
+            FinderMenuRowIcon(isEnabled: config.isEnabled, isUnavailable: summary.statusKind == .unavailable || summary.statusKind == .failed) {
+                Image(systemName: config.iconName ?? "document.badge.plus")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(config.isEnabled ? .primary : .secondary)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(config.name)
-                    .font(.callout)
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(config.isEnabled ? .primary : .secondary)
                     .lineLimit(1)
 
-                Text("\(config.templates.count) 个模板")
+                Text(summary.subtitle ?? "\(config.templates.count) 个模板")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)
@@ -59,8 +59,9 @@ struct NewFileListRow: View {
 
             MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
         }
-        .padding(.vertical, 3)
-        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .frame(minHeight: 40)
         .controlSize(.small)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)

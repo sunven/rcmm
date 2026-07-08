@@ -12,6 +12,8 @@ struct NewFileMenuEditor: View {
 
     @State private var editedName: String
     @State private var draftTemplatesByID: [UUID: NewFileTemplateConfig]
+    @State private var nameSaveFeedbackID = 0
+    @State private var showsNameSaveFeedback = false
 
     init(
         config: NewFileMenuConfig,
@@ -77,6 +79,11 @@ struct NewFileMenuEditor: View {
                 .controlSize(.small)
                 .disabled(trimmedEditedName.isEmpty || trimmedEditedName == config.name)
 
+                if showsNameSaveFeedback {
+                    SaveConfirmationLabel()
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                }
+
                 Button {
                     onAddTemplate()
                 } label: {
@@ -94,11 +101,28 @@ struct NewFileMenuEditor: View {
             }
 
             if config.templates.isEmpty {
-                Text("暂无模板")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 6)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("还没有模板", systemImage: "document.badge.plus")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text("添加模板后，Finder 右键菜单就能创建常用文件。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        onAddTemplate()
+                    } label: {
+                        Label("添加第一个模板", systemImage: "plus")
+                    }
+                    .controlSize(.small)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.primary.opacity(0.04))
+                )
             } else {
                 VStack(spacing: 6) {
                     ForEach(Array(config.templates.enumerated()), id: \.element.id) { index, template in
@@ -151,6 +175,22 @@ struct NewFileMenuEditor: View {
             return
         }
         onRename(trimmedEditedName)
+        showNameSaveFeedback()
+    }
+
+    private func showNameSaveFeedback() {
+        nameSaveFeedbackID += 1
+        let currentID = nameSaveFeedbackID
+        withAnimation(.easeOut(duration: 0.12)) {
+            showsNameSaveFeedback = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            guard currentID == nameSaveFeedbackID else { return }
+            withAnimation(.easeIn(duration: 0.12)) {
+                showsNameSaveFeedback = false
+            }
+        }
     }
 
     private func reconcileDraftTemplates(with templates: [NewFileTemplateConfig]) {
@@ -180,6 +220,8 @@ private struct NewFileTemplateEditorRow: View {
     @State private var templatePath: String
     @State private var initialContent: String
     @State private var isEnabled: Bool
+    @State private var saveFeedbackID = 0
+    @State private var showsSaveFeedback = false
 
     init(
         template: NewFileTemplateConfig,
@@ -301,7 +343,13 @@ private struct NewFileTemplateEditorRow: View {
             }
 
             HStack {
+                if showsSaveFeedback {
+                    SaveConfirmationLabel()
+                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                }
+
                 Spacer()
+
                 Button("保存模板") {
                     onUpdate(
                         displayName,
@@ -312,6 +360,7 @@ private struct NewFileTemplateEditorRow: View {
                         initialContent.nilIfBlank,
                         isEnabled
                     )
+                    showSaveFeedback()
                 }
                 .controlSize(.small)
                 .disabled(!hasChanges || hasBlockingIssues)
@@ -379,6 +428,21 @@ private struct NewFileTemplateEditorRow: View {
             if fileExtension.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                !url.pathExtension.isEmpty {
                 fileExtension = url.pathExtension
+            }
+        }
+    }
+
+    private func showSaveFeedback() {
+        saveFeedbackID += 1
+        let currentID = saveFeedbackID
+        withAnimation(.easeOut(duration: 0.12)) {
+            showsSaveFeedback = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            guard currentID == saveFeedbackID else { return }
+            withAnimation(.easeIn(duration: 0.12)) {
+                showsSaveFeedback = false
             }
         }
     }

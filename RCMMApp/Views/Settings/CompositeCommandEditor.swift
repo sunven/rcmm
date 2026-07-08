@@ -10,6 +10,8 @@ struct CompositeCommandEditor: View {
     let onMoveStep: (IndexSet, Int) -> Void
 
     @State private var editedName: String
+    @State private var nameSaveFeedbackID = 0
+    @State private var showsNameSaveFeedback = false
 
     init(
         config: CompositeMenuItemConfig,
@@ -53,6 +55,11 @@ struct CompositeCommandEditor: View {
                 .controlSize(.small)
                 .disabled(editedName == config.name)
 
+                if showsNameSaveFeedback {
+                    SaveConfirmationLabel()
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                }
+
                 Button {
                     onAddShellStep()
                 } label: {
@@ -70,11 +77,28 @@ struct CompositeCommandEditor: View {
             }
 
             if config.steps.isEmpty {
-                Text("暂无步骤")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 6)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("还没有步骤", systemImage: "rectangle.stack.badge.plus")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text("添加第一个 Shell 步骤后，Finder 会按这里的顺序执行。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        onAddShellStep()
+                    } label: {
+                        Label("添加第一个步骤", systemImage: "plus")
+                    }
+                    .controlSize(.small)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.primary.opacity(0.04))
+                )
             } else {
                 VStack(spacing: 6) {
                     ForEach(Array(config.steps.enumerated()), id: \.element.id) { index, step in
@@ -107,6 +131,22 @@ struct CompositeCommandEditor: View {
         let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed != config.name else { return }
         onRename(trimmed)
+        showNameSaveFeedback()
+    }
+
+    private func showNameSaveFeedback() {
+        nameSaveFeedbackID += 1
+        let currentID = nameSaveFeedbackID
+        withAnimation(.easeOut(duration: 0.12)) {
+            showsNameSaveFeedback = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            guard currentID == nameSaveFeedbackID else { return }
+            withAnimation(.easeIn(duration: 0.12)) {
+                showsNameSaveFeedback = false
+            }
+        }
     }
 }
 
@@ -125,6 +165,8 @@ private struct CompositeStepEditorRow: View {
     @State private var appPath: String
     @State private var bundleId: String
     @State private var isEnabled: Bool
+    @State private var saveFeedbackID = 0
+    @State private var showsSaveFeedback = false
 
     init(
         step: CompositeCommandStep,
@@ -209,7 +251,13 @@ private struct CompositeStepEditorRow: View {
             }
 
             HStack {
+                if showsSaveFeedback {
+                    SaveConfirmationLabel()
+                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                }
+
                 Spacer()
+
                 Button("保存步骤") {
                     onUpdate(
                         name,
@@ -218,6 +266,7 @@ private struct CompositeStepEditorRow: View {
                         bundleId.nilIfBlank,
                         isEnabled
                     )
+                    showSaveFeedback()
                 }
                 .controlSize(.small)
                 .disabled(!hasChanges)
@@ -243,5 +292,20 @@ private struct CompositeStepEditorRow: View {
             || appPath.nilIfBlank != step.appPath
             || bundleId.nilIfBlank != step.bundleId
             || isEnabled != step.isEnabled
+    }
+
+    private func showSaveFeedback() {
+        saveFeedbackID += 1
+        let currentID = saveFeedbackID
+        withAnimation(.easeOut(duration: 0.12)) {
+            showsSaveFeedback = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            guard currentID == saveFeedbackID else { return }
+            withAnimation(.easeIn(duration: 0.12)) {
+                showsSaveFeedback = false
+            }
+        }
     }
 }

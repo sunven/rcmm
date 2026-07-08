@@ -46,6 +46,20 @@ struct MenuItemResolverTests {
         #expect(result?.appName == "Ghostty")
     }
 
+    @Test("当前目录命令标题可用运行格式回退解析")
+    func resolvesCurrentDirectoryCommandByRunTitle() {
+        let items = makeItems()
+
+        let result = MenuItemResolver.customItem(
+            in: items,
+            representedObject: nil,
+            tag: -1,
+            title: "运行 Ghostty"
+        )
+
+        #expect(result?.appName == "Ghostty")
+    }
+
     @Test("tag 和标题冲突时优先使用标题避免错路由")
     func prefersMenuTitleWhenTagConflictsWithTitle() {
         let items = makeItems()
@@ -228,8 +242,10 @@ struct MenuItemResolverTests {
     @Test("能从中文菜单标题解析应用名")
     func parsesAppNameFromMenuTitle() {
         #expect(MenuItemResolver.appName(fromMenuTitle: "用 Visual Studio Code 打开") == "Visual Studio Code")
+        #expect(MenuItemResolver.appName(fromMenuTitle: "运行 Git Pull") == "Git Pull")
         #expect(MenuItemResolver.appName(fromMenuTitle: "拷贝路径") == nil)
         #expect(MenuItemResolver.appName(fromMenuTitle: "用  打开") == nil)
+        #expect(MenuItemResolver.appName(fromMenuTitle: "运行 ") == nil)
     }
 
     private func makeItems() -> [MenuItemConfig] {

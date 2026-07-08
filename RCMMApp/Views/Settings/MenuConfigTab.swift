@@ -16,7 +16,7 @@ struct MenuConfigTab: View {
     @State private var dragGrabOffset: CGSize = .zero
 
     private enum Layout {
-        static let rowInsets = EdgeInsets(top: 2, leading: 10, bottom: 2, trailing: 10)
+        static let rowInsets = EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 10)
         static let footerPadding = EdgeInsets(top: 10, leading: 12, bottom: 12, trailing: 12)
     }
 
@@ -64,6 +64,7 @@ struct MenuConfigTab: View {
                 }
             )
         }
+        .background(Color(nsColor: .windowBackgroundColor))
         .sheet(isPresented: $showingAppSelection) {
             AppSelectionSheet { addedIDs in
                 if let id = addedIDs.first {
@@ -100,6 +101,21 @@ struct MenuConfigTab: View {
         return summaries.first { $0.id == selectedEntryID }
     }
 
+    private var enabledCount: Int {
+        summaries.filter(\.isEnabled).count
+    }
+
+    private var issueCount: Int {
+        summaries.filter { summary in
+            switch summary.statusKind {
+            case .failed, .unavailable, .partiallyAvailable, .warning, .syncing:
+                return true
+            case .ready, .disabled, .command, .system:
+                return false
+            }
+        }.count
+    }
+
     private var centerPane: some View {
         VStack(spacing: 0) {
             header
@@ -119,7 +135,7 @@ struct MenuConfigTab: View {
     }
 
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Finder 菜单")
                     .font(.title3.weight(.semibold))
@@ -129,20 +145,76 @@ struct MenuConfigTab: View {
             }
 
             Spacer()
+
+            HStack(spacing: 6) {
+                headerMetric("\(summaries.count)", label: "菜单项", systemImage: "list.bullet")
+                headerMetric("\(enabledCount)", label: "启用", systemImage: "checkmark.circle")
+                if issueCount > 0 {
+                    headerMetric("\(issueCount)", label: "待处理", systemImage: "exclamationmark.triangle")
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 4) {
-            Text("暂无 Finder 菜单项")
+        VStack(spacing: 12) {
+            Image(systemName: "list.bullet.rectangle")
+                .font(.system(size: 30, weight: .regular))
                 .foregroundStyle(.secondary)
-            Text("点击下方按钮添加应用或自定义命令")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .symbolRenderingMode(.hierarchical)
+
+            VStack(spacing: 4) {
+                Text("暂无 Finder 菜单项")
+                    .font(.callout.weight(.semibold))
+                Text("先添加应用或命令，Finder 右键菜单会按这里的顺序显示。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    showingAppSelection = true
+                } label: {
+                    Label("添加应用", systemImage: "plus")
+                }
+                .buttonStyle(AppPrimaryButtonStyle())
+                .controlSize(.small)
+
+                Button {
+                    let id = appState.addGitPullCommand()
+                    selectEntry(id.uuidString)
+                } label: {
+                    Label("Git Pull 命令", systemImage: "terminal")
+                }
+                .controlSize(.small)
+            }
         }
+        .padding(24)
+        .frame(maxWidth: 320)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func headerMetric(_ value: String, label: String, systemImage: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.system(size: 10, weight: .semibold))
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+            Text(label)
+                .font(.caption)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(Color.primary.opacity(0.055))
+        )
+        .accessibilityLabel("\(label)：\(value)")
     }
 
     private var menuList: some View {
@@ -158,6 +230,7 @@ struct MenuConfigTab: View {
                         .menuRowFrame(id: entry.id)
                     }
                 }
+                .padding(.vertical, 4)
                 .frame(maxWidth: .infinity, alignment: .top)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -232,7 +305,7 @@ struct MenuConfigTab: View {
                             selectEntry(id.uuidString)
                         }
                     }
-                    Button("自定义命令") {
+                    Button("Git Pull 命令") {
                         let id = appState.addGitPullCommand()
                         selectEntry(id.uuidString)
                     }
@@ -263,6 +336,7 @@ struct MenuConfigTab: View {
             }
         }
         .padding(Layout.footerPadding)
+        .background(.bar)
     }
 
     @ViewBuilder
@@ -544,7 +618,7 @@ private struct FinderMenuDrag: Equatable {
 
 private enum MenuRowAlignment {
     static let leadingSlotWidth: CGFloat = 18
-    static let rowHeight: CGFloat = 34
+    static let rowHeight: CGFloat = 40
 }
 
 private enum MenuListCoordinateSpace {
@@ -584,6 +658,8 @@ private struct AlignedMenuRow<Label: View>: View {
                 .frame(width: MenuRowAlignment.leadingSlotWidth, height: MenuRowAlignment.rowHeight)
                 .contentShape(Rectangle())
                 .gesture(dragGesture)
+                .help("拖动调整 Finder 菜单顺序")
+                .accessibilityLabel("拖动调整 Finder 菜单顺序")
 
             label
         }
@@ -603,6 +679,8 @@ private struct SelectableMenuRow<Content: View>: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(backgroundColor)
             )
+            .animation(.easeOut(duration: 0.1), value: isHovered)
+            .animation(.easeOut(duration: 0.12), value: isSelected)
             .onHover { hovering in
                 isHovered = hovering
             }
@@ -610,10 +688,10 @@ private struct SelectableMenuRow<Content: View>: View {
 
     private var backgroundColor: Color {
         if isSelected {
-            return Color.accentColor.opacity(0.12)
+            return Color.accentColor.opacity(0.13)
         }
         if isHovered {
-            return Color.primary.opacity(0.08)
+            return Color.primary.opacity(0.055)
         }
         return .clear
     }

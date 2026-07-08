@@ -12,6 +12,8 @@ struct CommandEditor: View {
     @State private var lastSavedName: String
     @State private var executionMode: CustomCommandExecutionMode
     @State private var lastSavedExecutionMode: CustomCommandExecutionMode
+    @State private var saveFeedbackID = 0
+    @State private var showsSaveFeedback = false
 
     /// 当前生效的默认命令（内置映射或 open -a），作为 placeholder 显示
     let defaultCommand: String
@@ -164,6 +166,11 @@ struct CommandEditor: View {
 
                 Spacer()
 
+                if showsSaveFeedback {
+                    SaveConfirmationLabel()
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                }
+
                 Button("保存") {
                     commitChanges()
                 }
@@ -201,6 +208,22 @@ struct CommandEditor: View {
         editedName = savedName
         lastSavedCommand = editedCommand
         lastSavedExecutionMode = executionMode
+        showSaveFeedback()
+    }
+
+    private func showSaveFeedback() {
+        saveFeedbackID += 1
+        let currentID = saveFeedbackID
+        withAnimation(.easeOut(duration: 0.12)) {
+            showsSaveFeedback = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.6))
+            guard currentID == saveFeedbackID else { return }
+            withAnimation(.easeIn(duration: 0.12)) {
+                showsSaveFeedback = false
+            }
+        }
     }
 
     private func shellPreview(_ command: String) -> String {

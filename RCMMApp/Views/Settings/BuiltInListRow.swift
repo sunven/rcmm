@@ -12,17 +12,25 @@ struct BuiltInListRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: item.iconName)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 16, height: 16)
-                .foregroundStyle(item.isEnabled ? .primary : .secondary)
-                .frame(width: 28, height: 28)
+            FinderMenuRowIcon(isEnabled: item.isEnabled, isUnavailable: false) {
+                Image(systemName: item.iconName)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(item.isEnabled ? .primary : .secondary)
+            }
 
-            Text(item.displayName)
-                .font(.callout)
-                .foregroundStyle(item.isEnabled ? .primary : .secondary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.displayName)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(item.isEnabled ? .primary : .secondary)
+                    .lineLimit(1)
+
+                if let subtitle = summary.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
 
             Spacer(minLength: 8)
 
@@ -41,8 +49,9 @@ struct BuiltInListRow: View {
 
             MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
         }
-        .padding(.vertical, 3)
-        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .frame(minHeight: 40)
         .controlSize(.small)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)

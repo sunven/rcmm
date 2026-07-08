@@ -18,15 +18,24 @@ struct AppListRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            menuIcon
-                .frame(width: 28, height: 28)
-                .saturation(isUnavailable ? 0 : (menuItem.isEnabled ? 1 : 0.3))
-                .opacity(isUnavailable ? 0.4 : (menuItem.isEnabled ? 1 : 0.5))
+            FinderMenuRowIcon(isEnabled: menuItem.isEnabled, isUnavailable: isUnavailable) {
+                menuIcon
+            }
 
-            Text(menuItem.appName)
-                .font(.callout)
-                .foregroundStyle(menuItem.isEnabled ? .primary : .secondary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(menuItem.appName)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(menuItem.isEnabled ? .primary : .secondary)
+                    .lineLimit(1)
+
+                if let subtitle = summary.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
 
             Spacer(minLength: 8)
 
@@ -56,8 +65,9 @@ struct AppListRow: View {
 
             MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
         }
-        .padding(.vertical, 3)
-        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .frame(minHeight: 40)
         .controlSize(.small)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
@@ -81,11 +91,12 @@ struct AppListRow: View {
     private var menuIcon: some View {
         if isShellCommand {
             Image(systemName: "terminal")
-                .font(.system(size: 22, weight: .regular))
+                .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(.secondary)
         } else {
             Image(nsImage: NSWorkspace.shared.icon(forFile: menuItem.appPath))
                 .resizable()
+                .aspectRatio(contentMode: .fit)
         }
     }
 
@@ -98,6 +109,28 @@ struct AppListRow: View {
             return "右键菜单自定义命令项"
         }
         return summary.statusKind == .unavailable ? "应用未找到，请检查是否已安装" : "右键菜单应用项"
+    }
+}
+
+struct FinderMenuRowIcon<Content: View>: View {
+    let isEnabled: Bool
+    let isUnavailable: Bool
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .frame(width: 20, height: 20)
+            .frame(width: 30, height: 30)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.primary.opacity(0.045))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(Color.primary.opacity(0.06))
+            )
+            .saturation(isUnavailable ? 0 : (isEnabled ? 1 : 0.3))
+            .opacity(isUnavailable ? 0.42 : (isEnabled ? 1 : 0.56))
     }
 }
 

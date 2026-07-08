@@ -205,7 +205,7 @@ class FinderSync: FIFinderSync {
         customIndex: Int
     ) -> NSMenuItem {
         let menuItem = NSMenuItem(
-            title: "用 \(config.appName) 打开",
+            title: customMenuTitle(for: config),
             action: #selector(openScriptBackedEntry(_:)),
             keyEquivalent: ""
         )
@@ -230,6 +230,15 @@ class FinderSync: FIFinderSync {
         }
 
         return menuItem
+    }
+
+    private func customMenuTitle(for config: MenuItemConfig) -> String {
+        switch config.executionMode {
+        case .selectedPath:
+            return "用 \(config.appName) 打开"
+        case .currentDirectory:
+            return "运行 \(config.appName)"
+        }
     }
 
     private func makeCompositeMenuItem(_ config: CompositeMenuItemConfig) -> NSMenuItem {

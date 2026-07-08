@@ -13,22 +13,22 @@ struct CompositeListRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: config.iconName ?? "rectangle.stack.badge.play")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 16, height: 16)
-                .foregroundStyle(config.isEnabled ? .primary : .secondary)
-                .frame(width: 28, height: 28)
+            FinderMenuRowIcon(isEnabled: config.isEnabled, isUnavailable: summary.statusKind == .unavailable || summary.statusKind == .failed) {
+                Image(systemName: config.iconName ?? "rectangle.stack.badge.play")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(config.isEnabled ? .primary : .secondary)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(config.name)
-                    .font(.callout)
+                    .font(.callout.weight(.semibold))
                     .foregroundStyle(config.isEnabled ? .primary : .secondary)
                     .lineLimit(1)
 
-                Text("\(config.steps.count) 个步骤")
+                Text(summary.subtitle ?? "\(config.steps.count) 个步骤")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)
@@ -59,8 +59,9 @@ struct CompositeListRow: View {
 
             MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
         }
-        .padding(.vertical, 3)
-        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .frame(minHeight: 40)
         .controlSize(.small)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
