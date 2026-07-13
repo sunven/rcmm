@@ -51,7 +51,7 @@ struct DevAppcastParserTests {
         <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
           <channel>
             <item>
-              <description sparkle:descriptionFormat="markdown"><![CDATA[
+              <description sparkle:format="markdown"><![CDATA[
         ## Changes
 
         - Fixed the update prompt notes.

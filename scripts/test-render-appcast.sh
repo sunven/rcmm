@@ -28,6 +28,10 @@ if grep -Fq '<sparkle:releaseNotesLink>' "$appcast_file"; then
   exit 1
 fi
 
-grep -Fq '<description sparkle:descriptionFormat="markdown"><![CDATA[' "$appcast_file"
+grep -Fq '<description sparkle:format="markdown"><![CDATA[' "$appcast_file"
+if grep -Fq 'sparkle:descriptionFormat=' "$appcast_file"; then
+  echo "Error: appcast must use sparkle:format for Markdown release notes" >&2
+  exit 1
+fi
 grep -Fq 'Fixed update notes rendering.' "$appcast_file"
 grep -Fq '<sparkle:fullReleaseNotesLink>https://example.com/releases/tag/v1.2.3</sparkle:fullReleaseNotesLink>' "$appcast_file"

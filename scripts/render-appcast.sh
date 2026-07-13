@@ -80,7 +80,7 @@ cat <<EOF
     <language>zh-CN</language>
     <item>
       <title>Version $(xml_escape "$display_version")</title>
-      <description sparkle:descriptionFormat="markdown"><![CDATA[
+      <description sparkle:format="markdown"><![CDATA[
 $(cdata_escape "$release_notes_markdown")
       ]]></description>
       <sparkle:fullReleaseNotesLink>$(xml_escape "$release_page_url")</sparkle:fullReleaseNotesLink>
