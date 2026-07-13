@@ -46,6 +46,28 @@ struct SharedPreferencesStoreTests {
         #expect(store.string(forKey: "key") == "value")
     }
 
+    @Test("App Group 不可用时回退到 Application Scripts 共享 plist")
+    func unavailableAppGroupFallbackUsesApplicationScripts() {
+        let homeDirectory = URL(fileURLWithPath: "/Users/test", isDirectory: true)
+
+        let url = SharedPreferencesStore.fallbackPreferencesURL(
+            finderExtensionBundleID: "com.sunven.rcmm.FinderExtension",
+            homeDirectory: homeDirectory
+        )
+
+        #expect(url.path == "/Users/test/Library/Application Scripts/com.sunven.rcmm.FinderExtension/rcmm.shared.plist")
+        #expect(!url.path.contains("Library/Group Containers"))
+
+        let resolvedURL = SharedPreferencesStore.appGroupPreferencesURL(
+            appGroupID: "group.test.rcmm",
+            finderExtensionBundleID: "com.sunven.rcmm.FinderExtension",
+            fileManager: MissingAppGroupFileManager()
+        )
+
+        #expect(resolvedURL.path.hasSuffix("/Library/Application Scripts/com.sunven.rcmm.FinderExtension/rcmm.shared.plist"))
+        #expect(!resolvedURL.path.contains("Library/Group Containers"))
+    }
+
     @Test("多个 property list store 并发写不同 key 不会互相覆盖")
     func concurrentPropertyListWritesPreserveAllKeys() throws {
         let directory = FileManager.default.temporaryDirectory
@@ -121,5 +143,13 @@ struct SharedPreferencesStoreTests {
         #expect(configService.loadEntries().map(\.displayName) == ["Terminal"])
         #expect(publishStore.state(for: "entry-1")?.fingerprint == "fingerprint")
         #expect(errorQueue.loadAll().map(\.key) == ["error-1"])
+    }
+}
+
+private final class MissingAppGroupFileManager: FileManager {
+    override func containerURL(
+        forSecurityApplicationGroupIdentifier groupIdentifier: String
+    ) -> URL? {
+        nil
     }
 }

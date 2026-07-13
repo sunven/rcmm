@@ -36,17 +36,34 @@ public final class SharedPreferencesStore: @unchecked Sendable {
 
     public static func appGroupPreferencesURL(
         appGroupID: String = AppGroupConstants.appGroupID,
+        finderExtensionBundleID: String = RuntimeConfiguration.finderExtensionBundleID,
         fileManager: FileManager = .default
     ) -> URL {
         let containerURL = fileManager.containerURL(
             forSecurityApplicationGroupIdentifier: appGroupID
-        ) ?? realHomeDirectory()
-            .appendingPathComponent("Library/Group Containers")
-            .appendingPathComponent(appGroupID)
+        )
+
+        guard let containerURL else {
+            return fallbackPreferencesURL(
+                finderExtensionBundleID: finderExtensionBundleID,
+                homeDirectory: realHomeDirectory()
+            )
+        }
 
         return containerURL
             .appendingPathComponent("Library/Preferences")
             .appendingPathComponent(appGroupID)
+            .appendingPathExtension("plist")
+    }
+
+    static func fallbackPreferencesURL(
+        finderExtensionBundleID: String,
+        homeDirectory: URL
+    ) -> URL {
+        homeDirectory
+            .appendingPathComponent("Library/Application Scripts")
+            .appendingPathComponent(finderExtensionBundleID)
+            .appendingPathComponent("rcmm.shared")
             .appendingPathExtension("plist")
     }
 
