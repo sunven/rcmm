@@ -4,9 +4,20 @@ public enum ExtensionInstallHealthResolver {
     public static func resolve(
         currentExtensionPath: String?,
         currentProcessExtensionEnabled: Bool,
-        pluginKitOutput: String?
+        pluginKitOutput: String?,
+        siblingPluginKitOutput: String? = nil
     ) -> ExtensionInstallHealth {
         let normalizedCurrentExtensionPath = currentExtensionPath.map(normalizePath(_:))
+        let siblingEnabledPaths = siblingPluginKitOutput.map(enabledExtensionPaths(from:)) ?? []
+
+        if !siblingEnabledPaths.isEmpty {
+            let currentEnabledPaths = pluginKitOutput.map(enabledExtensionPaths(from:)) ?? []
+            return ExtensionInstallHealth(
+                status: .otherBuildEnabled,
+                currentExtensionPath: normalizedCurrentExtensionPath,
+                enabledExtensionPaths: deduplicatedPaths(currentEnabledPaths + siblingEnabledPaths)
+            )
+        }
 
         if let pluginKitOutput {
             let enabledPaths = enabledExtensionPaths(from: pluginKitOutput)
@@ -76,14 +87,18 @@ public enum ExtensionInstallHealthResolver {
                 return normalizePath(rawPath)
             }
 
-        var deduplicated: [String] = []
-        for path in paths where !deduplicated.contains(path) {
-            deduplicated.append(path)
-        }
-        return deduplicated
+        return deduplicatedPaths(paths)
     }
 
     private static func normalizePath(_ path: String) -> String {
         URL(fileURLWithPath: path).standardizedFileURL.path
+    }
+
+    private static func deduplicatedPaths(_ paths: [String]) -> [String] {
+        var result: [String] = []
+        for path in paths where !result.contains(path) {
+            result.append(path)
+        }
+        return result
     }
 }

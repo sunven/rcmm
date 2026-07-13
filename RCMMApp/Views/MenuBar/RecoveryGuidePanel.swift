@@ -7,6 +7,8 @@ import SwiftUI
 struct RecoveryGuidePanel: View {
     @Environment(AppState.self) private var appState
     @State private var isRecovered = false
+    @State private var isActivatingCurrentExtension = false
+    @State private var activationError: String?
     @State private var pollTimer: Timer?
     @State private var transitionTask: Task<Void, Never>?
 
@@ -55,6 +57,14 @@ struct RecoveryGuidePanel: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            if let activationError {
+                Text(activationError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             Text(recoveryCommandHint)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
@@ -62,13 +72,15 @@ struct RecoveryGuidePanel: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(PluginKitService.extensionEnableCommand)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.tertiary)
-                .textSelection(.enabled)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if appState.extensionStatus != .otherBuildEnabled {
+                Text(PluginKitService.extensionEnableCommand)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .textSelection(.enabled)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             Text("必要时请关闭旧的 rcmm 调试/测试版本，并重新启动 Finder。")
                 .font(.caption)
@@ -76,6 +88,18 @@ struct RecoveryGuidePanel: View {
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if appState.extensionStatus == .otherBuildEnabled {
+                Button {
+                    activateCurrentExtension()
+                } label: {
+                    Text(isActivatingCurrentExtension ? "正在切换…" : "切换到当前版本扩展")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isActivatingCurrentExtension)
+                .accessibilityLabel("切换到当前版本扩展")
+            }
 
             if appState.extensionStatus == .otherInstallationEnabled {
                 Button {
@@ -161,6 +185,8 @@ struct RecoveryGuidePanel: View {
 
     private var primaryRecoveryText: String {
         switch appState.extensionStatus {
+        case .otherBuildEnabled:
+            return "另一构建版本的 Finder 扩展已启用；两个版本同时工作时会出现重复菜单。请选择当前版本后再试。"
         case .otherInstallationEnabled:
             return "系统当前没有使用这份安装版 rcmm 的 Finder 扩展，因此右键菜单不会出现。请切回当前安装版扩展后再试。"
         case .disabled:
@@ -174,10 +200,27 @@ struct RecoveryGuidePanel: View {
 
     private var recoveryCommandHint: String {
         switch appState.extensionStatus {
+        case .otherBuildEnabled:
+            return "切换操作会停用另一构建版本、启用当前版本并重启 Finder。"
         case .otherInstallationEnabled:
             return "如果系统设置里没有切回当前安装版，可先执行："
         default:
             return "如果系统设置中没有看到 rcmm，可在终端执行："
+        }
+    }
+
+    private func activateCurrentExtension() {
+        guard !isActivatingCurrentExtension else { return }
+
+        isActivatingCurrentExtension = true
+        activationError = nil
+        Task { @MainActor in
+            do {
+                try await appState.activateCurrentFinderExtension()
+            } catch {
+                activationError = "切换扩展失败：\(error.localizedDescription)"
+            }
+            isActivatingCurrentExtension = false
         }
     }
 }

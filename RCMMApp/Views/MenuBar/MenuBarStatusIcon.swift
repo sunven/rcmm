@@ -3,8 +3,9 @@ import SwiftUI
 
 /// 菜单栏状态图标，根据 ExtensionStatus 显示不同的 SF Symbol 和颜色
 ///
-/// 四种状态使用不同的 SF Symbol 形状和颜色传达（色盲友好）：
+/// 各状态使用不同的 SF Symbol 形状和颜色传达（色盲友好）：
 /// - `.enabled` → `contextualmenu.and.cursorarrow`（模板渲染，跟随系统菜单栏色）
+/// - `.otherBuildEnabled` → `exclamationmark.circle.fill`（橙色警告）
 /// - `.otherInstallationEnabled` → `exclamationmark.circle.fill`（橙色警告）
 /// - `.unknown` → `exclamationmark.triangle.fill`（黄色警告）
 /// - `.disabled` → `xmark.circle.fill`（红色异常）
@@ -22,7 +23,7 @@ struct MenuBarStatusIcon: View {
         switch status {
         case .enabled:
             Image(systemName: "contextualmenu.and.cursorarrow")
-        case .otherInstallationEnabled:
+        case .otherBuildEnabled, .otherInstallationEnabled:
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(.orange)
         case .unknown:

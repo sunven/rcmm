@@ -4,6 +4,7 @@ public enum RuntimeConfiguration {
     public static let defaultAppDisplayName = "rcmm"
     public static let defaultAppGroupID = "group.com.sunven.rcmm"
     public static let defaultFinderExtensionBundleID = "com.sunven.rcmm.FinderExtension"
+    public static let debugFinderExtensionBundleID = "com.sunven.rcmm.debug.FinderExtension"
     public static let defaultNotificationPrefix = "com.sunven.rcmm"
 
     public static var appDisplayName: String {
@@ -25,6 +26,17 @@ public enum RuntimeConfiguration {
             for: "RCMMFinderExtensionBundleIdentifier",
             fallback: defaultFinderExtensionBundleID
         )
+    }
+
+    public static func siblingFinderExtensionBundleID(for bundleID: String) -> String? {
+        switch bundleID {
+        case defaultFinderExtensionBundleID:
+            return debugFinderExtensionBundleID
+        case debugFinderExtensionBundleID:
+            return defaultFinderExtensionBundleID
+        default:
+            return nil
+        }
     }
 
     public static var notificationPrefix: String {

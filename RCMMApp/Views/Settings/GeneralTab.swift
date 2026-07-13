@@ -9,6 +9,7 @@ struct GeneralTab: View {
     @State private var errorMessage: String? = nil
     @State private var maintenanceMessage: String? = nil
     @State private var maintenanceMessageIsError = false
+    @State private var isActivatingCurrentExtension = false
     @State private var isRestartingFinder = false
 
     private let logger = Logger(subsystem: "com.sunven.rcmm", category: "system")
@@ -49,7 +50,8 @@ struct GeneralTab: View {
                 }
 
                 GeneralSettingsPanel(title: "扩展维护", systemImage: "wrench.and.screwdriver") {
-                    if appState.extensionStatus == .otherInstallationEnabled,
+                    if (appState.extensionStatus == .otherBuildEnabled
+                        || appState.extensionStatus == .otherInstallationEnabled),
                        let detail = appState.extensionStatusDetail {
                         InlineSettingsMessage(text: detail, kind: .warning)
                             .textSelection(.enabled)
@@ -61,13 +63,29 @@ struct GeneralTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 8) {
-                        Button {
-                            appState.beginExtensionCleanup()
-                        } label: {
-                            Label("清理旧扩展副本", systemImage: "trash")
+                        if appState.extensionStatus == .otherBuildEnabled {
+                            Button {
+                                activateCurrentExtension()
+                            } label: {
+                                Label(
+                                    isActivatingCurrentExtension ? "正在切换" : "切换到当前版本",
+                                    systemImage: "arrow.triangle.swap"
+                                )
+                            }
+                            .controlSize(.small)
+                            .disabled(isActivatingCurrentExtension)
+                            .accessibilityLabel("切换到当前版本扩展")
                         }
-                        .controlSize(.small)
-                        .accessibilityLabel("清理旧扩展副本")
+
+                        if appState.extensionStatus != .otherBuildEnabled {
+                            Button {
+                                appState.beginExtensionCleanup()
+                            } label: {
+                                Label("清理旧扩展副本", systemImage: "trash")
+                            }
+                            .controlSize(.small)
+                            .accessibilityLabel("清理旧扩展副本")
+                        }
 
                         Button {
                             restartFinder()
@@ -162,6 +180,28 @@ struct GeneralTab: View {
             }
 
             isRestartingFinder = false
+        }
+    }
+
+    private func activateCurrentExtension() {
+        guard !isActivatingCurrentExtension else { return }
+
+        isActivatingCurrentExtension = true
+        maintenanceMessage = nil
+        maintenanceMessageIsError = false
+
+        Task { @MainActor in
+            do {
+                try await appState.activateCurrentFinderExtension()
+                maintenanceMessage = "已切换到当前版本扩展，Finder 右键菜单将只保留一份。"
+                maintenanceMessageIsError = false
+            } catch {
+                maintenanceMessage = "切换扩展失败：\(error.localizedDescription)"
+                maintenanceMessageIsError = true
+                logger.error("切换当前版本扩展失败: \(error.localizedDescription)")
+            }
+
+            isActivatingCurrentExtension = false
         }
     }
 }

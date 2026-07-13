@@ -77,6 +77,24 @@ struct ExtensionInstallHealthTests {
         #expect(report.enabledExtensionPaths == [currentPath, oldDebugPath])
     }
 
+    @Test("Release 与 Debug 扩展同时启用时标记为另一构建冲突")
+    func siblingBuildEnabledConflict() {
+        let debugPath = "/Users/test/Library/Developer/Xcode/DerivedData/rcmm/Build/Products/Debug/rcmm.app/Contents/PlugIns/RCMMFinderExtension.appex"
+        let report = ExtensionInstallHealthResolver.resolve(
+            currentExtensionPath: currentPath,
+            currentProcessExtensionEnabled: true,
+            pluginKitOutput: """
+            +    com.sunven.rcmm.FinderExtension(1.0.0)\tID-1\t2026-04-22 10:00:00 +0000\t\(currentPath)
+            """,
+            siblingPluginKitOutput: """
+            +    com.sunven.rcmm.debug.FinderExtension(1.0.0)\tID-2\t2026-04-22 10:05:00 +0000\t\(debugPath)
+            """
+        )
+
+        #expect(report.status == .otherBuildEnabled)
+        #expect(report.enabledExtensionPaths == [currentPath, debugPath])
+    }
+
     @Test("没有启用项时标记为未启用")
     func noEnabledEntriesMeansDisabled() {
         let report = ExtensionInstallHealthResolver.resolve(

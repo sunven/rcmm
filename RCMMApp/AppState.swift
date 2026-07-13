@@ -164,7 +164,7 @@ final class AppState {
         switch newStatus {
         case .enabled:
             popoverState = .normal
-        case .otherInstallationEnabled:
+        case .otherBuildEnabled, .otherInstallationEnabled:
             popoverState = .healthWarning
         case .disabled:
             popoverState = .healthWarning
@@ -173,6 +173,14 @@ final class AppState {
         }
 
         logger.info("Extension 状态变化: \(oldStatus.rawValue) → \(newStatus.rawValue), popoverState: \(String(describing: self.popoverState))")
+    }
+
+    func activateCurrentFinderExtension() async throws {
+        try await Task.detached(priority: .userInitiated) {
+            try PluginKitService.activateCurrent()
+        }.value
+        try? await Task.sleep(for: .milliseconds(300))
+        checkExtensionStatus()
     }
 
     // MARK: - Extension Cleanup

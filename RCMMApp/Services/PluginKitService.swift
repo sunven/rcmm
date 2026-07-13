@@ -68,8 +68,30 @@ enum PluginKitService {
         }
     }
 
+    static func activateCurrent(
+        extensionBundleID: String = RuntimeConfiguration.finderExtensionBundleID,
+        commandRunner: SystemCommandRunning = SystemCommandRunner()
+    ) throws {
+        if let siblingBundleID = RuntimeConfiguration.siblingFinderExtensionBundleID(
+            for: extensionBundleID
+        ) {
+            try runPluginKitElection(
+                "ignore",
+                bundleID: siblingBundleID,
+                commandRunner: commandRunner
+            )
+        }
+
+        try runPluginKitElection(
+            "use",
+            bundleID: extensionBundleID,
+            commandRunner: commandRunner
+        )
+        try restartFinder(commandRunner: commandRunner)
+    }
+
     static func enabledExtensionPaths() -> [String] {
-        guard let output = pluginKitMatchOutput() else {
+        guard let output = pluginKitMatchOutput(bundleID: extensionBundleID) else {
             return []
         }
 
@@ -83,11 +105,15 @@ enum PluginKitService {
         }
 
         let currentExtensionPath = currentExtensionPath()
-        let pluginKitOutput = pluginKitMatchOutput()
+        let pluginKitOutput = pluginKitMatchOutput(bundleID: extensionBundleID)
+        let siblingPluginKitOutput = RuntimeConfiguration
+            .siblingFinderExtensionBundleID(for: extensionBundleID)
+            .flatMap { pluginKitMatchOutput(bundleID: $0) }
         let report = ExtensionInstallHealthResolver.resolve(
             currentExtensionPath: currentExtensionPath,
             currentProcessExtensionEnabled: currentProcessEnabled,
-            pluginKitOutput: pluginKitOutput
+            pluginKitOutput: pluginKitOutput,
+            siblingPluginKitOutput: siblingPluginKitOutput
         )
 
         logger.debug(
@@ -110,6 +136,19 @@ enum PluginKitService {
         switch report.status {
         case .enabled:
             return nil
+        case .otherBuildEnabled:
+            let currentPath = report.currentExtensionPath ?? "未知路径"
+            let activePaths = report.enabledExtensionPaths.joined(separator: "\n")
+            return """
+            检测到另一构建版本的 Finder 扩展已启用。两个版本同时启用时，Finder 会显示重复菜单。
+            当前安装路径：
+            \(currentPath)
+
+            系统记录的启用路径：
+            \(activePaths)
+
+            请切换到当前版本扩展；该操作不会删除任何应用。
+            """
         case .disabled:
             if let currentPath = report.currentExtensionPath {
                 return """
@@ -168,13 +207,13 @@ enum PluginKitService {
         return path
     }
 
-    private static func pluginKitMatchOutput() -> String? {
+    private static func pluginKitMatchOutput(bundleID: String) -> String? {
         let process = Process()
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
 
         process.executableURL = pluginKitExecutable
-        process.arguments = ["-m", "-ADv", "-i", extensionBundleID]
+        process.arguments = ["-m", "-ADv", "-i", bundleID]
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
@@ -198,5 +237,28 @@ enum PluginKitService {
         }
 
         return output
+    }
+
+    private static func runPluginKitElection(
+        _ election: String,
+        bundleID: String,
+        commandRunner: SystemCommandRunning
+    ) throws {
+        let result = try commandRunner.run(
+            executable: pluginKitExecutable,
+            arguments: ["-e", election, "-i", bundleID]
+        )
+
+        guard result.terminationStatus == 0 else {
+            let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let failureReason = stderr.isEmpty
+                ? "pluginkit 退出码：\(result.terminationStatus)"
+                : stderr
+            throw NSError(
+                domain: "PluginKitService",
+                code: Int(result.terminationStatus),
+                userInfo: [NSLocalizedDescriptionKey: failureReason]
+            )
+        }
     }
 }

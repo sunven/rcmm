@@ -59,7 +59,12 @@ App 和 Extension 运行在独立沙盒进程中，通过以下机制通信：
 ### Health Monitoring（健康监控）
 定期检查扩展状态，更新 UI 提示：
 - 每 30 分钟检查一次 PluginKit 状态
-- 状态：enabled / disabled / unknown
+- 状态：
+  - `enabled` — 当前安装的扩展正常启用
+  - `otherBuildEnabled` — Release 与 Debug 中的另一构建版本已启用
+  - `otherInstallationEnabled` — 同一构建存在其他安装路径或多份启用记录
+  - `disabled` — 当前扩展未启用
+  - `unknown` — 暂时无法确认扩展状态
 - 影响：菜单栏图标红点、popover 提示内容
 
 ## 架构术语
