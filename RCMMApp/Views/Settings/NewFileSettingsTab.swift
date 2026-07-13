@@ -24,17 +24,17 @@ struct NewFileSettingsTab: View {
                         onAddTemplate: {
                             appState.addNewFileTemplate(to: config.id)
                         },
-                        onUpdateTemplate: { template, displayName, baseName, fileExtension, creationMode, templatePath, initialContent, isEnabled in
+                        onUpdateTemplate: { template in
                             appState.updateNewFileTemplate(
                                 menuID: config.id,
                                 templateID: template.id,
-                                displayName: displayName,
-                                baseName: baseName,
-                                fileExtension: fileExtension,
-                                creationMode: creationMode,
-                                templatePath: templatePath,
-                                initialContent: initialContent,
-                                isEnabled: isEnabled
+                                displayName: template.displayName,
+                                baseName: template.baseName,
+                                fileExtension: template.fileExtension,
+                                creationMode: template.creationMode,
+                                templatePath: template.templatePath,
+                                initialContent: template.initialContent,
+                                isEnabled: template.isEnabled
                             )
                         },
                         onDeleteTemplate: { templateID in

@@ -6,7 +6,7 @@ struct NewFileMenuEditor: View {
     let config: NewFileMenuConfig
     let onRename: (String) -> Void
     let onAddTemplate: () -> Void
-    let onUpdateTemplate: (NewFileTemplateConfig, String, String, String, NewFileCreationMode, String?, String?, Bool) -> Void
+    let onUpdateTemplate: (NewFileTemplateConfig) -> Void
     let onDeleteTemplate: (UUID) -> Void
     let onMoveTemplate: (IndexSet, Int) -> Void
 
@@ -22,7 +22,7 @@ struct NewFileMenuEditor: View {
         config: NewFileMenuConfig,
         onRename: @escaping (String) -> Void,
         onAddTemplate: @escaping () -> Void,
-        onUpdateTemplate: @escaping (NewFileTemplateConfig, String, String, String, NewFileCreationMode, String?, String?, Bool) -> Void,
+        onUpdateTemplate: @escaping (NewFileTemplateConfig) -> Void,
         onDeleteTemplate: @escaping (UUID) -> Void,
         onMoveTemplate: @escaping (IndexSet, Int) -> Void
     ) {
@@ -161,12 +161,8 @@ struct NewFileMenuEditor: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
     }
 
     private var templateWorkspace: some View {
@@ -268,18 +264,7 @@ struct NewFileMenuEditor: View {
             onDraftChange: { draft in
                 draftTemplatesByID[draft.id] = draft
             },
-            onUpdate: { displayName, baseName, fileExtension, creationMode, templatePath, initialContent, isEnabled in
-                onUpdateTemplate(
-                    template,
-                    displayName,
-                    baseName,
-                    fileExtension,
-                    creationMode,
-                    templatePath,
-                    initialContent,
-                    isEnabled
-                )
-            },
+            onUpdate: onUpdateTemplate,
             onRequestDelete: {
                 templatePendingDeletion = draftTemplatesByID[template.id] ?? template
             },
@@ -378,12 +363,10 @@ struct NewFileMenuEditor: View {
                     .accessibilityLabel("未保存")
             }
 
-            if !template.isEnabled {
-                Image(systemName: "pause.circle.fill")
-                    .foregroundStyle(.secondary)
-                    .help("已停用")
-                    .accessibilityLabel("已停用")
-            }
+            Image(systemName: template.isEnabled ? "eye.fill" : "eye.slash.fill")
+                .foregroundStyle(.secondary)
+                .help(template.isEnabled ? "已启用" : "已停用")
+                .accessibilityLabel(template.isEnabled ? "已启用" : "已停用")
 
             if let resourceStatus {
                 Label(resourceStatus.label, systemImage: resourceStatus.symbol)
@@ -400,7 +383,7 @@ struct NewFileMenuEditor: View {
                     .foregroundStyle(NewFileSemanticColor.warning)
                     .help(warning.message)
                     .accessibilityLabel("有警告：\(warning.message)")
-            } else if template.isEnabled && !hasUnsavedChanges {
+            } else {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(NewFileSemanticColor.success)
                     .help("配置有效")
@@ -536,7 +519,7 @@ private struct NewFileTemplateEditor: View {
     let canMoveUp: Bool
     let canMoveDown: Bool
     let onDraftChange: (NewFileTemplateConfig) -> Void
-    let onUpdate: (String, String, String, NewFileCreationMode, String?, String?, Bool) -> Void
+    let onUpdate: (NewFileTemplateConfig) -> Void
     let onRequestDelete: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
@@ -558,7 +541,7 @@ private struct NewFileTemplateEditor: View {
         canMoveUp: Bool,
         canMoveDown: Bool,
         onDraftChange: @escaping (NewFileTemplateConfig) -> Void,
-        onUpdate: @escaping (String, String, String, NewFileCreationMode, String?, String?, Bool) -> Void,
+        onUpdate: @escaping (NewFileTemplateConfig) -> Void,
         onRequestDelete: @escaping () -> Void,
         onMoveUp: @escaping () -> Void,
         onMoveDown: @escaping () -> Void
@@ -850,15 +833,7 @@ private struct NewFileTemplateEditor: View {
     }
 
     private func saveTemplate() {
-        onUpdate(
-            displayName,
-            baseName,
-            fileExtension,
-            creationMode,
-            templatePath.nilIfBlank,
-            initialContent.nilIfBlank,
-            isEnabled
-        )
+        onUpdate(editedTemplate)
         showSaveFeedback()
     }
 
