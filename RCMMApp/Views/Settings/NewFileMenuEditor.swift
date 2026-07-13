@@ -12,6 +12,9 @@ struct NewFileMenuEditor: View {
 
     @State private var editedName: String
     @State private var draftTemplatesByID: [UUID: NewFileTemplateConfig]
+    @State private var selectedTemplateID: UUID?
+    @State private var templatePendingDeletion: NewFileTemplateConfig?
+    @State private var shouldSelectNewestTemplate = false
     @State private var nameSaveFeedbackID = 0
     @State private var showsNameSaveFeedback = false
 
@@ -35,6 +38,7 @@ struct NewFileMenuEditor: View {
                 uniqueKeysWithValues: config.templates.map { ($0.id, $0) }
             )
         )
+        _selectedTemplateID = State(initialValue: config.templates.first?.id)
     }
 
     private var validation: NewFileValidationResult {
@@ -59,114 +63,363 @@ struct NewFileMenuEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                TextField("菜单名称", text: $editedName)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
-                    .onSubmit {
-                        commitName()
-                    }
-                    .onChange(of: config.name) { _, newValue in
-                        if editedName != newValue {
-                            editedName = newValue
-                        }
-                    }
-
-                Button("保存名称") {
-                    commitName()
-                }
-                .controlSize(.small)
-                .disabled(trimmedEditedName.isEmpty || trimmedEditedName == config.name)
-
-                if showsNameSaveFeedback {
-                    SaveConfirmationLabel()
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
-                }
-
-                Button {
-                    onAddTemplate()
-                } label: {
-                    Label("添加模板", systemImage: "plus")
-                }
-                .controlSize(.small)
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            menuNameEditor
 
             if !parentIssues.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(parentIssues.prefix(5)) { issue in
-                        ValidationIssueRow(isError: issue.severity == .error, message: issue.message)
-                    }
-                }
-            }
-
-            if config.templates.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("还没有模板", systemImage: "document.badge.plus")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    Text("添加模板后，Finder 右键菜单就能创建常用文件。")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-
-                    Button {
-                        onAddTemplate()
-                    } label: {
-                        Label("添加第一个模板", systemImage: "plus")
-                    }
-                    .controlSize(.small)
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.primary.opacity(0.04))
-                )
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(Array(config.templates.enumerated()), id: \.element.id) { index, template in
-                        NewFileTemplateEditorRow(
-                            template: template,
-                            liveIssues: validation.issues.filter { $0.templateID == template.id },
-                            canMoveUp: index > 0,
-                            canMoveDown: index < config.templates.count - 1,
-                            onDraftChange: { draft in
-                                draftTemplatesByID[draft.id] = draft
-                            },
-                            onUpdate: { displayName, baseName, fileExtension, creationMode, templatePath, initialContent, isEnabled in
-                                onUpdateTemplate(
-                                    template,
-                                    displayName,
-                                    baseName,
-                                    fileExtension,
-                                    creationMode,
-                                    templatePath,
-                                    initialContent,
-                                    isEnabled
-                                )
-                            },
-                            onDelete: {
-                                onDeleteTemplate(template.id)
-                            },
-                            onMoveUp: {
-                                onMoveTemplate(IndexSet(integer: index), index - 1)
-                            },
-                            onMoveDown: {
-                                onMoveTemplate(IndexSet(integer: index), index + 2)
-                            }
+                        ValidationIssueRow(
+                            isError: issue.severity == .error,
+                            message: issue.message,
+                            warningColor: .orange
                         )
                     }
                 }
             }
+
+            templateWorkspace
         }
-        .padding(.vertical, 6)
         .onAppear {
             reconcileDraftTemplates(with: config.templates)
+            normalizeSelection(in: config.templates)
+        }
+        .onChange(of: config.name) { _, newValue in
+            if editedName != newValue {
+                editedName = newValue
+            }
         }
         .onChange(of: config.templates) { _, templates in
+            let previousIDs = Set(draftTemplatesByID.keys)
             reconcileDraftTemplates(with: templates)
+
+            if shouldSelectNewestTemplate {
+                selectedTemplateID = templates.first { !previousIDs.contains($0.id) }?.id
+                    ?? templates.last?.id
+                shouldSelectNewestTemplate = false
+            } else {
+                normalizeSelection(in: templates)
+            }
         }
+        .confirmationDialog(
+            deletionDialogTitle,
+            isPresented: Binding(
+                get: { templatePendingDeletion != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        templatePendingDeletion = nil
+                    }
+                }
+            )
+        ) {
+            Button("删除模板", role: .destructive) {
+                guard let template = templatePendingDeletion else { return }
+                onDeleteTemplate(template.id)
+                templatePendingDeletion = nil
+            }
+            Button("取消", role: .cancel) {
+                templatePendingDeletion = nil
+            }
+        } message: {
+            Text("删除后，该模板将不再出现在 Finder 的新建文件菜单中。")
+        }
+    }
+
+    private var menuNameEditor: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "contextualmenu.and.cursorarrow")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Finder 菜单名称")
+                    .font(.caption.weight(.semibold))
+                Text("显示在右键菜单中的一级名称")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField("菜单名称", text: $editedName)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.small)
+                .frame(maxWidth: 210)
+                .onSubmit {
+                    commitName()
+                }
+
+            Button("保存") {
+                commitName()
+            }
+            .controlSize(.small)
+            .disabled(trimmedEditedName.isEmpty || trimmedEditedName == config.name)
+
+            if showsNameSaveFeedback {
+                SaveConfirmationLabel()
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+    }
+
+    private var templateWorkspace: some View {
+        templateList
+            .background(Color(nsColor: .textBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+            )
+    }
+
+    private var templateList: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Text("文件模板")
+                    .font(.callout.weight(.semibold))
+
+                Text(templateCountText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 0)
+
+                Button {
+                    addTemplate()
+                } label: {
+                    Label("添加", systemImage: "plus")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .help("添加新模板")
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 42)
+
+            Divider()
+
+            if config.templates.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "document.badge.plus")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.secondary)
+                        .symbolRenderingMode(.hierarchical)
+
+                    Text("暂无模板")
+                        .font(.callout.weight(.semibold))
+
+                    Text("添加一个模板，即可从 Finder 快速创建文件。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Button {
+                        addTemplate()
+                    } label: {
+                        Label("添加模板", systemImage: "plus")
+                    }
+                    .controlSize(.small)
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                LazyVStack(spacing: 2) {
+                    ForEach(Array(config.templates.enumerated()), id: \.element.id) { index, template in
+                        templateListRow(template, at: index)
+
+                        if selectedTemplateID == template.id {
+                            Divider()
+                                .padding(.horizontal, 8)
+
+                            templateDetail(for: template, at: index)
+                                .padding(14)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+
+                            if index < config.templates.count - 1 {
+                                Divider()
+                                    .padding(.horizontal, 8)
+                            }
+                        }
+                    }
+                }
+                .padding(6)
+            }
+        }
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+    }
+
+    private func templateDetail(
+        for template: NewFileTemplateConfig,
+        at index: Int
+    ) -> some View {
+        NewFileTemplateEditor(
+            savedTemplate: template,
+            initialDraft: draftTemplatesByID[template.id] ?? template,
+            liveIssues: validation.issues.filter { $0.templateID == template.id },
+            canMoveUp: index > 0,
+            canMoveDown: index < config.templates.count - 1,
+            onDraftChange: { draft in
+                draftTemplatesByID[draft.id] = draft
+            },
+            onUpdate: { displayName, baseName, fileExtension, creationMode, templatePath, initialContent, isEnabled in
+                onUpdateTemplate(
+                    template,
+                    displayName,
+                    baseName,
+                    fileExtension,
+                    creationMode,
+                    templatePath,
+                    initialContent,
+                    isEnabled
+                )
+            },
+            onRequestDelete: {
+                templatePendingDeletion = template
+            },
+            onMoveUp: {
+                onMoveTemplate(IndexSet(integer: index), index - 1)
+            },
+            onMoveDown: {
+                onMoveTemplate(IndexSet(integer: index), index + 2)
+            }
+        )
+        .id(template.id)
+    }
+
+    private func templateListRow(_ savedTemplate: NewFileTemplateConfig, at index: Int) -> some View {
+        let draft = draftTemplatesByID[savedTemplate.id] ?? savedTemplate
+        let issues = validation.issues.filter { $0.templateID == savedTemplate.id }
+        let isSelected = selectedTemplateID == savedTemplate.id
+
+        return Button {
+            withAnimation(.easeInOut(duration: 0.14)) {
+                selectedTemplateID = isSelected ? nil : savedTemplate.id
+            }
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: templateSymbol(for: draft.creationMode))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.05))
+                    )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(draft.displayName.nilIfBlank ?? "未命名模板")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(draft.isEnabled ? .primary : .secondary)
+                        .lineLimit(1)
+
+                    Text("\(generatedFilename(for: draft)) · \(creationModeTitle(draft.creationMode))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 4)
+
+                templateStateIcon(
+                    for: draft,
+                    savedTemplate: savedTemplate,
+                    issues: issues
+                )
+
+                Image(systemName: isSelected ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 12)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.13) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("上移", systemImage: "chevron.up") {
+                onMoveTemplate(IndexSet(integer: index), index - 1)
+            }
+            .disabled(index == 0)
+
+            Button("下移", systemImage: "chevron.down") {
+                onMoveTemplate(IndexSet(integer: index), index + 2)
+            }
+            .disabled(index == config.templates.count - 1)
+
+            Divider()
+
+            Button("删除模板", systemImage: "trash", role: .destructive) {
+                templatePendingDeletion = savedTemplate
+            }
+        }
+        .accessibilityLabel("\(draft.displayName)，\(generatedFilename(for: draft))，\(creationModeTitle(draft.creationMode))")
+        .accessibilityValue(isSelected ? "已选择" : "")
+    }
+
+    @ViewBuilder
+    private func templateStateIcon(
+        for template: NewFileTemplateConfig,
+        savedTemplate: NewFileTemplateConfig,
+        issues: [NewFileValidationIssue]
+    ) -> some View {
+        if !template.isEnabled {
+            Image(systemName: "pause.circle.fill")
+                .foregroundStyle(.secondary)
+                .help("已停用")
+                .accessibilityLabel("已停用")
+        } else if issues.contains(where: { $0.severity == .error }) {
+            Image(systemName: "xmark.octagon.fill")
+                .foregroundStyle(.red)
+                .help("需要修正")
+                .accessibilityLabel("需要修正")
+        } else if !issues.isEmpty {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .help("有警告")
+                .accessibilityLabel("有警告")
+        } else if template != savedTemplate {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 8))
+                .foregroundStyle(Color.accentColor)
+                .help("有未保存的更改")
+                .accessibilityLabel("未保存")
+        } else {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .help("配置有效")
+                .accessibilityLabel("配置有效")
+        }
+    }
+
+    private var deletionDialogTitle: String {
+        guard let template = templatePendingDeletion else {
+            return "删除模板？"
+        }
+        return "删除“\(template.displayName)”模板？"
+    }
+
+    private var templateCountText: String {
+        let enabledCount = config.templates.filter(\.isEnabled).count
+        return "\(enabledCount) 个启用，共 \(config.templates.count) 个"
+    }
+
+    private func addTemplate() {
+        shouldSelectNewestTemplate = true
+        onAddTemplate()
     }
 
     private func commitName() {
@@ -193,6 +446,14 @@ struct NewFileMenuEditor: View {
         }
     }
 
+    private func normalizeSelection(in templates: [NewFileTemplateConfig]) {
+        guard let selectedTemplateID,
+              templates.contains(where: { $0.id == selectedTemplateID }) else {
+            self.selectedTemplateID = templates.first?.id
+            return
+        }
+    }
+
     private func reconcileDraftTemplates(with templates: [NewFileTemplateConfig]) {
         var nextDrafts: [UUID: NewFileTemplateConfig] = [:]
         for template in templates {
@@ -202,14 +463,14 @@ struct NewFileMenuEditor: View {
     }
 }
 
-private struct NewFileTemplateEditorRow: View {
-    let template: NewFileTemplateConfig
+private struct NewFileTemplateEditor: View {
+    let savedTemplate: NewFileTemplateConfig
     let liveIssues: [NewFileValidationIssue]
     let canMoveUp: Bool
     let canMoveDown: Bool
     let onDraftChange: (NewFileTemplateConfig) -> Void
     let onUpdate: (String, String, String, NewFileCreationMode, String?, String?, Bool) -> Void
-    let onDelete: () -> Void
+    let onRequestDelete: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
 
@@ -224,160 +485,121 @@ private struct NewFileTemplateEditorRow: View {
     @State private var showsSaveFeedback = false
 
     init(
-        template: NewFileTemplateConfig,
+        savedTemplate: NewFileTemplateConfig,
+        initialDraft: NewFileTemplateConfig,
         liveIssues: [NewFileValidationIssue],
         canMoveUp: Bool,
         canMoveDown: Bool,
         onDraftChange: @escaping (NewFileTemplateConfig) -> Void,
         onUpdate: @escaping (String, String, String, NewFileCreationMode, String?, String?, Bool) -> Void,
-        onDelete: @escaping () -> Void,
+        onRequestDelete: @escaping () -> Void,
         onMoveUp: @escaping () -> Void,
         onMoveDown: @escaping () -> Void
     ) {
-        self.template = template
+        self.savedTemplate = savedTemplate
         self.liveIssues = liveIssues
         self.canMoveUp = canMoveUp
         self.canMoveDown = canMoveDown
         self.onDraftChange = onDraftChange
         self.onUpdate = onUpdate
-        self.onDelete = onDelete
+        self.onRequestDelete = onRequestDelete
         self.onMoveUp = onMoveUp
         self.onMoveDown = onMoveDown
-        _displayName = State(initialValue: template.displayName)
-        _baseName = State(initialValue: template.baseName)
-        _fileExtension = State(initialValue: template.fileExtension)
-        _creationMode = State(initialValue: template.creationMode)
-        _templatePath = State(initialValue: template.templatePath ?? "")
-        _initialContent = State(initialValue: template.initialContent ?? "")
-        _isEnabled = State(initialValue: template.isEnabled)
+        _displayName = State(initialValue: initialDraft.displayName)
+        _baseName = State(initialValue: initialDraft.baseName)
+        _fileExtension = State(initialValue: initialDraft.fileExtension)
+        _creationMode = State(initialValue: initialDraft.creationMode)
+        _templatePath = State(initialValue: initialDraft.templatePath ?? "")
+        _initialContent = State(initialValue: initialDraft.initialContent ?? "")
+        _isEnabled = State(initialValue: initialDraft.isEnabled)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                TextField("菜单名", text: $displayName)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
-                    .frame(minWidth: 70)
+        VStack(alignment: .leading, spacing: 16) {
+            editorHeader
 
+            Divider()
+
+            editorSection("基本信息") {
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+                    GridRow {
+                        fieldLabel("显示名称")
+                        TextField("例如：Markdown", text: $displayName)
+                            .textFieldStyle(.roundedBorder)
+                            .controlSize(.small)
+                    }
+
+                    GridRow(alignment: .center) {
+                        fieldLabel("生成文件名")
+                        HStack(spacing: 6) {
+                            TextField("基础文件名", text: $baseName)
+                                .textFieldStyle(.roundedBorder)
+                                .controlSize(.small)
+
+                            Text(".")
+                                .foregroundStyle(.secondary)
+
+                            TextField("扩展名", text: $fileExtension)
+                                .textFieldStyle(.roundedBorder)
+                                .controlSize(.small)
+                                .frame(width: 82)
+                        }
+                    }
+                }
+
+                HStack(spacing: 5) {
+                    Image(systemName: "doc")
+                    Text("示例：\(generatedFilename(for: editedTemplate))")
+                        .monospaced()
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 82)
+            }
+
+            editorSection("创建方式") {
                 Picker("创建方式", selection: $creationMode) {
                     ForEach(NewFileCreationMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
+                        Text(creationModeTitle(mode)).tag(mode)
                     }
                 }
-                .pickerStyle(.menu)
-                .controlSize(.small)
-                .frame(width: 110)
+                .pickerStyle(.segmented)
+                .labelsHidden()
 
-                Toggle("", isOn: $isEnabled)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .labelsHidden()
-
-                Button(action: onMoveUp) {
-                    Image(systemName: "chevron.up")
-                }
-                .buttonStyle(.plain)
-                .disabled(!canMoveUp)
-                .help("上移")
-
-                Button(action: onMoveDown) {
-                    Image(systemName: "chevron.down")
-                }
-                .buttonStyle(.plain)
-                .disabled(!canMoveDown)
-                .help("下移")
-
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.plain)
-                .help("删除模板")
-            }
-
-            HStack(spacing: 6) {
-                TextField("基础文件名", text: $baseName)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
-
-                Text(".")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                TextField("扩展名", text: $fileExtension)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
-                    .frame(width: 80)
-            }
-
-            switch creationMode {
-            case .emptyFile:
-                EmptyView()
-            case .textContent:
-                TextEditor(text: $initialContent)
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(minHeight: 72)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 5)
-                            .stroke(Color.primary.opacity(0.12))
-                    )
-            case .copyTemplate:
-                HStack(spacing: 6) {
-                    TextField("模板文件路径", text: $templatePath)
-                        .textFieldStyle(.roundedBorder)
-                        .controlSize(.small)
-                    Button {
-                        chooseTemplateFile()
-                    } label: {
-                        Image(systemName: "folder")
-                    }
-                    .controlSize(.small)
-                    .help("选择模板文件")
-                }
+                creationModeEditor
             }
 
             if !liveIssues.isEmpty {
-                ForEach(liveIssues) { issue in
-                    ValidationIssueRow(isError: issue.severity == .error, message: issue.message)
-                }
-            }
-
-            HStack {
-                if showsSaveFeedback {
-                    SaveConfirmationLabel()
-                        .transition(.opacity.combined(with: .move(edge: .leading)))
-                }
-
-                Spacer()
-
-                Button("保存模板") {
-                    onUpdate(
-                        displayName,
-                        baseName,
-                        fileExtension,
-                        creationMode,
-                        templatePath.nilIfBlank,
-                        initialContent.nilIfBlank,
-                        isEnabled
+                editorSection("需要处理") {
+                    VStack(alignment: .leading, spacing: 5) {
+                        ForEach(liveIssues) { issue in
+                            ValidationIssueRow(
+                                isError: issue.severity == .error,
+                                message: issue.message,
+                                warningColor: .orange
+                            )
+                        }
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(issueTint.opacity(0.08))
                     )
-                    showSaveFeedback()
                 }
-                .controlSize(.small)
-                .disabled(!hasChanges || hasBlockingIssues)
             }
+
+            Divider()
+
+            editorFooter
         }
-        .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.primary.opacity(0.04))
-        )
         .onAppear {
             onDraftChange(editedTemplate)
         }
         .onChange(of: editedTemplate) { _, draft in
             onDraftChange(draft)
         }
-        .onChange(of: template) { _, newValue in
+        .onChange(of: savedTemplate) { _, newValue in
             displayName = newValue.displayName
             baseName = newValue.baseName
             fileExtension = newValue.fileExtension
@@ -389,12 +611,154 @@ private struct NewFileTemplateEditorRow: View {
         }
     }
 
+    private var editorHeader: some View {
+        HStack(spacing: 10) {
+            Image(systemName: templateSymbol(for: creationMode))
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 34, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.11))
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayName.nilIfBlank ?? "未命名模板")
+                    .font(.headline)
+                    .lineLimit(1)
+                Text(generatedFilename(for: editedTemplate))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospaced()
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Toggle("在 Finder 菜单中显示", isOn: $isEnabled)
+                .toggleStyle(.checkbox)
+                .controlSize(.small)
+                .help(isEnabled ? "保存后继续在 Finder 菜单中显示" : "保存后从 Finder 菜单中隐藏")
+        }
+    }
+
+    @ViewBuilder
+    private var creationModeEditor: some View {
+        switch creationMode {
+        case .emptyFile:
+            Label("创建不包含任何内容的空文件。", systemImage: "doc")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+        case .textContent:
+            VStack(alignment: .leading, spacing: 5) {
+                Text("默认内容")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+
+                TextEditor(text: $initialContent)
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(minHeight: 100)
+                    .padding(4)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .stroke(Color.primary.opacity(0.14))
+                    )
+            }
+
+        case .copyTemplate:
+            VStack(alignment: .leading, spacing: 5) {
+                Text("模板文件")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 6) {
+                    TextField("选择一个本地文件", text: $templatePath)
+                        .font(.system(.caption, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
+
+                    Button {
+                        chooseTemplateFile()
+                    } label: {
+                        Label("选择…", systemImage: "folder")
+                    }
+                    .controlSize(.small)
+                }
+
+                Text("创建文件时会复制该文件的内容。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var editorFooter: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Button("上移", systemImage: "chevron.up", action: onMoveUp)
+                    .disabled(!canMoveUp)
+                Button("下移", systemImage: "chevron.down", action: onMoveDown)
+                    .disabled(!canMoveDown)
+                Divider()
+                Button("删除模板", systemImage: "trash", role: .destructive, action: onRequestDelete)
+            } label: {
+                Label("更多", systemImage: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .controlSize(.small)
+            .fixedSize()
+
+            Spacer(minLength: 8)
+
+            if showsSaveFeedback {
+                SaveConfirmationLabel()
+                    .transition(.opacity.combined(with: .move(edge: .trailing)))
+            } else if hasChanges {
+                Text("有未保存的更改")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Button("保存并同步") {
+                saveTemplate()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(!hasChanges || hasBlockingIssues)
+        }
+    }
+
+    private func editorSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            content()
+        }
+    }
+
+    private func fieldLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(width: 72, alignment: .trailing)
+    }
+
+    private var issueTint: Color {
+        liveIssues.contains { $0.severity == .error } ? .red : .orange
+    }
+
     private var hasBlockingIssues: Bool {
         liveIssues.contains { $0.severity == .error }
     }
 
     private var editedTemplate: NewFileTemplateConfig {
-        var copy = template
+        var copy = savedTemplate
         copy.displayName = displayName
         copy.baseName = baseName
         copy.fileExtension = fileExtension
@@ -407,13 +771,26 @@ private struct NewFileTemplateEditorRow: View {
     }
 
     private var hasChanges: Bool {
-        displayName != template.displayName
-            || baseName != template.baseName
-            || fileExtension != template.fileExtension
-            || creationMode != template.creationMode
-            || templatePath.nilIfBlank != template.templatePath
-            || initialContent.nilIfBlank != template.initialContent
-            || isEnabled != template.isEnabled
+        displayName != savedTemplate.displayName
+            || baseName != savedTemplate.baseName
+            || fileExtension != savedTemplate.fileExtension
+            || creationMode != savedTemplate.creationMode
+            || templatePath.nilIfBlank != savedTemplate.templatePath
+            || initialContent.nilIfBlank != savedTemplate.initialContent
+            || isEnabled != savedTemplate.isEnabled
+    }
+
+    private func saveTemplate() {
+        onUpdate(
+            displayName,
+            baseName,
+            fileExtension,
+            creationMode,
+            templatePath.nilIfBlank,
+            initialContent.nilIfBlank,
+            isEnabled
+        )
+        showSaveFeedback()
     }
 
     private func chooseTemplateFile() {
@@ -446,4 +823,42 @@ private struct NewFileTemplateEditorRow: View {
             }
         }
     }
+}
+
+private func templateSymbol(for mode: NewFileCreationMode) -> String {
+    switch mode {
+    case .emptyFile:
+        return "doc"
+    case .textContent:
+        return "doc.text"
+    case .copyTemplate:
+        return "doc.on.doc"
+    }
+}
+
+private func creationModeTitle(_ mode: NewFileCreationMode) -> String {
+    switch mode {
+    case .emptyFile:
+        return "空白文件"
+    case .textContent:
+        return "预填文本"
+    case .copyTemplate:
+        return "复制现有文件"
+    }
+}
+
+private func generatedFilename(for template: NewFileTemplateConfig) -> String {
+    let baseName = template.baseName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let fileExtension = template.fileExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    if baseName.isEmpty, fileExtension.isEmpty {
+        return "文件名未设置"
+    }
+    if fileExtension.isEmpty {
+        return baseName
+    }
+    if baseName.isEmpty {
+        return ".\(fileExtension)"
+    }
+    return "\(baseName).\(fileExtension)"
 }

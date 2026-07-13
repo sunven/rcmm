@@ -79,39 +79,21 @@ struct NewFileSettingsTab: View {
                     .foregroundStyle(config.isEnabled ? .primary : .secondary)
                     .lineLimit(1)
 
-                Text("\(config.name) · \(config.templates.count) 个模板")
+                Text("管理 Finder 右键菜单中的文件模板")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 8)
 
-            HStack(spacing: 6) {
-                Image(systemName: "doc.on.doc")
-                    .font(.system(size: 10, weight: .semibold))
-                Text("\(config.templates.count)")
-                    .font(.caption.weight(.semibold))
-                    .monospacedDigit()
-                Text("模板")
-                    .font(.caption)
-            }
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(Color.primary.opacity(0.055))
-            )
-
             statusBadge(status)
 
-            Toggle("", isOn: Binding(
+            Toggle("启用", isOn: Binding(
                 get: { config.isEnabled },
                 set: { appState.toggleEntry(for: config.id.uuidString, isEnabled: $0) }
             ))
             .toggleStyle(.switch)
             .controlSize(.small)
-            .labelsHidden()
             .help(config.isEnabled ? "停用新建文件菜单" : "启用新建文件菜单")
         }
         .padding(.horizontal, 16)
