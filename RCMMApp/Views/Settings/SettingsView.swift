@@ -12,7 +12,7 @@ struct SettingsView: View {
 
             content
         }
-        .frame(minWidth: 720, idealWidth: 820, minHeight: 500, idealHeight: 560)
+        .frame(minWidth: 720, idealWidth: 760, minHeight: 500, idealHeight: 540)
     }
 
     @ViewBuilder

@@ -5,17 +5,26 @@ struct SettingsSidebar: View {
     @Binding var selection: SettingsDestination
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("rcmm")
-                    .font(.headline.weight(.semibold))
-                Text("Finder 扩展控制台")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 32, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("rcmm")
+                        .font(.headline.weight(.semibold))
+                    Text("Finder 扩展控制台")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 14)
-            .padding(.top, 18)
-            .padding(.bottom, 4)
+            .padding(.top, 22)
+            .padding(.bottom, 20)
 
             ForEach(SettingsDestination.allCases) { destination in
                 Button {
@@ -24,7 +33,7 @@ struct SettingsSidebar: View {
                     sidebarLabel(for: destination)
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(selection == destination ? .primary : .secondary)
+                .foregroundStyle(selection == destination ? Color.accentColor : .secondary)
                 .accessibilityLabel(destination.title)
                 .accessibilityAddTraits(selection == destination ? [.isSelected] : [])
                 .padding(.horizontal, 8)
@@ -32,7 +41,7 @@ struct SettingsSidebar: View {
 
             Spacer()
         }
-        .frame(width: 188)
+        .frame(width: 160)
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
@@ -54,13 +63,5 @@ struct SettingsSidebar: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(selection == destination ? Color.accentColor.opacity(0.14) : Color.clear)
         )
-        .overlay(alignment: .leading) {
-            if selection == destination {
-                Capsule()
-                    .fill(Color.accentColor)
-                    .frame(width: 3, height: 18)
-                    .padding(.leading, 2)
-            }
-        }
     }
 }

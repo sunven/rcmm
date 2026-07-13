@@ -5,52 +5,48 @@ struct NewFileSettingsTab: View {
     @Environment(AppState.self) private var appState
 
     private enum Layout {
-        static let contentPadding = EdgeInsets(top: 14, leading: 16, bottom: 16, trailing: 16)
+        static let contentPadding = EdgeInsets(top: 18, leading: 18, bottom: 18, trailing: 18)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             if let config = appState.primaryNewFileMenu {
-                header(for: config)
-
-                Divider()
-
                 ScrollView {
-                    NewFileMenuEditor(
-                        config: config,
-                        onRename: { name in
-                            appState.updateNewFileMenuName(for: config.id, name: name)
-                        },
-                        onAddTemplate: {
-                            appState.addNewFileTemplate(to: config.id)
-                        },
-                        onUpdateTemplate: { template in
-                            appState.updateNewFileTemplate(
-                                menuID: config.id,
-                                templateID: template.id,
-                                displayName: template.displayName,
-                                baseName: template.baseName,
-                                fileExtension: template.fileExtension,
-                                creationMode: template.creationMode,
-                                templatePath: template.templatePath,
-                                initialContent: template.initialContent,
-                                isEnabled: template.isEnabled
-                            )
-                        },
-                        onDeleteTemplate: { templateID in
-                            appState.removeNewFileTemplate(
-                                menuID: config.id,
-                                templateID: templateID
-                            )
-                        },
-                        onMoveTemplate: { source, destination in
-                            appState.moveNewFileTemplate(
-                                menuID: config.id,
-                                from: source,
-                                to: destination
-                            )
-                        }
-                    )
+                    VStack(alignment: .leading, spacing: 16) {
+                        pageHeader(for: config)
+
+                        NewFileMenuEditor(
+                            config: config,
+                            onUpdateTemplate: { template in
+                                appState.updateNewFileTemplate(
+                                    menuID: config.id,
+                                    templateID: template.id,
+                                    displayName: template.displayName,
+                                    baseName: template.baseName,
+                                    fileExtension: template.fileExtension,
+                                    creationMode: template.creationMode,
+                                    templatePath: template.templatePath,
+                                    initialContent: template.initialContent,
+                                    isEnabled: template.isEnabled
+                                )
+                            },
+                            onDeleteTemplate: { templateID in
+                                appState.removeNewFileTemplate(
+                                    menuID: config.id,
+                                    templateID: templateID
+                                )
+                            },
+                            onMoveTemplate: { source, destination in
+                                appState.moveNewFileTemplate(
+                                    menuID: config.id,
+                                    from: source,
+                                    to: destination
+                                )
+                            }
+                        )
+
+                        usageTip
+                    }
                     .padding(Layout.contentPadding)
                 }
             } else {
@@ -60,61 +56,136 @@ struct NewFileSettingsTab: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func header(for config: NewFileMenuConfig) -> some View {
+    private func pageHeader(for config: NewFileMenuConfig) -> some View {
         let status = NewFileMenuStatusResolver.resolve(
             config: config,
             publishStates: appState.scriptPublishStates
         )
 
-        return HStack(spacing: 12) {
-            FinderMenuRowIcon(isEnabled: config.isEnabled, isUnavailable: status.kind == .unavailable) {
-                Image(systemName: config.iconName ?? "document.badge.plus")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(config.isEnabled ? .primary : .secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
+        return HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("新建文件")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(config.isEnabled ? .primary : .secondary)
-                    .lineLimit(1)
-
-                Text("管理 Finder 右键菜单中的文件模板")
-                    .font(.caption)
+                    .font(.title3.weight(.bold))
+                Text("自定义快速新建文件模板，提升工作效率")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: 12)
 
-            statusBadge(status)
+            VStack(alignment: .trailing, spacing: 14) {
+                HStack(spacing: 8) {
+                    Text("\(config.templates.count) 个模板")
+                        .font(.caption.weight(.medium))
+                        .monospacedDigit()
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(Color(nsColor: .controlBackgroundColor))
+                        )
 
-            Toggle("启用", isOn: Binding(
-                get: { config.isEnabled },
-                set: { appState.toggleEntry(for: config.id.uuidString, isEnabled: $0) }
-            ))
-            .toggleStyle(.switch)
-            .controlSize(.small)
-            .help(config.isEnabled ? "停用新建文件菜单" : "启用新建文件菜单")
+                    headerStatusBadge(status)
+
+                    Toggle(
+                        config.isEnabled ? "已启用" : "已停用",
+                        isOn: Binding(
+                            get: { config.isEnabled },
+                            set: { appState.toggleEntry(for: config.id.uuidString, isEnabled: $0) }
+                        )
+                    )
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(config.isEnabled ? Color.accentColor : .secondary)
+                    .padding(.leading, 10)
+                    .padding(.trailing, 6)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(Color.accentColor.opacity(config.isEnabled ? 0.10 : 0.04))
+                    )
+                    .help(config.isEnabled ? "停用新建文件菜单" : "启用新建文件菜单")
+                }
+
+                Button {
+                    appState.addNewFileTemplate(to: config.id)
+                } label: {
+                    Label("添加模板", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .help("添加新模板")
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func statusBadge(_ status: NewFileMenuStatus) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: statusSymbol(for: status))
-                .font(.system(size: 9, weight: .bold))
-            Text(status.displayName)
-                .font(.caption2.weight(.semibold))
-        }
+    private func headerStatusBadge(_ status: NewFileMenuStatus) -> some View {
+        Label(status.displayName, systemImage: statusSymbol(for: status))
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(statusColor(for: status))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
             .background(
                 Capsule()
-                    .fill(statusColor(for: status).opacity(0.12))
+                    .fill(statusColor(for: status).opacity(0.11))
             )
             .accessibilityLabel("状态：\(status.displayName)")
+    }
+
+    private var usageTip: some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "lightbulb")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color(nsColor: .textBackgroundColor).opacity(0.82)))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("使用提示")
+                    .font(.caption.weight(.semibold))
+                Text("添加模板后，可在 Finder 右键菜单中快速新建文件。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.accentColor.opacity(0.07))
+        )
+    }
+
+    private func statusSymbol(for status: NewFileMenuStatus) -> String {
+        switch status.kind {
+        case .disabled:
+            return "pause.circle.fill"
+        case .unavailable:
+            return "exclamationmark.triangle.fill"
+        case .partiallyAvailable, .warning:
+            return "exclamationmark.circle.fill"
+        case .syncing:
+            return "arrow.triangle.2.circlepath"
+        case .ready:
+            return "checkmark.circle.fill"
+        }
+    }
+
+    private func statusColor(for status: NewFileMenuStatus) -> Color {
+        switch status.kind {
+        case .disabled, .partiallyAvailable, .warning:
+            return NewFileSettingsColor.warning
+        case .unavailable:
+            return NewFileSettingsColor.error
+        case .syncing:
+            return NewFileSettingsColor.info
+        case .ready:
+            return NewFileSettingsColor.success
+        }
     }
 
     private var emptyState: some View {
@@ -145,33 +216,4 @@ struct NewFileSettingsTab: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func statusSymbol(for status: NewFileMenuStatus) -> String {
-        switch status.kind {
-        case .disabled:
-            return "pause.circle.fill"
-        case .unavailable:
-            return "exclamationmark.triangle.fill"
-        case .partiallyAvailable, .warning:
-            return "exclamationmark.circle.fill"
-        case .syncing:
-            return "arrow.triangle.2.circlepath"
-        case .ready:
-            return "checkmark.circle.fill"
-        }
-    }
-
-    private func statusColor(for status: NewFileMenuStatus) -> Color {
-        switch status.kind {
-        case .disabled, .partiallyAvailable:
-            return .orange
-        case .unavailable:
-            return .red
-        case .warning:
-            return .orange
-        case .syncing:
-            return .blue
-        case .ready:
-            return .green
-        }
-    }
 }
