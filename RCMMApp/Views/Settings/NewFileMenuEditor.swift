@@ -72,7 +72,7 @@ struct NewFileMenuEditor: View {
                         ValidationIssueRow(
                             isError: issue.severity == .error,
                             message: issue.message,
-                            warningColor: .orange
+                            warningColor: NewFileSemanticColor.warning
                         )
                     }
                 }
@@ -281,7 +281,7 @@ struct NewFileMenuEditor: View {
                 )
             },
             onRequestDelete: {
-                templatePendingDeletion = template
+                templatePendingDeletion = draftTemplatesByID[template.id] ?? template
             },
             onMoveUp: {
                 onMoveTemplate(IndexSet(integer: index), index - 1)
@@ -295,16 +295,17 @@ struct NewFileMenuEditor: View {
 
     private func templateListRow(_ savedTemplate: NewFileTemplateConfig, at index: Int) -> some View {
         let draft = draftTemplatesByID[savedTemplate.id] ?? savedTemplate
-        let issues = validation.issues.filter { $0.templateID == savedTemplate.id }
+        let issues = templateIssues(for: draft)
         let isSelected = selectedTemplateID == savedTemplate.id
 
         return Button {
+            guard !isSelected else { return }
             withAnimation(.easeInOut(duration: 0.14)) {
-                selectedTemplateID = isSelected ? nil : savedTemplate.id
+                selectedTemplateID = savedTemplate.id
             }
         } label: {
             HStack(spacing: 9) {
-                Image(systemName: templateSymbol(for: draft.creationMode))
+                Image(systemName: creationModePresentation(for: draft.creationMode).symbol)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(isSelected ? Color.accentColor : .secondary)
                     .frame(width: 28, height: 28)
@@ -319,7 +320,7 @@ struct NewFileMenuEditor: View {
                         .foregroundStyle(draft.isEnabled ? .primary : .secondary)
                         .lineLimit(1)
 
-                    Text("\(generatedFilename(for: draft)) · \(creationModeTitle(draft.creationMode))")
+                    Text("\(generatedFilename(for: draft)) · \(creationModePresentation(for: draft.creationMode).title)")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -327,7 +328,7 @@ struct NewFileMenuEditor: View {
 
                 Spacer(minLength: 4)
 
-                templateStateIcon(
+                templateStatus(
                     for: draft,
                     savedTemplate: savedTemplate,
                     issues: issues
@@ -349,59 +350,62 @@ struct NewFileMenuEditor: View {
             )
         }
         .buttonStyle(.plain)
-        .contextMenu {
-            Button("上移", systemImage: "chevron.up") {
-                onMoveTemplate(IndexSet(integer: index), index - 1)
-            }
-            .disabled(index == 0)
-
-            Button("下移", systemImage: "chevron.down") {
-                onMoveTemplate(IndexSet(integer: index), index + 2)
-            }
-            .disabled(index == config.templates.count - 1)
-
-            Divider()
-
-            Button("删除模板", systemImage: "trash", role: .destructive) {
-                templatePendingDeletion = savedTemplate
-            }
-        }
-        .accessibilityLabel("\(draft.displayName)，\(generatedFilename(for: draft))，\(creationModeTitle(draft.creationMode))")
-        .accessibilityValue(isSelected ? "已选择" : "")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityHint(isSelected ? "正在编辑此模板" : "按下以编辑此模板")
     }
 
     @ViewBuilder
-    private func templateStateIcon(
+    private func templateStatus(
         for template: NewFileTemplateConfig,
         savedTemplate: NewFileTemplateConfig,
         issues: [NewFileValidationIssue]
     ) -> some View {
-        if !template.isEnabled {
-            Image(systemName: "pause.circle.fill")
-                .foregroundStyle(.secondary)
-                .help("已停用")
-                .accessibilityLabel("已停用")
-        } else if issues.contains(where: { $0.severity == .error }) {
-            Image(systemName: "xmark.octagon.fill")
-                .foregroundStyle(.red)
-                .help("需要修正")
-                .accessibilityLabel("需要修正")
-        } else if !issues.isEmpty {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-                .help("有警告")
-                .accessibilityLabel("有警告")
-        } else if template != savedTemplate {
-            Image(systemName: "circle.fill")
-                .font(.system(size: 8))
-                .foregroundStyle(Color.accentColor)
-                .help("有未保存的更改")
-                .accessibilityLabel("未保存")
-        } else {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .help("配置有效")
-                .accessibilityLabel("配置有效")
+        let hasUnsavedChanges = hasUserChanges(template, comparedWith: savedTemplate)
+        let resourceStatus = templateResourceStatus(
+            for: template,
+            savedTemplate: savedTemplate,
+            issues: issues
+        )
+        let error = issues.first { $0.severity == .error }
+        let warning = issues.first { $0.severity == .warning }
+
+        HStack(spacing: 6) {
+            if hasUnsavedChanges {
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 8))
+                    .foregroundStyle(NewFileSemanticColor.info)
+                    .help("有未保存的更改")
+                    .accessibilityLabel("未保存")
+            }
+
+            if !template.isEnabled {
+                Image(systemName: "pause.circle.fill")
+                    .foregroundStyle(.secondary)
+                    .help("已停用")
+                    .accessibilityLabel("已停用")
+            }
+
+            if let resourceStatus {
+                Label(resourceStatus.label, systemImage: resourceStatus.symbol)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(resourceStatus.color)
+                    .lineLimit(1)
+            } else if let error {
+                Image(systemName: "xmark.octagon.fill")
+                    .foregroundStyle(NewFileSemanticColor.error)
+                    .help(error.message)
+                    .accessibilityLabel("不可用：\(error.message)")
+            } else if let warning {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(NewFileSemanticColor.warning)
+                    .help(warning.message)
+                    .accessibilityLabel("有警告：\(warning.message)")
+            } else if template.isEnabled && !hasUnsavedChanges {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(NewFileSemanticColor.success)
+                    .help("配置有效")
+                    .accessibilityLabel("配置有效")
+            }
         }
     }
 
@@ -409,12 +413,75 @@ struct NewFileMenuEditor: View {
         guard let template = templatePendingDeletion else {
             return "删除模板？"
         }
-        return "删除“\(template.displayName)”模板？"
+        let displayName = template.displayName.nilIfBlank ?? "未命名模板"
+        return "删除“\(displayName)”模板？"
     }
 
     private var templateCountText: String {
-        let enabledCount = config.templates.filter(\.isEnabled).count
+        let enabledCount = draftMenu.templates.filter(\.isEnabled).count
         return "\(enabledCount) 个启用，共 \(config.templates.count) 个"
+    }
+
+    private func templateIssues(
+        for template: NewFileTemplateConfig
+    ) -> [NewFileValidationIssue] {
+        if template.isEnabled {
+            return validation.issues.filter { $0.templateID == template.id }
+        }
+
+        var menu = draftMenu
+        guard let index = menu.templates.firstIndex(where: { $0.id == template.id }) else {
+            return []
+        }
+        menu.templates[index].isEnabled = true
+        return NewFileMenuValidator.validate(menu).issues.filter { $0.templateID == template.id }
+    }
+
+    private func templateResourceStatus(
+        for template: NewFileTemplateConfig,
+        savedTemplate: NewFileTemplateConfig,
+        issues: [NewFileValidationIssue]
+    ) -> TemplateResourceStatus? {
+        if issues.contains(where: { $0.code == .missingTemplatePath }) {
+            return TemplateResourceStatus(
+                label: "未选择模板文件",
+                symbol: "xmark.octagon.fill",
+                color: NewFileSemanticColor.error
+            )
+        }
+        if issues.contains(where: { $0.code == .templatePathMissing }) {
+            return TemplateResourceStatus(
+                label: "模板文件缺失",
+                symbol: "xmark.octagon.fill",
+                color: NewFileSemanticColor.error
+            )
+        }
+        if issues.contains(where: { $0.code == .templatePathIsDirectory }) {
+            return TemplateResourceStatus(
+                label: "模板文件不可用",
+                symbol: "xmark.octagon.fill",
+                color: NewFileSemanticColor.error
+            )
+        }
+        if template.creationMode == .copyTemplate,
+           template.templatePath == savedTemplate.templatePath,
+           template.templateFingerprint != savedTemplate.templateFingerprint {
+            return TemplateResourceStatus(
+                label: "模板文件已变化",
+                symbol: "exclamationmark.triangle.fill",
+                color: NewFileSemanticColor.warning
+            )
+        }
+        return nil
+    }
+
+    private func hasUserChanges(
+        _ template: NewFileTemplateConfig,
+        comparedWith savedTemplate: NewFileTemplateConfig
+    ) -> Bool {
+        var comparableTemplate = template
+        comparableTemplate.templateFingerprint = savedTemplate.templateFingerprint
+        return comparableTemplate != savedTemplate
     }
 
     private func addTemplate() {
@@ -560,7 +627,7 @@ private struct NewFileTemplateEditor: View {
             editorSection("创建方式") {
                 Picker("创建方式", selection: $creationMode) {
                     ForEach(NewFileCreationMode.allCases) { mode in
-                        Text(creationModeTitle(mode)).tag(mode)
+                        Text(creationModePresentation(for: mode).title).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -576,7 +643,7 @@ private struct NewFileTemplateEditor: View {
                             ValidationIssueRow(
                                 isError: issue.severity == .error,
                                 message: issue.message,
-                                warningColor: .orange
+                                warningColor: NewFileSemanticColor.warning
                             )
                         }
                     }
@@ -613,7 +680,7 @@ private struct NewFileTemplateEditor: View {
 
     private var editorHeader: some View {
         HStack(spacing: 10) {
-            Image(systemName: templateSymbol(for: creationMode))
+            Image(systemName: creationModePresentation(for: creationMode).symbol)
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 34, height: 34)
@@ -750,7 +817,9 @@ private struct NewFileTemplateEditor: View {
     }
 
     private var issueTint: Color {
-        liveIssues.contains { $0.severity == .error } ? .red : .orange
+        liveIssues.contains { $0.severity == .error }
+            ? NewFileSemanticColor.error
+            : NewFileSemanticColor.warning
     }
 
     private var hasBlockingIssues: Bool {
@@ -825,25 +894,34 @@ private struct NewFileTemplateEditor: View {
     }
 }
 
-private func templateSymbol(for mode: NewFileCreationMode) -> String {
-    switch mode {
-    case .emptyFile:
-        return "doc"
-    case .textContent:
-        return "doc.text"
-    case .copyTemplate:
-        return "doc.on.doc"
-    }
+private struct TemplateResourceStatus {
+    let label: String
+    let symbol: String
+    let color: Color
 }
 
-private func creationModeTitle(_ mode: NewFileCreationMode) -> String {
+private struct NewFileCreationModePresentation {
+    let title: String
+    let symbol: String
+}
+
+private enum NewFileSemanticColor {
+    static let success = Color(red: 47 / 255, green: 158 / 255, blue: 68 / 255)
+    static let warning = Color(red: 183 / 255, green: 121 / 255, blue: 31 / 255)
+    static let error = Color(red: 217 / 255, green: 45 / 255, blue: 32 / 255)
+    static let info = Color(red: 37 / 255, green: 99 / 255, blue: 235 / 255)
+}
+
+private func creationModePresentation(
+    for mode: NewFileCreationMode
+) -> NewFileCreationModePresentation {
     switch mode {
     case .emptyFile:
-        return "空白文件"
+        return NewFileCreationModePresentation(title: "空白文件", symbol: "doc")
     case .textContent:
-        return "预填文本"
+        return NewFileCreationModePresentation(title: "预填文本", symbol: "doc.text")
     case .copyTemplate:
-        return "复制现有文件"
+        return NewFileCreationModePresentation(title: "复制现有文件", symbol: "doc.on.doc")
     }
 }
 
