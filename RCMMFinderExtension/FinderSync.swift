@@ -29,16 +29,6 @@ class FinderSync: FIFinderSync {
                 publishStates: self.publishStates
             )
         }
-
-        var customAppPaths: Set<String> {
-            Set(visibleEntries.compactMap { entry in
-                guard case .custom(let config) = entry,
-                      FinderMenuIconPolicy.shouldPreloadApplicationIcon(for: config) else {
-                    return nil
-                }
-                return config.appPath.trimmingCharacters(in: .whitespacesAndNewlines)
-            })
-        }
     }
 
     private let logger = Logger(
@@ -50,12 +40,8 @@ class FinderSync: FIFinderSync {
     private let scriptExecutor = ScriptExecutor()
     private let preferencesURL = SharedPreferencesStore.appGroupPreferencesURL()
     private let menuSnapshotLock = NSLock()
-    private let iconCacheLock = NSLock()
-    private let iconLoadQueue = DispatchQueue(label: "com.sunven.rcmm.finder-icon-cache", qos: .utility)
     private var menuSnapshot = MenuSnapshot.empty
     private var menuCacheMetadata: FinderMenuCacheMetadata?
-    private var iconCache: [String: NSImage] = [:]
-    private var pendingIconLoads: Set<String> = []
     private var configObservation: DarwinObservation?
     private var currentMenuKind: FIMenuKind?
 
@@ -214,20 +200,10 @@ class FinderSync: FIFinderSync {
         menuItem.tag = customIndex
         menuItem.target = self
 
-        if config.executionMode == .currentDirectory {
-            menuItem.image = makeMenuSymbolImage(
-                named: FinderMenuIconPolicy.placeholderSymbolName(for: config),
-                accessibilityDescription: config.appName
-            )
-        } else if let icon = cachedAppIcon(forFile: config.appPath) {
-            menuItem.image = icon
-        } else {
-            menuItem.image = makeMenuSymbolImage(
-                named: FinderMenuIconPolicy.placeholderSymbolName(for: config),
-                accessibilityDescription: config.appName
-            )
-            prewarmIconCache(forFile: config.appPath)
-        }
+        menuItem.image = makeMenuSymbolImage(
+            named: FinderMenuIconPolicy.placeholderSymbolName(for: config),
+            accessibilityDescription: config.appName
+        )
 
         return menuItem
     }
@@ -452,57 +428,10 @@ class FinderSync: FIFinderSync {
             loadedAt: loadedAt
         )
         menuSnapshotLock.unlock()
-
-        pruneIconCache(keeping: snapshot.customAppPaths)
-        prewarmIconCache(for: snapshot.customAppPaths)
     }
 
     private func preferencesModificationDate() -> Date? {
         SharedPreferencesStore.propertyListModificationDate(at: preferencesURL)
-    }
-
-    private func pruneIconCache(keeping paths: Set<String>) {
-        iconCacheLock.lock()
-        defer { iconCacheLock.unlock() }
-        iconCache = iconCache.filter { paths.contains($0.key) }
-        pendingIconLoads = pendingIconLoads.filter { paths.contains($0) }
-    }
-
-    private func cachedAppIcon(forFile path: String) -> NSImage? {
-        let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        iconCacheLock.lock()
-        defer { iconCacheLock.unlock() }
-        return iconCache[trimmedPath]
-    }
-
-    private func prewarmIconCache(for paths: Set<String>) {
-        for path in paths {
-            prewarmIconCache(forFile: path)
-        }
-    }
-
-    private func prewarmIconCache(forFile path: String) {
-        let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedPath.isEmpty else { return }
-
-        iconCacheLock.lock()
-        if iconCache[trimmedPath] != nil || pendingIconLoads.contains(trimmedPath) {
-            iconCacheLock.unlock()
-            return
-        }
-        pendingIconLoads.insert(trimmedPath)
-        iconCacheLock.unlock()
-
-        iconLoadQueue.async { [weak self] in
-            guard let self else { return }
-            let icon = NSWorkspace.shared.icon(forFile: trimmedPath)
-            icon.size = NSSize(width: 16, height: 16)
-
-            self.iconCacheLock.lock()
-            self.iconCache[trimmedPath] = icon
-            self.pendingIconLoads.remove(trimmedPath)
-            self.iconCacheLock.unlock()
-        }
     }
 
     private func parentMenuTitle(for sender: NSMenuItem) -> String? {
