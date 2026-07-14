@@ -29,6 +29,7 @@ struct ScriptCompilationPipelineTests {
         #expect(outcome.publishStates[scriptID]?.status == .current)
         #expect(outcome.errorRecords.isEmpty)
         #expect(harness.compiler.compiledSources.count == 1)
+        #expect(harness.iconPublisher.publishedEntries == [[.custom(item)]])
         #expect(harness.fileManager.fileExists(atPath: scriptURL.path))
         #expect(harness.notifier.postedConfigChangedCount == 1)
     }
@@ -231,6 +232,7 @@ private final class PipelineHarness {
     let temporaryRoot: URL
     let scriptsDirectory: URL
     let compiler: RecordingAppleScriptCompiler
+    let iconPublisher: RecordingApplicationIconPublisher
     let notifier: RecordingScriptCompilationNotifier
     let configService: SharedConfigService
     let publishStore: ScriptPublishStore
@@ -250,6 +252,7 @@ private final class PipelineHarness {
         )
 
         compiler = RecordingAppleScriptCompiler()
+        iconPublisher = RecordingApplicationIconPublisher()
         notifier = RecordingScriptCompilationNotifier()
         configService = SharedConfigService(defaults: defaults)
         publishStore = ScriptPublishStore(defaults: defaults)
@@ -263,6 +266,7 @@ private final class PipelineHarness {
             sourceGenerator: ScriptSourceGenerator(),
             fileManager: fileManager,
             scriptsDirectory: scriptsDirectory,
+            iconPublisher: iconPublisher,
             notifier: notifier
         )
     }
@@ -375,5 +379,22 @@ private final class RecordingScriptCompilationNotifier: ScriptCompilationNotifyi
 
     func postConfigChanged() {
         postedConfigChangedCount += 1
+    }
+}
+
+private final class RecordingApplicationIconPublisher: ApplicationIconPublishing, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedEntries: [[MenuEntry]] = []
+
+    var publishedEntries: [[MenuEntry]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedEntries
+    }
+
+    func publishIcons(for entries: [MenuEntry]) {
+        lock.lock()
+        recordedEntries.append(entries)
+        lock.unlock()
     }
 }

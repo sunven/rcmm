@@ -2,6 +2,7 @@ import Foundation
 
 public enum SharedKeys {
     public static let menuEntries = "rcmm.menu.entries"
+    public static let applicationIcons = "rcmm.menu.applicationIcons"
     public static let menuPresentationMode = "rcmm.menu.presentationMode"
     public static let scriptPublishStates = "rcmm.script.publishStates"
     public static let legacyMenuItems = "rcmm.menu.items"

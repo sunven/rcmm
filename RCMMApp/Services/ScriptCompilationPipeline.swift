@@ -27,6 +27,7 @@ final class ScriptCompilationPipeline: @unchecked Sendable {
     private let configService: SharedConfigService
     private let publishStore: ScriptPublishStore
     private let errorQueue: SharedErrorQueue
+    private let iconPublisher: ApplicationIconPublishing
     private let notifier: ScriptCompilationNotifying
 
     init(
@@ -37,11 +38,13 @@ final class ScriptCompilationPipeline: @unchecked Sendable {
         sourceGenerator: ScriptSourceGenerator = ScriptSourceGenerator(),
         fileManager: FileManager = .default,
         scriptsDirectory: URL? = nil,
+        iconPublisher: ApplicationIconPublishing = ApplicationIconPublisher(),
         notifier: ScriptCompilationNotifying = DarwinScriptCompilationNotifier()
     ) {
         self.configService = configService
         self.publishStore = publishStore
         self.errorQueue = errorQueue
+        self.iconPublisher = iconPublisher
         self.notifier = notifier
         self.installer = ScriptInstallerService(
             compiler: compiler,
@@ -57,9 +60,9 @@ final class ScriptCompilationPipeline: @unchecked Sendable {
     func publishCurrentConfiguration() async -> ScriptCompilationOutcome {
         await withCheckedContinuation { continuation in
             Self.publishQueue.async {
-                let results = self.installer.syncScripts(
-                    with: self.configService.loadEntries()
-                )
+                let entries = self.configService.loadEntries()
+                self.iconPublisher.publishIcons(for: entries)
+                let results = self.installer.syncScripts(with: entries)
                 self.notifier.postConfigChanged()
                 continuation.resume(
                     returning: ScriptCompilationOutcome(

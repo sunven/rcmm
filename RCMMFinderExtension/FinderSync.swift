@@ -8,22 +8,26 @@ class FinderSync: FIFinderSync {
         let entries: [MenuEntry]
         let publishStates: [String: ScriptPublishState]
         let presentationMode: MenuPresentationMode
+        let applicationIcons: [String: Data]
         let visibleEntries: [MenuEntry]
 
         static let empty = MenuSnapshot(
             entries: [],
             publishStates: [:],
-            presentationMode: .flat
+            presentationMode: .flat,
+            applicationIcons: [:]
         )
 
         init(
             entries: [MenuEntry],
             publishStates: [String: ScriptPublishState],
-            presentationMode: MenuPresentationMode
+            presentationMode: MenuPresentationMode,
+            applicationIcons: [String: Data]
         ) {
             self.entries = entries
             self.publishStates = publishStates
             self.presentationMode = presentationMode
+            self.applicationIcons = applicationIcons
             self.visibleEntries = FinderMenuPresenter.visibleEntries(
                 entries: self.entries,
                 publishStates: self.publishStates
@@ -37,6 +41,7 @@ class FinderSync: FIFinderSync {
     )
     private let configService = SharedConfigService()
     private let publishStore = ScriptPublishStore()
+    private let iconStore = ApplicationIconStore()
     private let scriptExecutor = ScriptExecutor()
     private let preferencesURL = SharedPreferencesStore.appGroupPreferencesURL()
     private let menuSnapshotLock = NSLock()
@@ -114,6 +119,7 @@ class FinderSync: FIFinderSync {
             addMenuItems(
                 for: entries,
                 publishStates: snapshot.publishStates,
+                applicationIcons: snapshot.applicationIcons,
                 to: menu
             )
         case .nestedUnderRCMM:
@@ -127,6 +133,7 @@ class FinderSync: FIFinderSync {
             addMenuItems(
                 for: entries,
                 publishStates: snapshot.publishStates,
+                applicationIcons: snapshot.applicationIcons,
                 to: submenu
             )
             parentItem.submenu = submenu
@@ -139,6 +146,7 @@ class FinderSync: FIFinderSync {
     private func addMenuItems(
         for entries: [MenuEntry],
         publishStates: [String: ScriptPublishState],
+        applicationIcons: [String: Data],
         to menu: NSMenu
     ) {
         var customIndex = 0
@@ -147,7 +155,11 @@ class FinderSync: FIFinderSync {
             case .builtIn(let item):
                 menu.addItem(makeBuiltInMenuItem(from: item))
             case .custom(let config):
-                menu.addItem(makeCustomMenuItem(config, customIndex: customIndex))
+                menu.addItem(makeCustomMenuItem(
+                    config,
+                    customIndex: customIndex,
+                    applicationIcons: applicationIcons
+                ))
                 customIndex += 1
             case .composite(let config):
                 menu.addItem(makeCompositeMenuItem(config))
@@ -188,7 +200,8 @@ class FinderSync: FIFinderSync {
 
     private func makeCustomMenuItem(
         _ config: MenuItemConfig,
-        customIndex: Int
+        customIndex: Int,
+        applicationIcons: [String: Data]
     ) -> NSMenuItem {
         let menuItem = NSMenuItem(
             title: customMenuTitle(for: config),
@@ -200,10 +213,17 @@ class FinderSync: FIFinderSync {
         menuItem.tag = customIndex
         menuItem.target = self
 
-        menuItem.image = makeMenuSymbolImage(
-            named: FinderMenuIconPolicy.placeholderSymbolName(for: config),
-            accessibilityDescription: config.appName
-        )
+        if let iconData = FinderMenuIconPolicy.applicationIconData(
+            for: config,
+            cachedIcons: applicationIcons
+        ), let image = makeApplicationIconImage(from: iconData) {
+            menuItem.image = image
+        } else {
+            menuItem.image = makeMenuSymbolImage(
+                named: FinderMenuIconPolicy.placeholderSymbolName(for: config),
+                accessibilityDescription: config.appName
+            )
+        }
 
         return menuItem
     }
@@ -308,6 +328,17 @@ class FinderSync: FIFinderSync {
 
         image.size = NSSize(width: 16, height: 16)
         image.isTemplate = true
+        return image
+    }
+
+    private func makeApplicationIconImage(from data: Data) -> NSImage? {
+        guard let image = NSImage(data: data) else {
+            logger.error("无法解码共享应用图标")
+            return nil
+        }
+
+        image.size = NSSize(width: 16, height: 16)
+        image.isTemplate = false
         return image
     }
 
@@ -418,7 +449,8 @@ class FinderSync: FIFinderSync {
         let snapshot = MenuSnapshot(
             entries: configService.loadEntries(),
             publishStates: publishStore.loadAll(),
-            presentationMode: configService.loadMenuPresentationMode()
+            presentationMode: configService.loadMenuPresentationMode(),
+            applicationIcons: iconStore.loadIcons()
         )
 
         menuSnapshotLock.lock()
