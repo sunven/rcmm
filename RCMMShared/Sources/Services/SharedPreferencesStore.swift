@@ -12,58 +12,60 @@ public final class SharedPreferencesStore: @unchecked Sendable {
 
     private let backend: Backend
     private let fileManager: FileManager
+    private let directoryPolicy: DirectoryPolicy
+
+    /// 写入时对父目录的处理方式
+    public enum DirectoryPolicy: Sendable {
+        /// 目录不存在就创建（主 App 写 Application Scripts 目录时使用）
+        case create
+        /// 目录必须已存在，否则放弃写入。
+        ///
+        /// 扩展的沙盒容器只能由 containermanagerd 创建；主 App 抢先建目录会导致容器
+        /// 缺少元数据，扩展下次启动时容器结构不完整。
+        case requireExisting
+    }
 
     public convenience init(defaults: UserDefaults? = nil) {
         if let defaults {
             self.init(userDefaults: defaults)
         } else {
-            self.init(propertyListURL: Self.appGroupPreferencesURL())
+            self.init(propertyListURL: SharedPaths.extensionScriptsPreferencesURL())
         }
     }
 
     public init(userDefaults: UserDefaults) {
         backend = .userDefaults(userDefaults)
         fileManager = .default
+        directoryPolicy = .create
     }
 
     public init(
         propertyListURL: URL,
+        directoryPolicy: DirectoryPolicy = .create,
         fileManager: FileManager = .default
     ) {
         backend = .propertyList(propertyListURL)
         self.fileManager = fileManager
+        self.directoryPolicy = directoryPolicy
     }
 
-    public static func appGroupPreferencesURL(
+    /// 迁移专用：旧版本写在 App Group 容器里的配置路径。
+    ///
+    /// 该容器会触发 macOS App Data（TCC）门禁，正常读写路径已迁到
+    /// `SharedPaths.extensionScriptsPreferencesURL()`。
+    public static func legacyAppGroupPreferencesURL(
         appGroupID: String = AppGroupConstants.appGroupID,
-        finderExtensionBundleID: String = RuntimeConfiguration.finderExtensionBundleID,
         fileManager: FileManager = .default
-    ) -> URL {
-        let containerURL = fileManager.containerURL(
+    ) -> URL? {
+        guard let containerURL = fileManager.containerURL(
             forSecurityApplicationGroupIdentifier: appGroupID
-        )
-
-        guard let containerURL else {
-            return fallbackPreferencesURL(
-                finderExtensionBundleID: finderExtensionBundleID,
-                homeDirectory: realHomeDirectory()
-            )
+        ) else {
+            return nil
         }
 
         return containerURL
             .appendingPathComponent("Library/Preferences")
             .appendingPathComponent(appGroupID)
-            .appendingPathExtension("plist")
-    }
-
-    static func fallbackPreferencesURL(
-        finderExtensionBundleID: String,
-        homeDirectory: URL
-    ) -> URL {
-        homeDirectory
-            .appendingPathComponent("Library/Application Scripts")
-            .appendingPathComponent(finderExtensionBundleID)
-            .appendingPathComponent("rcmm.shared")
             .appendingPathExtension("plist")
     }
 
@@ -134,7 +136,7 @@ public final class SharedPreferencesStore: @unchecked Sendable {
     }
 
     private func updatePropertyList(_ mutate: (inout [String: Any]) -> Void) {
-        withLockedPropertyList {
+        withLockedPropertyList(exclusive: true) {
             var values = loadPropertyListUnlocked()
             mutate(&values)
             savePropertyListUnlocked(values)
@@ -142,7 +144,7 @@ public final class SharedPreferencesStore: @unchecked Sendable {
     }
 
     private func loadPropertyList() -> [String: Any] {
-        withLockedPropertyList {
+        withLockedPropertyList(exclusive: false) {
             loadPropertyListUnlocked()
         }
     }
@@ -164,11 +166,24 @@ public final class SharedPreferencesStore: @unchecked Sendable {
     private func savePropertyListUnlocked(_ values: [String: Any]) {
         guard case .propertyList(let url) = backend else { return }
 
+        let directory = url.deletingLastPathComponent()
+
         do {
-            try fileManager.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
+            switch directoryPolicy {
+            case .create:
+                try fileManager.createDirectory(
+                    at: directory,
+                    withIntermediateDirectories: true
+                )
+            case .requireExisting:
+                var isDirectory = ObjCBool(false)
+                let exists = fileManager.fileExists(
+                    atPath: directory.path,
+                    isDirectory: &isDirectory
+                )
+                guard exists, isDirectory.boolValue else { return }
+            }
+
             let data = try PropertyListSerialization.data(
                 fromPropertyList: values,
                 format: .binary,
@@ -180,7 +195,7 @@ public final class SharedPreferencesStore: @unchecked Sendable {
         }
     }
 
-    private func withLockedPropertyList<T>(_ body: () -> T) -> T {
+    private func withLockedPropertyList<T>(exclusive: Bool, _ body: () -> T) -> T {
         guard case .propertyList(let url) = backend else {
             return body()
         }
@@ -188,6 +203,12 @@ public final class SharedPreferencesStore: @unchecked Sendable {
         let inProcessLock = Self.propertyListLock(for: url)
         inProcessLock.lock()
         defer { inProcessLock.unlock() }
+
+        // 扩展对 Application Scripts 只有读权限，不能建锁文件
+        // 写路径（exclusive=true）才尝试 flock
+        guard exclusive else {
+            return body()
+        }
 
         let descriptor = openLockFile(for: url)
         if descriptor >= 0 {
@@ -220,19 +241,29 @@ public final class SharedPreferencesStore: @unchecked Sendable {
 
     private func openLockFile(for url: URL) -> Int32 {
         let lockURL = url.appendingPathExtension("lock")
-        try? fileManager.createDirectory(
-            at: lockURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
+        let directory = lockURL.deletingLastPathComponent()
+
+        // requireExisting 下不得建目录：扩展沙盒容器只能由 containermanagerd 创建，
+        // 这里抢先 mkdir 会留下缺元数据的残缺容器。
+        switch directoryPolicy {
+        case .create:
+            try? fileManager.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+        case .requireExisting:
+            var isDirectory = ObjCBool(false)
+            let exists = fileManager.fileExists(
+                atPath: directory.path,
+                isDirectory: &isDirectory
+            )
+            guard exists, isDirectory.boolValue else { return -1 }
+        }
+
         return open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
     }
 
     private static func realHomeDirectory() -> URL {
-        if let passwd = getpwuid(getuid()),
-           let home = passwd.pointee.pw_dir {
-            return URL(fileURLWithPath: String(cString: home), isDirectory: true)
-        }
-
-        return FileManager.default.homeDirectoryForCurrentUser
+        SharedPaths.realHomeDirectory()
     }
 }

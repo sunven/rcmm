@@ -43,7 +43,7 @@ class FinderSync: FIFinderSync {
     private let publishStore = ScriptPublishStore()
     private let iconStore = ApplicationIconStore()
     private let scriptExecutor = ScriptExecutor()
-    private let preferencesURL = SharedPreferencesStore.appGroupPreferencesURL()
+    private let preferencesURL = SharedPaths.extensionScriptsPreferencesURL()
     private let menuSnapshotLock = NSLock()
     private var menuSnapshot = MenuSnapshot.empty
     private var menuCacheMetadata: FinderMenuCacheMetadata?

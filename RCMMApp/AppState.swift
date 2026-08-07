@@ -101,6 +101,12 @@ final class AppState {
 #endif
 
     init(coordinator: AppCoordinator? = nil, forPreview: Bool = false) {
+        // 一次性迁移：App Group → Application Scripts。
+        // 必须早于 AppCoordinator 构建 —— 后者在 init 里就会读配置并同步脚本。
+        if !forPreview, coordinator == nil {
+            ConfigurationMigrationService().migrateIfNeeded()
+        }
+
         self.coordinator = coordinator ?? AppCoordinator(forPreview: forPreview)
         isOnboardingCompleted = SharedPreferencesStore()
             .bool(forKey: SharedKeys.onboardingCompleted)
