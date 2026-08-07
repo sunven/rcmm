@@ -33,15 +33,6 @@ require_cmd() {
   fi
 }
 
-expand_entitlements() {
-  local input_path="$1"
-  local output_path="$2"
-
-  sed \
-    -e "s|\$(RCMM_APP_GROUP_IDENTIFIER)|group.com.sunven.rcmm|g" \
-    "$input_path" > "$output_path"
-}
-
 verify_extension_bundle() {
   if [[ ! -d "$APP_PATH/Contents/PlugIns/RCMMFinderExtension.appex" ]]; then
     echo "Error: Finder extension is missing from extracted app bundle" >&2
@@ -55,13 +46,10 @@ verify_extension_bundle() {
 }
 
 adhoc_sign_app() {
-  local app_entitlements="$BUILD_DIR/rcmm.entitlements"
-  local extension_entitlements="$BUILD_DIR/RCMMFinderExtension.entitlements"
+  local app_entitlements="$ROOT_DIR/RCMMApp/rcmm.entitlements"
+  local extension_entitlements="$ROOT_DIR/RCMMFinderExtension/RCMMFinderExtension.entitlements"
   local sparkle_framework="$APP_PATH/Contents/Frameworks/Sparkle.framework"
   local sparkle_version="$sparkle_framework/Versions/B"
-
-  expand_entitlements "$ROOT_DIR/RCMMApp/rcmm.entitlements" "$app_entitlements"
-  expand_entitlements "$ROOT_DIR/RCMMFinderExtension/RCMMFinderExtension.entitlements" "$extension_entitlements"
 
   if [[ -d "$sparkle_version" ]]; then
     codesign --force --sign - "$sparkle_version/XPCServices/Downloader.xpc"
