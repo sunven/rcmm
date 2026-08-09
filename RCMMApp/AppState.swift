@@ -25,31 +25,11 @@ enum ExtensionCleanupFlowState: Equatable {
 @Observable
 @MainActor
 final class AppState {
-    // MARK: - 领域模型（委托给 AppCoordinator）
+    // MARK: - 依赖
 
+    /// 仅用于展示层写入配置的少数流程（如 VS Code + Terminal 预设）。
+    /// Menu Entry 的读取与写入由视图直接经 MenuConfigStore / AppCoordinator 完成。
     private let coordinator: AppCoordinator
-
-    var menuEntries: [MenuEntry] {
-        get { coordinator.configStore.menuEntries }
-        set { coordinator.configStore.menuEntries = newValue }
-    }
-
-    var menuPresentationMode: MenuPresentationMode {
-        get { coordinator.configStore.menuPresentationMode }
-        set { coordinator.configStore.menuPresentationMode = newValue }
-    }
-
-    var scriptPublishStates: [String: ScriptPublishState] {
-        get { coordinator.configStore.scriptPublishStates }
-    }
-
-    var errorRecords: [ErrorRecord] {
-        get { coordinator.configStore.errorRecords }
-    }
-
-    var autoRepairMessage: String? {
-        get { coordinator.autoRepairMessage }
-    }
 
     // MARK: - UI 状态（AppState 保留）
 
@@ -140,17 +120,6 @@ final class AppState {
         } else {
             scheduleStartupUpdateCheckIfNeeded()
         }
-    }
-
-    // MARK: - Error Queue
-
-    func loadErrors() {
-        // 委托给 AppCoordinator：configStore 负责加载错误，coordinator 负责触发自动修复
-        coordinator.configStore.loadErrors()
-    }
-
-    func dismissAllErrors() {
-        coordinator.dismissAllErrors()
     }
 
     // MARK: - Extension Status
@@ -688,33 +657,10 @@ final class AppState {
         ActivationPolicyManager.hideToMenuBar()
     }
 
-    // MARK: - Menu Items
+    // MARK: - 组合命令预设
 
-    var primaryNewFileMenu: NewFileMenuConfig? {
-        coordinator.configStore.primaryNewFileMenu
-    }
-
-    @discardableResult
-    func ensureNewFileMenu() -> UUID {
-        coordinator.configStore.ensureNewFileMenu()
-    }
-
-    /// 从 AppInfo 创建 MenuItemConfig 并添加到菜单
-    @discardableResult
-    func addMenuItem(from appInfo: AppInfo) -> UUID? {
-        coordinator.addMenuItem(from: appInfo)
-    }
-
-    @discardableResult
-    func addEmptyCompositeCommand() -> UUID {
-        coordinator.addEmptyCompositeCommand()
-    }
-
-    @discardableResult
-    func addGitPullCommand() -> UUID {
-        coordinator.addGitPullCommand()
-    }
-
+    /// VS Code + Terminal 预设：扫描应用、挑选编辑器与终端属于展示流程，
+    /// 构造出的 Menu Entry 经 AppCoordinator.edit 写入。
     func addEditorTerminalPreset(onCreated: ((UUID) -> Void)? = nil) {
         compositePresetMessage = "正在查找已安装的编辑器和终端…"
 
@@ -773,12 +719,6 @@ final class AppState {
         onCreated?(id)
     }
 
-    /// 批量添加多个应用到菜单（只触发一次 saveAndSync）
-    @discardableResult
-    func addMenuItems(from appInfos: [AppInfo]) -> [UUID] {
-        coordinator.addMenuItems(from: appInfos)
-    }
-
     private func preferredDiscoveredApp(
         in category: AppCategory,
         preferredBundleIds: [String]
@@ -798,123 +738,4 @@ final class AppState {
 
         return CompositeCommandTemplates.legacyOpenApp
     }
-
-    /// 移动菜单项到新位置（拖拽排序）
-    func moveEntry(from source: IndexSet, to destination: Int, sync: Bool = true) {
-        if sync {
-            coordinator.moveEntry(from: source, to: destination)
-        } else {
-            coordinator.configStore.moveEntry(from: source, to: destination, save: false)
-        }
-    }
-
-    /// 删除指定位置的菜单项
-    func removeEntry(at offsets: IndexSet) {
-        coordinator.removeEntry(at: offsets)
-    }
-
-    func updateNewFileMenuName(for menuID: UUID, name: String) {
-        coordinator.updateNewFileMenuName(for: menuID, name: name)
-    }
-
-    func addNewFileTemplate(to menuID: UUID) {
-        coordinator.addNewFileTemplate(to: menuID)
-    }
-
-    func updateNewFileTemplate(
-        menuID: UUID,
-        templateID: UUID,
-        displayName: String,
-        baseName: String,
-        fileExtension: String,
-        creationMode: NewFileCreationMode,
-        templatePath: String?,
-        initialContent: String?,
-        isEnabled: Bool
-    ) {
-        coordinator.updateNewFileTemplate(
-            menuID: menuID,
-            templateID: templateID,
-            displayName: displayName,
-            baseName: baseName,
-            fileExtension: fileExtension,
-            creationMode: creationMode,
-            templatePath: templatePath,
-            initialContent: initialContent,
-            isEnabled: isEnabled
-        )
-    }
-
-    func removeNewFileTemplate(menuID: UUID, templateID: UUID) {
-        coordinator.removeNewFileTemplate(menuID: menuID, templateID: templateID)
-    }
-
-    func moveNewFileTemplate(menuID: UUID, from source: IndexSet, to destination: Int) {
-        coordinator.moveNewFileTemplate(menuID: menuID, from: source, to: destination)
-    }
-
-    func updateCustomCommand(
-        for itemId: UUID,
-        name: String? = nil,
-        command: String?,
-        executionMode: CustomCommandExecutionMode? = nil
-    ) {
-        coordinator.updateCustomCommand(
-            for: itemId,
-            name: name,
-            command: command,
-            executionMode: executionMode
-        )
-    }
-
-    func updateCompositeName(for compositeId: UUID, name: String) {
-        coordinator.updateCompositeName(for: compositeId, name: name)
-    }
-
-    func updateCompositeStep(
-        compositeId: UUID,
-        stepId: UUID,
-        name: String,
-        commandTemplate: String,
-        appPath: String?,
-        bundleId: String?,
-        isEnabled: Bool
-    ) {
-        coordinator.updateCompositeStep(
-            compositeID: compositeId,
-            stepID: stepId,
-            name: name,
-            commandTemplate: commandTemplate,
-            appPath: appPath,
-            bundleID: bundleId,
-            isEnabled: isEnabled
-        )
-    }
-
-    func addShellStep(to compositeId: UUID) {
-        coordinator.addShellStep(to: compositeId)
-    }
-
-    func removeCompositeStep(compositeId: UUID, stepId: UUID) {
-        coordinator.removeCompositeStep(compositeID: compositeId, stepID: stepId)
-    }
-
-    func moveCompositeStep(compositeId: UUID, from source: IndexSet, to destination: Int) {
-        coordinator.moveCompositeStep(compositeID: compositeId, from: source, to: destination)
-    }
-
-    /// 切换菜单项的启用/禁用状态
-    func toggleEntry(for entryId: String, isEnabled: Bool) {
-        coordinator.toggleEntry(for: entryId, isEnabled: isEnabled)
-    }
-
-    func updateMenuPresentationMode(_ mode: MenuPresentationMode) {
-        coordinator.updateMenuPresentationMode(mode)
-    }
-
-    /// 保存配置 + 同步脚本 + 发送 Darwin Notification
-    func saveAndSync() {
-        coordinator.saveAndSync()
-    }
-
 }

@@ -35,25 +35,6 @@ struct ScriptCompilationPipelineTests {
     }
 }
 
-@Suite("AppState coordinator wiring tests", .serialized)
-@MainActor
-struct AppStateCoordinatorWiringTests {
-    @Test("ensureNewFileMenu 使用注入 coordinator 的真实配置 store")
-    func ensureNewFileMenuUsesInjectedCoordinatorStore() throws {
-        let harness = try PipelineHarness()
-        defer { harness.cleanup() }
-
-        let coordinator = harness.makeCoordinator()
-        let state = AppState(coordinator: coordinator, forPreview: true)
-        let expectedID = coordinator.configStore.primaryNewFileMenu?.id
-
-        let actualID = state.ensureNewFileMenu()
-
-        #expect(actualID == expectedID)
-        #expect(expectedID != nil)
-    }
-}
-
 @Suite("ScriptInstallerService tests", .serialized)
 struct ScriptInstallerServiceTests {
     @Test("编译期间配置变化时丢弃 stale 结果")

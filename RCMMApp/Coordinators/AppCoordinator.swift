@@ -5,12 +5,13 @@ import Observation
 /// 顶层编排器：组合配置和脚本发布模块
 ///
 /// AppCoordinator 持有 MenuConfigStore、ScriptCompilationPipeline，
-/// 并协调它们之间的交互。采用扁平组合：三个模块彼此独立，依赖关系只存在于这里。
+/// 并协调它们之间的交互。采用扁平组合：模块彼此独立，依赖关系只存在于这里。
 ///
 /// 职责：
 /// - 持有并初始化配置、脚本发布模块
 /// - 编排自动修复逻辑（观察错误队列，触发脚本发布）
-/// - 提供统一的 saveAndSync 接口（供 UI 调用）
+/// - 提供 Menu Entry 配置的写入接口：`edit` / `preview` / `commitPreview` /
+///   `updateMenuPresentationMode`。视图读配置直接用 MenuConfigStore。
 @Observable
 @MainActor
 final class AppCoordinator {
@@ -155,169 +156,10 @@ final class AppCoordinator {
         syncScriptsInBackground()
     }
 
-    // MARK: - Sync Interface
+    // MARK: - Menu Presentation Mode
 
-    /// 保存配置并同步脚本（统一接口，供 UI 调用）
-    func saveAndSync() {
-        configStore.saveEntries()
-        syncScriptsInBackground()
-    }
-
-    @discardableResult
-    func addMenuItem(from appInfo: AppInfo) -> UUID? {
-        let id = configStore.addMenuItem(from: appInfo)
-        if id != nil {
-            syncScriptsInBackground()
-        }
-        return id
-    }
-
-    @discardableResult
-    func addMenuItems(from appInfos: [AppInfo]) -> [UUID] {
-        let ids = configStore.addMenuItems(from: appInfos)
-        if !ids.isEmpty {
-            syncScriptsInBackground()
-        }
-        return ids
-    }
-
-    @discardableResult
-    func addEmptyCompositeCommand() -> UUID {
-        let id = configStore.addEmptyCompositeCommand()
-        syncScriptsInBackground()
-        return id
-    }
-
-    @discardableResult
-    func addGitPullCommand() -> UUID {
-        let id = configStore.addGitPullCommand()
-        syncScriptsInBackground()
-        return id
-    }
-
-    @discardableResult
-    func addCompositeCommand(_ composite: CompositeMenuItemConfig) -> UUID {
-        let id = configStore.addCompositeCommand(composite)
-        syncScriptsInBackground()
-        return id
-    }
-
-    func moveEntry(from source: IndexSet, to destination: Int) {
-        configStore.moveEntry(from: source, to: destination)
-        syncScriptsInBackground()
-    }
-
-    func removeEntry(at offsets: IndexSet) {
-        configStore.removeEntry(at: offsets)
-        syncScriptsInBackground()
-    }
-
-    func toggleEntry(for entryID: String, isEnabled: Bool) {
-        configStore.toggleEntry(for: entryID, isEnabled: isEnabled)
-        syncScriptsInBackground()
-    }
-
-    func updateCustomCommand(
-        for itemID: UUID,
-        name: String? = nil,
-        command: String?,
-        executionMode: CustomCommandExecutionMode? = nil
-    ) {
-        configStore.updateCustomCommand(
-            for: itemID,
-            name: name,
-            command: command,
-            executionMode: executionMode
-        )
-        syncScriptsInBackground()
-    }
-
-    func updateCompositeName(for compositeID: UUID, name: String) {
-        configStore.updateCompositeName(for: compositeID, name: name)
-        syncScriptsInBackground()
-    }
-
-    func updateCompositeStep(
-        compositeID: UUID,
-        stepID: UUID,
-        name: String,
-        commandTemplate: String,
-        appPath: String?,
-        bundleID: String?,
-        isEnabled: Bool
-    ) {
-        configStore.updateCompositeStep(
-            compositeId: compositeID,
-            stepId: stepID,
-            name: name,
-            commandTemplate: commandTemplate,
-            appPath: appPath,
-            bundleId: bundleID,
-            isEnabled: isEnabled
-        )
-        syncScriptsInBackground()
-    }
-
-    func addShellStep(to compositeID: UUID) {
-        configStore.addShellStep(to: compositeID)
-        syncScriptsInBackground()
-    }
-
-    func removeCompositeStep(compositeID: UUID, stepID: UUID) {
-        configStore.removeCompositeStep(compositeId: compositeID, stepId: stepID)
-        syncScriptsInBackground()
-    }
-
-    func moveCompositeStep(compositeID: UUID, from source: IndexSet, to destination: Int) {
-        configStore.moveCompositeStep(compositeId: compositeID, from: source, to: destination)
-        syncScriptsInBackground()
-    }
-
-    func updateNewFileMenuName(for menuID: UUID, name: String) {
-        configStore.updateNewFileMenuName(for: menuID, name: name)
-        syncScriptsInBackground()
-    }
-
-    func addNewFileTemplate(to menuID: UUID) {
-        configStore.addNewFileTemplate(to: menuID)
-        syncScriptsInBackground()
-    }
-
-    func updateNewFileTemplate(
-        menuID: UUID,
-        templateID: UUID,
-        displayName: String,
-        baseName: String,
-        fileExtension: String,
-        creationMode: NewFileCreationMode,
-        templatePath: String?,
-        initialContent: String?,
-        isEnabled: Bool
-    ) {
-        configStore.updateNewFileTemplate(
-            menuID: menuID,
-            templateID: templateID,
-            displayName: displayName,
-            baseName: baseName,
-            fileExtension: fileExtension,
-            creationMode: creationMode,
-            templatePath: templatePath,
-            initialContent: initialContent,
-            isEnabled: isEnabled
-        )
-        syncScriptsInBackground()
-    }
-
-    func removeNewFileTemplate(menuID: UUID, templateID: UUID) {
-        configStore.removeNewFileTemplate(menuID: menuID, templateID: templateID)
-        syncScriptsInBackground()
-    }
-
-    func moveNewFileTemplate(menuID: UUID, from source: IndexSet, to destination: Int) {
-        configStore.moveNewFileTemplate(menuID: menuID, from: source, to: destination)
-        syncScriptsInBackground()
-    }
-
+    /// 展示方式不影响 `.scpt` 内容，因此不走 `edit` —— 只落盘并发通知，
+    /// 避免为一个枚举触发全量 AppleScript 重编译。
     func updateMenuPresentationMode(_ mode: MenuPresentationMode) {
         guard configStore.menuPresentationMode != mode else { return }
         configStore.saveMenuPresentationMode(mode)
