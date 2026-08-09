@@ -768,7 +768,7 @@ final class AppState {
                 ),
             ]
         )
-        let id = coordinator.addCompositeCommand(composite)
+        let id = coordinator.edit { $0.addCompositeCommand(composite) }
         compositePresetMessage = nil
         onCreated?(id)
     }

@@ -3,6 +3,8 @@ import SwiftUI
 
 struct MenuConfigTab: View {
     @Environment(AppState.self) private var appState
+    @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(MenuConfigStore.self) private var configStore
 
     @Binding var selectedEntryID: String?
     var onOpenNewFileSettings: () -> Void = {}
@@ -32,35 +34,39 @@ struct MenuConfigTab: View {
                 entry: selectedEntry,
                 onOpenNewFileSettings: onOpenNewFileSettings,
                 onUpdateCustomCommand: { config, name, command, executionMode in
-                    appState.updateCustomCommand(
-                        for: config.id,
-                        name: name,
-                        command: command,
-                        executionMode: executionMode
-                    )
+                    appCoordinator.edit {
+                        $0.updateCustomCommand(
+                            for: config.id,
+                            name: name,
+                            command: command,
+                            executionMode: executionMode
+                        )
+                    }
                 },
                 onRenameComposite: { config, name in
-                    appState.updateCompositeName(for: config.id, name: name)
+                    appCoordinator.edit { $0.updateCompositeName(for: config.id, name: name) }
                 },
                 onAddCompositeShellStep: { config in
-                    appState.addShellStep(to: config.id)
+                    appCoordinator.edit { $0.addShellStep(to: config.id) }
                 },
                 onUpdateCompositeStep: { config, step, name, commandTemplate, appPath, bundleId, isEnabled in
-                    appState.updateCompositeStep(
-                        compositeId: config.id,
-                        stepId: step.id,
-                        name: name,
-                        commandTemplate: commandTemplate,
-                        appPath: appPath,
-                        bundleId: bundleId,
-                        isEnabled: isEnabled
-                    )
+                    appCoordinator.edit {
+                        $0.updateCompositeStep(
+                            compositeId: config.id,
+                            stepId: step.id,
+                            name: name,
+                            commandTemplate: commandTemplate,
+                            appPath: appPath,
+                            bundleId: bundleId,
+                            isEnabled: isEnabled
+                        )
+                    }
                 },
                 onDeleteCompositeStep: { config, stepID in
-                    appState.removeCompositeStep(compositeId: config.id, stepId: stepID)
+                    appCoordinator.edit { $0.removeCompositeStep(compositeId: config.id, stepId: stepID) }
                 },
                 onMoveCompositeStep: { config, source, destination in
-                    appState.moveCompositeStep(compositeId: config.id, from: source, to: destination)
+                    appCoordinator.edit { $0.moveCompositeStep(compositeId: config.id, from: source, to: destination) }
                 }
             )
         }
@@ -75,7 +81,7 @@ struct MenuConfigTab: View {
         .onAppear {
             reconcileSelection()
         }
-        .onChange(of: appState.menuEntries) { _, _ in
+        .onChange(of: configStore.menuEntries) { _, _ in
             reconcileSelection()
         }
     }
@@ -83,12 +89,12 @@ struct MenuConfigTab: View {
     private var summaries: [FinderMenuEntrySummary] {
         FinderMenuEntrySummaryBuilder.summaries(
             for: displayedEntries,
-            publishStates: appState.scriptPublishStates
+            publishStates: configStore.scriptPublishStates
         )
     }
 
     private var displayedEntries: [MenuEntry] {
-        dragPreviewEntries ?? appState.menuEntries
+        dragPreviewEntries ?? configStore.menuEntries
     }
 
     private var selectedEntry: MenuEntry? {
@@ -122,7 +128,7 @@ struct MenuConfigTab: View {
 
             Divider()
 
-            if appState.menuEntries.isEmpty {
+            if configStore.menuEntries.isEmpty {
                 emptyState
             } else {
                 menuList
@@ -184,7 +190,7 @@ struct MenuConfigTab: View {
                 .controlSize(.small)
 
                 Button {
-                    let id = appState.addGitPullCommand()
+                    let id = appCoordinator.edit { $0.addGitPullCommand() }
                     selectEntry(id.uuidString)
                 } label: {
                     Label("Git Pull 命令", systemImage: "terminal")
@@ -280,8 +286,8 @@ struct MenuConfigTab: View {
                 Picker(
                     "右键菜单显示方式",
                     selection: Binding(
-                        get: { appState.menuPresentationMode },
-                        set: { appState.updateMenuPresentationMode($0) }
+                        get: { configStore.menuPresentationMode },
+                        set: { appCoordinator.updateMenuPresentationMode($0) }
                     )
                 ) {
                     ForEach(MenuPresentationMode.allCases) { mode in
@@ -306,11 +312,11 @@ struct MenuConfigTab: View {
                         }
                     }
                     Button("Git Pull 命令") {
-                        let id = appState.addGitPullCommand()
+                        let id = appCoordinator.edit { $0.addGitPullCommand() }
                         selectEntry(id.uuidString)
                     }
                     Button("新组合命令") {
-                        let id = appState.addEmptyCompositeCommand()
+                        let id = appCoordinator.edit { $0.addEmptyCompositeCommand() }
                         selectEntry(id.uuidString)
                     }
                 } label: {
@@ -350,12 +356,12 @@ struct MenuConfigTab: View {
                     item: item,
                     summary: summary,
                     onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                    onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                    onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
                     onToggle: { isEnabled in
-                        appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
+                        appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
                     },
                     position: index + 1,
-                    total: appState.menuEntries.count
+                    total: configStore.menuEntries.count
                 )
             }
             .onTapGesture {
@@ -367,13 +373,13 @@ struct MenuConfigTab: View {
                     menuItem: config,
                     summary: summary,
                     onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                    onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                    onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
                     onDelete: { removeItem(at: index) },
                     onToggle: { isEnabled in
-                        appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
+                        appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
                     },
                     position: index + 1,
-                    total: appState.menuEntries.count
+                    total: configStore.menuEntries.count
                 )
             }
             .onTapGesture {
@@ -385,13 +391,13 @@ struct MenuConfigTab: View {
                     config: config,
                     summary: summary,
                     onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                    onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                    onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
                     onDelete: { removeItem(at: index) },
                     onToggle: { isEnabled in
-                        appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
+                        appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
                     },
                     position: index + 1,
-                    total: appState.menuEntries.count
+                    total: configStore.menuEntries.count
                 )
             }
             .onTapGesture {
@@ -403,12 +409,12 @@ struct MenuConfigTab: View {
                     config: config,
                     summary: summary,
                     onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                    onMoveDown: index < appState.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                    onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
                     onToggle: { isEnabled in
-                        appState.toggleEntry(for: entry.id, isEnabled: isEnabled)
+                        appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
                     },
                     position: index + 1,
-                    total: appState.menuEntries.count
+                    total: configStore.menuEntries.count
                 )
             }
             .onTapGesture {
@@ -422,7 +428,7 @@ struct MenuConfigTab: View {
             for: entry,
             position: index + 1,
             total: max(displayedEntries.count, 1),
-            publishStates: appState.scriptPublishStates
+            publishStates: configStore.scriptPublishStates
         )
     }
 
@@ -471,10 +477,10 @@ struct MenuConfigTab: View {
 
         let drag = FinderMenuDrag(
             entryID: entryID,
-            originalEntries: appState.menuEntries
+            originalEntries: configStore.menuEntries
         )
         activeDrag = drag
-        dragPreviewEntries = appState.menuEntries
+        dragPreviewEntries = configStore.menuEntries
         if let frame = rowFrames[entryID] {
             dragOverlaySize = frame.size
             dragGrabOffset = CGSize(
@@ -520,9 +526,9 @@ struct MenuConfigTab: View {
     }
 
     private func moveItem(at index: Int, direction: Int) {
-        let movedID = appState.menuEntries.indices.contains(index) ? appState.menuEntries[index].id : nil
+        let movedID = configStore.menuEntries.indices.contains(index) ? configStore.menuEntries[index].id : nil
         let destination = direction < 0 ? index - 1 : index + 2
-        appState.moveEntry(from: IndexSet(integer: index), to: destination)
+        appCoordinator.edit { $0.moveEntry(from: IndexSet(integer: index), to: destination) }
         if let movedID {
             selectedEntryID = movedID
         }
@@ -530,30 +536,32 @@ struct MenuConfigTab: View {
 
     private func previewDraggedEntry(_ draggedID: String, to targetID: String) {
         guard draggedID != targetID,
-              let sourceIndex = appState.menuEntries.firstIndex(where: { $0.id == draggedID }),
-              let targetIndex = appState.menuEntries.firstIndex(where: { $0.id == targetID }) else {
+              let sourceIndex = configStore.menuEntries.firstIndex(where: { $0.id == draggedID }),
+              let targetIndex = configStore.menuEntries.firstIndex(where: { $0.id == targetID }) else {
             return
         }
 
         withAnimation(.easeInOut(duration: 0.12)) {
-            appState.moveEntry(
-                from: IndexSet(integer: sourceIndex),
-                to: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex,
-                sync: false
-            )
-            dragPreviewEntries = appState.menuEntries
+            appCoordinator.preview {
+                $0.moveEntry(
+                    from: IndexSet(integer: sourceIndex),
+                    to: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex,
+                    save: false
+                )
+            }
+            dragPreviewEntries = configStore.menuEntries
         }
         selectedEntryID = draggedID
     }
 
     private func commitDraggedEntry(_ drag: FinderMenuDrag) -> Bool {
-        guard appState.menuEntries.map(\.id) != drag.originalEntries.map(\.id) else {
+        guard configStore.menuEntries.map(\.id) != drag.originalEntries.map(\.id) else {
             dragPreviewEntries = nil
             return true
         }
 
         dragPreviewEntries = nil
-        appState.saveAndSync()
+        appCoordinator.commitPreview()
         selectedEntryID = drag.entryID
         return true
     }
@@ -564,21 +572,21 @@ struct MenuConfigTab: View {
             return
         }
 
-        appState.menuEntries = drag.originalEntries
+        appCoordinator.preview { $0.menuEntries = drag.originalEntries }
         dragPreviewEntries = nil
         selectedEntryID = FinderMenuSelection.reconciledSelection(
             currentID: selectedEntryID,
-            entries: appState.menuEntries
+            entries: configStore.menuEntries
         )
     }
 
     private func removeItem(at index: Int) {
-        guard appState.menuEntries.indices.contains(index) else { return }
-        let removedID = appState.menuEntries[index].id
-        appState.removeEntry(at: IndexSet(integer: index))
+        guard configStore.menuEntries.indices.contains(index) else { return }
+        let removedID = configStore.menuEntries[index].id
+        appCoordinator.edit { $0.removeEntry(at: IndexSet(integer: index)) }
         selectedEntryID = FinderMenuSelection.reconciledSelection(
             currentID: selectedEntryID == removedID ? nil : selectedEntryID,
-            entries: appState.menuEntries,
+            entries: configStore.menuEntries,
             deletedIndex: index
         )
     }
@@ -590,7 +598,7 @@ struct MenuConfigTab: View {
     private func reconcileSelection() {
         selectedEntryID = FinderMenuSelection.reconciledSelection(
             currentID: selectedEntryID,
-            entries: appState.menuEntries
+            entries: configStore.menuEntries
         )
     }
 

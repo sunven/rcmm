@@ -10,6 +10,7 @@ struct rcmmApp: App {
             PopoverContainerView()
                 .environment(appModel.appState)
                 .environment(appModel.appCoordinator)
+                .environment(appModel.appCoordinator.configStore)
         } label: {
             MenuBarStatusIcon(status: appModel.appState.extensionStatus)
         }
@@ -18,6 +19,7 @@ struct rcmmApp: App {
             SettingsView()
                 .environment(appModel.appState)
                 .environment(appModel.appCoordinator)
+                .environment(appModel.appCoordinator.configStore)
                 .onDisappear {
                     ActivationPolicyManager.hideToMenuBar()
                 }

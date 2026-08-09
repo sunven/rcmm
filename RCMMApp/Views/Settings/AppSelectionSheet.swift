@@ -3,6 +3,8 @@ import SwiftUI
 
 struct AppSelectionSheet: View {
     @Environment(AppState.self) private var appState
+    @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(MenuConfigStore.self) private var configStore
     @Environment(\.dismiss) private var dismiss
 
     var onAdded: (([UUID]) -> Void)?
@@ -24,7 +26,7 @@ struct AppSelectionSheet: View {
 
             AppPickerListView(
                 apps: discoveredApps,
-                existingEntries: appState.menuEntries,
+                existingEntries: configStore.menuEntries,
                 selectedAppIds: $selectedAppIds,
                 isLoading: isLoading,
                 loadingTitle: "正在扫描应用…",
@@ -71,7 +73,7 @@ struct AppSelectionSheet: View {
 
     private func addSelectedApps() {
         let appsToAdd = discoveredApps.filter { selectedAppIds.contains($0.id) }
-        let addedIDs = appState.addMenuItems(from: appsToAdd)
+        let addedIDs = appCoordinator.edit { $0.addMenuItems(from: appsToAdd) }
         onAdded?(addedIDs)
     }
 }

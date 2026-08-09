@@ -347,6 +347,10 @@ final class AppCoordinator {
         }
     }
 
+    func loadErrors() {
+        configStore.loadErrors()
+    }
+
     func dismissAllErrors() {
         configStore.dismissAllErrors()
         hasTriggeredAutoRepair = false

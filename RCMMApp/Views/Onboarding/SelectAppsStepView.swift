@@ -4,6 +4,7 @@ import SwiftUI
 struct SelectAppsStepView: View {
     @Binding var selectedAppIds: Set<UUID>
     @Environment(AppState.self) private var appState
+    @Environment(MenuConfigStore.self) private var configStore
     @State private var isLoading = true
 
     private let preselectBundleIds: Set<String> = [
@@ -16,7 +17,7 @@ struct SelectAppsStepView: View {
         VStack(spacing: 0) {
             AppPickerListView(
                 apps: appState.discoveredApps,
-                existingEntries: appState.menuEntries,
+                existingEntries: configStore.menuEntries,
                 selectedAppIds: $selectedAppIds,
                 isLoading: isLoading,
                 loadingTitle: "正在扫描已安装应用...",
@@ -55,7 +56,7 @@ struct SelectAppsStepView: View {
         for app in apps {
             if let bundleId = app.bundleId,
                preselectBundleIds.contains(bundleId),
-               !AppPickerItemMatcher.isAlreadyAdded(app, in: appState.menuEntries) {
+               !AppPickerItemMatcher.isAlreadyAdded(app, in: configStore.menuEntries) {
                 selectedAppIds.insert(app.id)
             }
         }
@@ -69,6 +70,7 @@ struct SelectAppsStepView: View {
 
     SelectAppsStepView(selectedAppIds: .constant([]))
         .environment(appModel.appState)
+        .environment(appModel.appCoordinator.configStore)
         .frame(width: 480, height: 500)
 }
 
@@ -82,5 +84,6 @@ struct SelectAppsStepView: View {
     let sampleId = appModel.appState.discoveredApps.first!.id
     return SelectAppsStepView(selectedAppIds: .constant([sampleId]))
         .environment(appModel.appState)
+        .environment(appModel.appCoordinator.configStore)
         .frame(width: 480, height: 500)
 }

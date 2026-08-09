@@ -4,18 +4,18 @@ import SwiftUI
 /// 错误展示横幅，在弹出窗口中显示最近的执行错误和恢复建议
 struct ErrorBannerView: View {
     @Environment(AppCoordinator.self) private var appCoordinator
-    @Environment(AppState.self) private var appState
+    @Environment(MenuConfigStore.self) private var configStore
     @Environment(\.dismiss) private var dismiss
     @State private var showAutoRepair = true
 
     /// 最多展示 3 条最近的错误，避免弹出窗口过高
     private var displayedErrors: [ErrorRecord] {
-        Array(appState.errorRecords.suffix(3))
+        Array(configStore.errorRecords.suffix(3))
     }
 
     var body: some View {
         VStack(spacing: 8) {
-            if let message = appState.autoRepairMessage, showAutoRepair {
+            if let message = appCoordinator.autoRepairMessage, showAutoRepair {
                 autoRepairBanner(message: message)
                     .transition(.opacity)
             }
@@ -24,7 +24,7 @@ struct ErrorBannerView: View {
                 errorRow(record: record)
             }
 
-            if !appState.errorRecords.isEmpty {
+            if !configStore.errorRecords.isEmpty {
                 actionBar
             }
         }
@@ -94,7 +94,7 @@ struct ErrorBannerView: View {
             .accessibilityLabel("打开设置以修复问题")
 
             Button {
-                appState.dismissAllErrors()
+                appCoordinator.dismissAllErrors()
             } label: {
                 Text("忽略全部")
                     .frame(maxWidth: .infinity)
@@ -128,8 +128,8 @@ struct ErrorBannerView: View {
     ]
 
     return ErrorBannerView()
-        .environment(appModel.appState)
         .environment(appModel.appCoordinator)
+        .environment(appModel.appCoordinator.configStore)
         .frame(width: 196)
         .padding()
 }
@@ -143,8 +143,8 @@ struct ErrorBannerView: View {
     appModel.appCoordinator.autoRepairMessage = "已自动修复脚本文件"
 
     return ErrorBannerView()
-        .environment(appModel.appState)
         .environment(appModel.appCoordinator)
+        .environment(appModel.appCoordinator.configStore)
         .frame(width: 196)
         .padding()
 }
@@ -153,8 +153,8 @@ struct ErrorBannerView: View {
     let appModel = AppModel(forPreview: true)
 
     return ErrorBannerView()
-        .environment(appModel.appState)
         .environment(appModel.appCoordinator)
+        .environment(appModel.appCoordinator.configStore)
         .frame(width: 196)
         .padding()
 }

@@ -4,6 +4,8 @@ import SwiftUI
 /// 正常状态弹出窗口，展示扩展状态 + 错误信息 + 打开设置 + 退出按钮
 struct NormalPopoverView: View {
     @Environment(AppState.self) private var appState
+    @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(MenuConfigStore.self) private var configStore
     @Environment(\.dismiss) private var dismiss
     @State private var settingsHovered = false
     @State private var quitHovered = false
@@ -14,7 +16,7 @@ struct NormalPopoverView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
 
-            if !appState.errorRecords.isEmpty || appState.autoRepairMessage != nil {
+            if !configStore.errorRecords.isEmpty || appCoordinator.autoRepairMessage != nil {
                 Divider()
                 ErrorBannerView()
             }
@@ -61,6 +63,7 @@ struct NormalPopoverView: View {
     NormalPopoverView()
         .environment(appModel.appState)
         .environment(appModel.appCoordinator)
+        .environment(appModel.appCoordinator.configStore)
         .frame(width: 220)
 }
 
@@ -74,5 +77,6 @@ struct NormalPopoverView: View {
     return NormalPopoverView()
         .environment(appModel.appState)
         .environment(appModel.appCoordinator)
+        .environment(appModel.appCoordinator.configStore)
         .frame(width: 220)
 }

@@ -2,7 +2,8 @@ import RCMMShared
 import SwiftUI
 
 struct NewFileSettingsTab: View {
-    @Environment(AppState.self) private var appState
+    @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(MenuConfigStore.self) private var configStore
 
     private enum Layout {
         static let contentPadding = EdgeInsets(top: 18, leading: 18, bottom: 18, trailing: 18)
@@ -10,7 +11,7 @@ struct NewFileSettingsTab: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let config = appState.primaryNewFileMenu {
+            if let config = configStore.primaryNewFileMenu {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         pageHeader(for: config)
@@ -18,30 +19,36 @@ struct NewFileSettingsTab: View {
                         NewFileMenuEditor(
                             config: config,
                             onUpdateTemplate: { template in
-                                appState.updateNewFileTemplate(
-                                    menuID: config.id,
-                                    templateID: template.id,
-                                    displayName: template.displayName,
-                                    baseName: template.baseName,
-                                    fileExtension: template.fileExtension,
-                                    creationMode: template.creationMode,
-                                    templatePath: template.templatePath,
-                                    initialContent: template.initialContent,
-                                    isEnabled: template.isEnabled
-                                )
+                                appCoordinator.edit {
+                                    $0.updateNewFileTemplate(
+                                        menuID: config.id,
+                                        templateID: template.id,
+                                        displayName: template.displayName,
+                                        baseName: template.baseName,
+                                        fileExtension: template.fileExtension,
+                                        creationMode: template.creationMode,
+                                        templatePath: template.templatePath,
+                                        initialContent: template.initialContent,
+                                        isEnabled: template.isEnabled
+                                    )
+                                }
                             },
                             onDeleteTemplate: { templateID in
-                                appState.removeNewFileTemplate(
-                                    menuID: config.id,
-                                    templateID: templateID
-                                )
+                                appCoordinator.edit {
+                                    $0.removeNewFileTemplate(
+                                        menuID: config.id,
+                                        templateID: templateID
+                                    )
+                                }
                             },
                             onMoveTemplate: { source, destination in
-                                appState.moveNewFileTemplate(
-                                    menuID: config.id,
-                                    from: source,
-                                    to: destination
-                                )
+                                appCoordinator.edit {
+                                    $0.moveNewFileTemplate(
+                                        menuID: config.id,
+                                        from: source,
+                                        to: destination
+                                    )
+                                }
                             }
                         )
 
@@ -59,7 +66,7 @@ struct NewFileSettingsTab: View {
     private func pageHeader(for config: NewFileMenuConfig) -> some View {
         let status = NewFileMenuStatusResolver.resolve(
             config: config,
-            publishStates: appState.scriptPublishStates
+            publishStates: configStore.scriptPublishStates
         )
 
         return HStack(alignment: .top, spacing: 16) {
@@ -91,7 +98,7 @@ struct NewFileSettingsTab: View {
                         config.isEnabled ? "已启用" : "已停用",
                         isOn: Binding(
                             get: { config.isEnabled },
-                            set: { appState.toggleEntry(for: config.id.uuidString, isEnabled: $0) }
+                            set: { isEnabled in appCoordinator.edit { $0.toggleEntry(for: config.id.uuidString, isEnabled: isEnabled) } }
                         )
                     )
                     .toggleStyle(.switch)
@@ -109,7 +116,7 @@ struct NewFileSettingsTab: View {
                 }
 
                 Button {
-                    appState.addNewFileTemplate(to: config.id)
+                    appCoordinator.edit { $0.addNewFileTemplate(to: config.id) }
                 } label: {
                     Label("添加模板", systemImage: "plus")
                 }
@@ -204,7 +211,9 @@ struct NewFileSettingsTab: View {
                 .multilineTextAlignment(.center)
 
             Button {
-                appState.ensureNewFileMenu()
+                appCoordinator.edit { store in
+                    _ = store.ensureNewFileMenu()
+                }
             } label: {
                 Label("恢复新建文件菜单", systemImage: "arrow.clockwise")
             }

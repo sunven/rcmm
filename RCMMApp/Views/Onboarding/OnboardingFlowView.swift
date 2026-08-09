@@ -4,6 +4,7 @@ import os.log
 
 struct OnboardingFlowView: View {
     @Environment(AppState.self) private var appState
+    @Environment(AppCoordinator.self) private var appCoordinator
     @State private var currentStep: OnboardingStep = .enableExtension
     @State private var isExtensionEnabled = false
     @State private var selectedAppIds: Set<UUID> = []
@@ -175,7 +176,7 @@ struct OnboardingFlowView: View {
 
     private func applySelectedApps() {
         let appsToAdd = appState.discoveredApps.filter { selectedAppIds.contains($0.id) }
-        appState.addMenuItems(from: appsToAdd)
+        appCoordinator.edit { $0.addMenuItems(from: appsToAdd) }
     }
 
     // MARK: - 引导完成
@@ -227,4 +228,6 @@ struct OnboardingFlowView: View {
 
     OnboardingFlowView()
         .environment(appModel.appState)
+        .environment(appModel.appCoordinator)
+        .environment(appModel.appCoordinator.configStore)
 }
