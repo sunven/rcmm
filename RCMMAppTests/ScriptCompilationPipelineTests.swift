@@ -43,15 +43,7 @@ struct AppStateCoordinatorWiringTests {
         let harness = try PipelineHarness()
         defer { harness.cleanup() }
 
-        let coordinator = AppCoordinator(
-            configStore: MenuConfigStore(
-                configService: harness.configService,
-                publishStore: harness.publishStore,
-                errorQueue: harness.errorQueue
-            ),
-            scriptCompilationPipeline: harness.pipeline,
-            startsServices: false
-        )
+        let coordinator = harness.makeCoordinator()
         let state = AppState(coordinator: coordinator, forPreview: true)
         let expectedID = coordinator.configStore.primaryNewFileMenu?.id
 
@@ -59,60 +51,6 @@ struct AppStateCoordinatorWiringTests {
 
         #expect(actualID == expectedID)
         #expect(expectedID != nil)
-    }
-
-    @Test("MenuConfigStore 添加应用按非空 bundleId 优先，缺失时按路径去重")
-    func menuConfigStoreDeduplicatesApplicationsByBundleThenPath() throws {
-        let harness = try PipelineHarness()
-        defer { harness.cleanup() }
-        let store = MenuConfigStore(
-            configService: harness.configService,
-            publishStore: harness.publishStore,
-            errorQueue: harness.errorQueue
-        )
-        store.menuEntries = [
-            .custom(MenuItemConfig(
-                appName: "Existing Bundle",
-                bundleId: "com.example.editor",
-                appPath: "/Applications/OldEditor.app"
-            )),
-            .custom(MenuItemConfig(
-                appName: "Existing No Bundle",
-                appPath: "/Applications/NoBundle.app"
-            )),
-        ]
-
-        let addedIDs = store.addMenuItems(from: [
-            AppInfo(
-                name: "Same Bundle",
-                bundleId: "com.example.editor",
-                path: "/Applications/NewEditor.app"
-            ),
-            AppInfo(
-                name: "Same Path No Bundle",
-                path: "/Applications/NoBundle.app"
-            ),
-            AppInfo(
-                name: "Different Path No Bundle",
-                path: "/Applications/OtherNoBundle.app"
-            ),
-            AppInfo(
-                name: "New Bundle",
-                bundleId: "com.example.viewer",
-                path: "/Applications/Viewer.app"
-            ),
-        ])
-
-        #expect(addedIDs.count == 2)
-        #expect(store.menuEntries.compactMap { entry -> String? in
-            guard case .custom(let item) = entry else { return nil }
-            return item.appName
-        } == [
-            "Existing Bundle",
-            "Existing No Bundle",
-            "Different Path No Bundle",
-            "New Bundle",
-        ])
     }
 }
 
@@ -225,58 +163,6 @@ struct ScriptInstallerServiceTests {
     }
 }
 
-private final class PipelineHarness {
-    let suiteName: String
-    let defaults: UserDefaults
-    let fileManager: FileManager
-    let temporaryRoot: URL
-    let scriptsDirectory: URL
-    let compiler: RecordingAppleScriptCompiler
-    let iconPublisher: RecordingApplicationIconPublisher
-    let notifier: RecordingScriptCompilationNotifier
-    let configService: SharedConfigService
-    let publishStore: ScriptPublishStore
-    let errorQueue: SharedErrorQueue
-    let pipeline: ScriptCompilationPipeline
-
-    init() throws {
-        suiteName = "script.pipeline.tests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)!
-        fileManager = .default
-        temporaryRoot = fileManager.temporaryDirectory
-            .appendingPathComponent("ScriptCompilationPipelineTests-\(UUID().uuidString)", isDirectory: true)
-        scriptsDirectory = temporaryRoot.appendingPathComponent("Scripts", isDirectory: true)
-        try fileManager.createDirectory(
-            at: scriptsDirectory,
-            withIntermediateDirectories: true
-        )
-
-        compiler = RecordingAppleScriptCompiler()
-        iconPublisher = RecordingApplicationIconPublisher()
-        notifier = RecordingScriptCompilationNotifier()
-        configService = SharedConfigService(defaults: defaults)
-        publishStore = ScriptPublishStore(defaults: defaults)
-        errorQueue = SharedErrorQueue(defaults: defaults)
-
-        pipeline = ScriptCompilationPipeline(
-            configService: configService,
-            publishStore: publishStore,
-            errorQueue: errorQueue,
-            compiler: compiler,
-            sourceGenerator: ScriptSourceGenerator(),
-            fileManager: fileManager,
-            scriptsDirectory: scriptsDirectory,
-            iconPublisher: iconPublisher,
-            notifier: notifier
-        )
-    }
-
-    func cleanup() {
-        try? fileManager.removeItem(at: temporaryRoot)
-        defaults.removePersistentDomain(forName: suiteName)
-    }
-}
-
 private final class InstallerHarness {
     let fileManager: FileManager
     let temporaryRoot: URL
@@ -332,69 +218,5 @@ private final class InstallerHarness {
 
     func cleanup() {
         try? fileManager.removeItem(at: temporaryRoot)
-    }
-}
-
-private final class RecordingAppleScriptCompiler: AppleScriptCompiling {
-    private(set) var compiledSources: [String] = []
-
-    func compile(source: String, outputURL: URL) throws {
-        compiledSources.append(source)
-        try Data("compiled".utf8).write(to: outputURL)
-    }
-}
-
-private final class MutatingAppleScriptCompiler: AppleScriptCompiling {
-    private let mutate: () -> Void
-
-    init(mutate: @escaping () -> Void) {
-        self.mutate = mutate
-    }
-
-    func compile(source: String, outputURL: URL) throws {
-        mutate()
-        try Data("compiled".utf8).write(to: outputURL)
-    }
-}
-
-private final class ThrowingAppleScriptCompiler: AppleScriptCompiling {
-    func compile(source: String, outputURL: URL) throws {
-        throw NSError(
-            domain: "ScriptInstallerServiceTests",
-            code: 1,
-            userInfo: [NSLocalizedDescriptionKey: "compile failed"]
-        )
-    }
-}
-
-private final class DeletingOutputAppleScriptCompiler: AppleScriptCompiling {
-    func compile(source: String, outputURL: URL) throws {
-        try Data("compiled".utf8).write(to: outputURL)
-        try FileManager.default.removeItem(at: outputURL)
-    }
-}
-
-private final class RecordingScriptCompilationNotifier: ScriptCompilationNotifying {
-    private(set) var postedConfigChangedCount = 0
-
-    func postConfigChanged() {
-        postedConfigChangedCount += 1
-    }
-}
-
-private final class RecordingApplicationIconPublisher: ApplicationIconPublishing, @unchecked Sendable {
-    private let lock = NSLock()
-    private var recordedEntries: [[MenuEntry]] = []
-
-    var publishedEntries: [[MenuEntry]] {
-        lock.lock()
-        defer { lock.unlock() }
-        return recordedEntries
-    }
-
-    func publishIcons(for entries: [MenuEntry]) {
-        lock.lock()
-        recordedEntries.append(entries)
-        lock.unlock()
     }
 }
