@@ -77,6 +77,24 @@ App 和 Extension 运行在独立沙盒进程中，通过以下机制通信：
 - **WindowCoordinator** — 管理窗口生命周期、UI 流程（onboarding、settings、更新检查）、健康监控
 - **AppCoordinator** — 顶层编排器，持有 MenuConfigStore、ScriptCompilationPipeline、WindowCoordinator，协调它们之间的交互
 
+### Menu Entry 写入接口（四入口写模型）
+
+视图**读**配置直接用 MenuConfigStore；**写**配置只经过 AppCoordinator 上的四个入口：
+
+| 入口 | 改内存 | 落盘 | 脚本发布 |
+|---|---|---|---|
+| `edit { store in … }` | ✓ | ✓ | ✓ |
+| `preview { store in … }` | ✓ | — | — |
+| `commitPreview()` | — | ✓ | ✓ |
+| `updateMenuPresentationMode(_:)` | ✓ | ✓ | 仅 Cross-Process Sync 通知 |
+
+- **不变量** — 每一次已提交编辑恰好触发一次发布。
+- **edit** — 闭包同步执行，返回值原样带出（新建条目的 ID）；发布异步进行，调用方不等待编译。无论闭包走 MenuConfigStore 的具名方法还是直接改 `menuEntries`，落盘都由 `edit` 保证。
+- **preview** — 拖拽排序这类过程态。回滚责任在调用方（它同时持有选中项与动画等视图状态），取消同样走 `preview` 把原顺序写回。
+- **为什么 `updateMenuPresentationMode` 不走 `edit`** — 展示方式不影响 `.scpt` 内容，走 `edit` 会为一个枚举触发全量 AppleScript 重编译。
+
+详见 [ADR-0003](docs/adr/0003-menu-entry-write-interface.md)。
+
 ### Module Depth（模块深度）
 接口复杂度与实现复杂度的比值：
 - **Deep Module（深模块）** — 小接口隐藏大量实现，高 leverage
