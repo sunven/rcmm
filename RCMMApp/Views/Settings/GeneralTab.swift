@@ -3,7 +3,8 @@ import ServiceManagement
 import os.log
 
 struct GeneralTab: View {
-    @Environment(AppState.self) private var appState
+    @Environment(ExtensionHealthMonitor.self) private var healthMonitor
+    @Environment(AppFlowCoordinator.self) private var appFlowCoordinator
     @State private var isLoginItemEnabled = false
     @State private var isUpdating = false
     @State private var errorMessage: String? = nil
@@ -41,7 +42,7 @@ struct GeneralTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     Button {
-                        appState.showOnboarding()
+                        appFlowCoordinator.showOnboarding()
                     } label: {
                         Label("重新打开设置向导", systemImage: "arrow.clockwise")
                     }
@@ -50,9 +51,9 @@ struct GeneralTab: View {
                 }
 
                 GeneralSettingsPanel(title: "扩展维护", systemImage: "wrench.and.screwdriver") {
-                    if (appState.extensionStatus == .otherBuildEnabled
-                        || appState.extensionStatus == .otherInstallationEnabled),
-                       let detail = appState.extensionStatusDetail {
+                    if (healthMonitor.extensionStatus == .otherBuildEnabled
+                        || healthMonitor.extensionStatus == .otherInstallationEnabled),
+                       let detail = healthMonitor.extensionStatusDetail {
                         InlineSettingsMessage(text: detail, kind: .warning)
                             .textSelection(.enabled)
                     }
@@ -63,7 +64,7 @@ struct GeneralTab: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 8) {
-                        if appState.extensionStatus == .otherBuildEnabled {
+                        if healthMonitor.extensionStatus == .otherBuildEnabled {
                             Button {
                                 activateCurrentExtension()
                             } label: {
@@ -77,9 +78,9 @@ struct GeneralTab: View {
                             .accessibilityLabel("切换到当前版本扩展")
                         }
 
-                        if appState.extensionStatus != .otherBuildEnabled {
+                        if healthMonitor.extensionStatus != .otherBuildEnabled {
                             Button {
-                                appState.beginExtensionCleanup()
+                                appFlowCoordinator.beginExtensionCleanup()
                             } label: {
                                 Label("清理旧扩展副本", systemImage: "trash")
                             }
@@ -169,7 +170,7 @@ struct GeneralTab: View {
                     try PluginKitService.restartFinder()
                 }.value
                 try? await Task.sleep(for: .seconds(1))
-                appState.checkExtensionStatus()
+                healthMonitor.refresh()
                 maintenanceMessage = "Finder 已重启，可以回到 Finder 再试一次右键菜单。"
                 maintenanceMessageIsError = false
                 logger.info("Finder 已通过设置页手动重启")
@@ -192,7 +193,7 @@ struct GeneralTab: View {
 
         Task { @MainActor in
             do {
-                try await appState.activateCurrentFinderExtension()
+                try await healthMonitor.activateCurrentFinderExtension()
                 maintenanceMessage = "已切换到当前版本扩展，Finder 右键菜单将只保留一份。"
                 maintenanceMessageIsError = false
             } catch {
@@ -208,7 +209,11 @@ struct GeneralTab: View {
 
 // Note: Preview uses real SMAppService — status may vary in Xcode Preview context
 #Preview {
+    let appModel = AppModel(forPreview: true)
+
     GeneralTab()
+        .environment(appModel.extensionHealthMonitor)
+        .environment(appModel.appFlowCoordinator)
         .frame(width: 480, height: 400)
 }
 

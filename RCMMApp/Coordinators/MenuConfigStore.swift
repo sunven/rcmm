@@ -4,14 +4,14 @@ import Observation
 
 /// 领域模型：管理菜单配置、发布状态、错误记录
 ///
-/// MenuConfigStore 是纯领域模型，负责菜单项的持久化和状态管理。
+/// MenuConfigStore 是纯领域模型，负责加载菜单配置和管理内存状态。
 /// 它不依赖 UI 框架，不执行脚本编译，不管理窗口生命周期。
 ///
 /// 职责：
-/// - 加载和保存菜单配置（menuEntries）
+/// - 加载菜单配置，并为 AppCoordinator 提供显式保存能力
 /// - 管理脚本发布状态（scriptPublishStates）
 /// - 管理错误队列（errorRecords）
-/// - 提供菜单项的增删改查接口
+/// - 提供只修改内存状态的菜单项增删改查接口
 @Observable
 @MainActor
 final class MenuConfigStore {
@@ -95,7 +95,6 @@ final class MenuConfigStore {
         }
 
         menuEntries = result.entries
-        saveEntries()
         return result.menuID
     }
 
@@ -147,7 +146,6 @@ final class MenuConfigStore {
             appPath: appInfo.path
         )
         menuEntries.append(.custom(newItem))
-        saveEntries()
         return newItem.id
     }
 
@@ -167,9 +165,6 @@ final class MenuConfigStore {
             addedIDs.append(newItem.id)
         }
 
-        if !addedIDs.isEmpty {
-            saveEntries()
-        }
         return addedIDs
     }
 
@@ -192,14 +187,12 @@ final class MenuConfigStore {
             executionMode: .currentDirectory
         )
         menuEntries.append(.custom(item))
-        saveEntries()
         return item.id
     }
 
     @discardableResult
     func addCompositeCommand(_ composite: CompositeMenuItemConfig) -> UUID {
         menuEntries.append(.composite(composite))
-        saveEntries()
         return composite.id
     }
 
@@ -232,11 +225,8 @@ final class MenuConfigStore {
 
     // MARK: - Update Menu Items
 
-    func moveEntry(from source: IndexSet, to destination: Int, save: Bool = true) {
+    func moveEntry(from source: IndexSet, to destination: Int) {
         menuEntries.move(fromOffsets: source, toOffset: destination)
-        if save {
-            saveEntries()
-        }
     }
 
     func removeEntry(at offsets: IndexSet) {
@@ -249,7 +239,6 @@ final class MenuConfigStore {
             }
         }
         menuEntries.remove(atOffsets: IndexSet(removableOffsets))
-        saveEntries()
     }
 
     func toggleEntry(for entryId: String, isEnabled: Bool) {
@@ -268,7 +257,6 @@ final class MenuConfigStore {
             config.isEnabled = isEnabled
             menuEntries[index] = .newFile(config)
         }
-        saveEntries()
     }
 
     func updateCustomCommand(
@@ -291,7 +279,6 @@ final class MenuConfigStore {
             }
             menuEntries[index] = .custom(config)
         }
-        saveEntries()
     }
 
     // MARK: - Composite Commands
@@ -358,7 +345,6 @@ final class MenuConfigStore {
         guard case .composite(var config) = menuEntries[index] else { return }
         mutate(&config)
         menuEntries[index] = .composite(config)
-        saveEntries()
     }
 
     // MARK: - New File Menu
@@ -441,7 +427,6 @@ final class MenuConfigStore {
         guard case .newFile(var config) = menuEntries[index] else { return }
         mutate(&config)
         menuEntries[index] = .newFile(config)
-        saveEntries()
     }
 
     private func uniqueNewFileMenuName(preferredName: String, excluding menuID: UUID) -> String {
@@ -516,20 +501,10 @@ final class MenuConfigStore {
         errorRecords = errorQueue.loadAll()
     }
 
-    var hasScriptFileErrors: Bool {
-        errorRecords.contains { record in
-            record.message.contains("脚本文件不存在") || record.message.contains("脚本文件无法加载")
-        }
-    }
-
-    func clearScriptFileErrors(repairedNames: Set<String>) {
-        errorQueue.removeAll { record in
-            guard let context = record.context else { return false }
-            return repairedNames.contains(context)
-                && (record.message.contains("脚本文件不存在")
-                    || record.message.contains("脚本文件无法加载"))
-        }
-        errorRecords = errorQueue.loadAll()
+    func removeErrors(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        errorQueue.removeAll { ids.contains($0.id) }
+        loadErrors()
     }
 
     func dismissAllErrors() {

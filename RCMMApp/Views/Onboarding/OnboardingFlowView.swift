@@ -3,7 +3,8 @@ import SwiftUI
 import os.log
 
 struct OnboardingFlowView: View {
-    @Environment(AppState.self) private var appState
+    @Environment(ApplicationDiscoveryCoordinator.self) private var applicationDiscovery
+    @Environment(AppFlowCoordinator.self) private var appFlowCoordinator
     @Environment(AppCoordinator.self) private var appCoordinator
     @State private var currentStep: OnboardingStep = .enableExtension
     @State private var isExtensionEnabled = false
@@ -175,7 +176,7 @@ struct OnboardingFlowView: View {
     }
 
     private func applySelectedApps() {
-        let appsToAdd = appState.discoveredApps.filter { selectedAppIds.contains($0.id) }
+        let appsToAdd = applicationDiscovery.apps.filter { selectedAppIds.contains($0.id) }
         appCoordinator.edit { $0.addMenuItems(from: appsToAdd) }
     }
 
@@ -183,8 +184,7 @@ struct OnboardingFlowView: View {
 
     private func skipOnboarding() {
         guard !isCompleting else { return }
-        appState.isOnboardingCompleted = true
-        appState.closeOnboarding()
+        appFlowCoordinator.completeOnboarding()
     }
 
     private func completeOnboarding() {
@@ -209,8 +209,6 @@ struct OnboardingFlowView: View {
             }
         }
 
-        appState.isOnboardingCompleted = true
-
         // 显示完成确认，短暂延迟后关闭窗口
         withAnimation(.easeInOut(duration: 0.3)) {
             isCompleting = true
@@ -218,7 +216,7 @@ struct OnboardingFlowView: View {
 
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
-            appState.closeOnboarding()
+            appFlowCoordinator.completeOnboarding()
         }
     }
 }
@@ -227,7 +225,8 @@ struct OnboardingFlowView: View {
     let appModel = AppModel(forPreview: true)
 
     OnboardingFlowView()
-        .environment(appModel.appState)
+        .environment(appModel.appFlowCoordinator)
+        .environment(appModel.applicationDiscoveryCoordinator)
         .environment(appModel.appCoordinator)
         .environment(appModel.appCoordinator.configStore)
 }

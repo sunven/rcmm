@@ -3,7 +3,7 @@ import os.log
 
 /// 集中管理应用激活策略切换（.regular ↔ .accessory）
 ///
-/// 将分散在 rcmmApp 和 AppState 中的激活策略逻辑统一管理，
+/// 由 WindowCoordinator 统一调用这些 AppKit 操作，
 /// 避免多处手动调用 NSApp.setActivationPolicy 导致的不一致问题。
 enum ActivationPolicyManager {
     private static let logger = Logger(subsystem: "com.sunven.rcmm", category: "activationPolicy")

@@ -2,12 +2,12 @@ import SwiftUI
 
 /// PopoverState 路由容器，根据状态枚举显示对应视图
 struct PopoverContainerView: View {
-    @Environment(AppState.self) private var appState
+    @Environment(ExtensionHealthMonitor.self) private var healthMonitor
     @Environment(AppCoordinator.self) private var appCoordinator
 
     var body: some View {
         Group {
-            switch appState.popoverState {
+            switch healthMonitor.popoverState {
             case .normal:
                 NormalPopoverView()
             case .healthWarning:
@@ -17,9 +17,9 @@ struct PopoverContainerView: View {
                 NormalPopoverView()
             }
         }
-        .frame(width: appState.popoverState.preferredPopoverWidth)
+        .frame(width: healthMonitor.popoverState.preferredPopoverWidth)
         .onAppear {
-            appState.checkExtensionStatus()
+            healthMonitor.refresh()
             appCoordinator.loadErrors()
         }
     }
@@ -29,7 +29,8 @@ struct PopoverContainerView: View {
     let appModel = AppModel(forPreview: true)
 
     PopoverContainerView()
-        .environment(appModel.appState)
         .environment(appModel.appCoordinator)
         .environment(appModel.appCoordinator.configStore)
+        .environment(appModel.extensionHealthMonitor)
+        .environment(appModel.appFlowCoordinator)
 }

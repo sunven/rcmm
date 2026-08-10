@@ -1,15 +1,16 @@
 import AppKit
 import SwiftUI
-import RCMMShared
 
 struct AboutTab: View {
-    @Environment(AppState.self) private var appState
+    @Environment(UpdateCoordinator.self) private var updateCoordinator
 
     private var appIcon: NSImage {
         NSApp.applicationIconImage
     }
 
     var body: some View {
+        let presentation = updateCoordinator.presentation
+
         VStack(spacing: 16) {
             Spacer()
 
@@ -29,27 +30,27 @@ struct AboutTab: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                Text("版本 \(appState.currentDisplayVersion)")
+                Text("版本 \(presentation.displayVersion)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             VStack(spacing: 10) {
-                Text(appState.updateStatusText)
+                Text(presentation.statusText)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
                 HStack(spacing: 10) {
-                    if appState.canCheckForUpdates {
+                    if presentation.canCheck {
                         Button("检查更新") {
-                            appState.checkForUpdatesManually()
+                            updateCoordinator.checkForUpdates()
                         }
                     }
 
-                    if appState.canPerformUpdatePrimaryAction {
-                        Button(appState.updatePrimaryActionTitle) {
-                            appState.performUpdatePrimaryAction()
+                    if let primaryActionTitle = presentation.primaryActionTitle {
+                        Button(primaryActionTitle) {
+                            updateCoordinator.performPrimaryAction()
                         }
                         .buttonStyle(AppPrimaryButtonStyle())
                     }

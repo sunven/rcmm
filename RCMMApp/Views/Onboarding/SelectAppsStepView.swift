@@ -3,9 +3,8 @@ import SwiftUI
 
 struct SelectAppsStepView: View {
     @Binding var selectedAppIds: Set<UUID>
-    @Environment(AppState.self) private var appState
+    @Environment(ApplicationDiscoveryCoordinator.self) private var applicationDiscovery
     @Environment(MenuConfigStore.self) private var configStore
-    @State private var isLoading = true
 
     private let preselectBundleIds: Set<String> = [
         "com.apple.Terminal",
@@ -16,16 +15,16 @@ struct SelectAppsStepView: View {
     var body: some View {
         VStack(spacing: 0) {
             AppPickerListView(
-                apps: appState.discoveredApps,
+                apps: applicationDiscovery.apps,
                 existingEntries: configStore.menuEntries,
                 selectedAppIds: $selectedAppIds,
-                isLoading: isLoading,
+                isLoading: applicationDiscovery.isScanning,
                 loadingTitle: "正在扫描已安装应用...",
                 emptyTitle: "未发现可用应用",
                 emptySubtitle: "仅显示 /Applications 和 ~/Applications 中的应用"
             )
 
-            if !isLoading && !appState.discoveredApps.isEmpty {
+            if !applicationDiscovery.isScanning && !applicationDiscovery.apps.isEmpty {
                 HStack {
                     Text("已选择 \(selectedAppIds.count) 个应用")
                         .font(.caption)
@@ -46,22 +45,15 @@ struct SelectAppsStepView: View {
     // MARK: - Actions
 
     private func loadAndPreselectApps() async {
-        isLoading = true
-        let discoveryService = AppDiscoveryService()
-        let apps = await Task.detached {
-            discoveryService.scanApplications()
-        }.value
-        appState.discoveredApps = apps
+        await applicationDiscovery.refresh()
 
-        for app in apps {
+        for app in applicationDiscovery.apps {
             if let bundleId = app.bundleId,
                preselectBundleIds.contains(bundleId),
                !AppPickerItemMatcher.isAlreadyAdded(app, in: configStore.menuEntries) {
                 selectedAppIds.insert(app.id)
             }
         }
-
-        isLoading = false
     }
 }
 
@@ -69,21 +61,25 @@ struct SelectAppsStepView: View {
     let appModel = AppModel(forPreview: true)
 
     SelectAppsStepView(selectedAppIds: .constant([]))
-        .environment(appModel.appState)
+        .environment(appModel.applicationDiscoveryCoordinator)
         .environment(appModel.appCoordinator.configStore)
         .frame(width: 480, height: 500)
 }
 
 #Preview("列表状态") {
     let appModel = AppModel(forPreview: true)
-    appModel.appState.discoveredApps = [
+    let sampleApps = [
         AppInfo(name: "Terminal", bundleId: "com.apple.Terminal", path: "/System/Applications/Utilities/Terminal.app", category: .terminal),
         AppInfo(name: "iTerm", bundleId: "com.googlecode.iterm2", path: "/Applications/iTerm.app", category: .terminal),
         AppInfo(name: "Visual Studio Code", bundleId: "com.microsoft.VSCode", path: "/Applications/Visual Studio Code.app", category: .editor),
     ]
-    let sampleId = appModel.appState.discoveredApps.first!.id
+    let coordinator = ApplicationDiscoveryCoordinator(
+        scanApplications: { sampleApps },
+        addComposite: { $0.id }
+    )
+    let sampleId = sampleApps.first!.id
     return SelectAppsStepView(selectedAppIds: .constant([sampleId]))
-        .environment(appModel.appState)
+        .environment(coordinator)
         .environment(appModel.appCoordinator.configStore)
         .frame(width: 480, height: 500)
 }

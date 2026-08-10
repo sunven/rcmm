@@ -52,9 +52,10 @@ App 和 Extension 运行在独立沙盒进程中，通过以下机制通信：
 
 ### Auto-Repair（自动修复）
 检测到特定错误时自动触发脚本重新同步：
-- 触发条件：错误队列中存在"脚本文件不存在"错误
+- 触发条件：错误队列中存在带稳定脚本身份的 `scriptLoad` 类型错误
 - 修复动作：重新执行脚本编译管线
-- 清理：修复成功后清除匹配的错误记录
+- 清理：发布成功后清除已恢复菜单项的错误；菜单项已删除时，其错误视为过期
+- 结果：没有剩余可自动修复的 `scriptLoad` 错误即为成功；只清除部分错误即为部分失败
 
 ### Health Monitoring（健康监控）
 定期检查扩展状态，更新 UI 提示：
@@ -74,8 +75,13 @@ App 和 Extension 运行在独立沙盒进程中，通过以下机制通信：
 
 - **MenuConfigStore** — 领域模型，管理菜单配置、发布状态、错误记录
 - **ScriptCompilationPipeline** — 深模块，读取已保存菜单配置，串行执行脚本编译管线，发布状态、错误记录和 Cross-Process Sync 通知
-- **WindowCoordinator** — 管理窗口生命周期、UI 流程（onboarding、settings、更新检查）、健康监控
-- **AppCoordinator** — 顶层编排器，持有 MenuConfigStore、ScriptCompilationPipeline、WindowCoordinator，协调它们之间的交互
+- **WindowCoordinator** — 管理 onboarding、更新提示和扩展清理窗口的生命周期与应用激活策略
+- **ApplicationDiscoveryCoordinator** — 缓存应用扫描结果，并从扫描结果创建常用组合菜单预设
+- **ExtensionHealthMonitor** — 管理 Finder Extension 健康状态、诊断详情与定期刷新
+- **ExtensionCleanupCoordinator** — 管理旧扩展副本清理的计划、确认、执行、取消与结果状态
+- **UpdateCoordinator** — 管理应用更新状态、feed 请求、启动检查、安装动作与更新提示
+- **AppFlowCoordinator** — 编排应用启动、Onboarding 完成状态与扩展清理窗口；不复制健康、清理、更新或应用发现状态
+- **AppCoordinator** — 顶层编排器，持有 MenuConfigStore、ScriptCompilationPipeline，协调配置写入、脚本发布与自动修复
 
 ### Menu Entry 写入接口（四入口写模型）
 

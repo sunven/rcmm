@@ -48,4 +48,25 @@ public struct ErrorRecord: Codable, Identifiable, Hashable, Sendable {
         key = try container.decodeIfPresent(String.self, forKey: .key)
         kind = try container.decodeIfPresent(ErrorRecordKind.self, forKey: .kind)
     }
+
+    /// Finder 运行期错误使用的稳定 key。脚本 ID 可以包含 `.`，因此消费端按固定前后缀解析。
+    public static func runtimeScriptKey(scriptID: String, kind: ErrorRecordKind) -> String {
+        "script.\(scriptID).\(kind.rawValue)"
+    }
+
+    /// Finder 运行期加载或执行错误所指向的脚本 ID。
+    public var runtimeScriptID: String? {
+        guard let kind,
+              kind == .scriptLoad || kind == .scriptExecution,
+              let key else {
+            return nil
+        }
+
+        let prefix = "script."
+        let suffix = ".\(kind.rawValue)"
+        guard key.hasPrefix(prefix), key.hasSuffix(suffix) else { return nil }
+
+        let scriptID = key.dropFirst(prefix.count).dropLast(suffix.count)
+        return scriptID.isEmpty ? nil : String(scriptID)
+    }
 }

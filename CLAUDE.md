@@ -82,7 +82,8 @@ rcmm.xcodeproj
 | 文件 | 职责 |
 |---|---|
 | `RCMMApp/rcmmApp.swift` | `@main` 入口，定义 `MenuBarExtra` 和 `Settings` scene |
-| `RCMMApp/AppState.swift` | `@Observable @MainActor` 全局状态；健康监控、错误队列、配置同步 |
+| `RCMMApp/AppModel.swift` | composition root；组装配置、窗口、健康、清理、更新和应用发现模块 |
+| `RCMMApp/Coordinators/` | 各领域的 `@Observable @MainActor` 状态与编排模块 |
 | `RCMMFinderExtension/FinderSync.swift` | 上下文菜单生成与执行路由 |
 | `RCMMFinderExtension/ScriptExecutor.swift` | `NSUserAppleScriptTask` 封装，含错误队列记录 |
 | `RCMMApp/Services/ScriptCompilationPipeline.swift` | 已保存菜单配置到脚本发布状态的深模块；串行队列、通知、结果快照 |
@@ -92,8 +93,8 @@ rcmm.xcodeproj
 
 ### 并发模型
 
-- `AppState` 为 `@Observable @MainActor`，所有状态变更必须在主线程
-- Darwin Notifications 在后台线程接收，访问 `AppState` 前须派发到主线程
+- App 层可观察协调器为 `@MainActor`，所有可观察状态变更必须在主线程
+- Darwin Notifications 在后台线程接收，访问 App 层协调器前须派发到主线程
 - 脚本编译管线使用专用串行队列（`com.sunven.rcmm.scriptCompilation`）防止竞争
 - Swift 6 + `SWIFT_STRICT_CONCURRENCY=targeted`，跨进程共享类型须标注 `@Sendable`
 

@@ -5,7 +5,8 @@ import SwiftUI
 ///
 /// 包含自动轮询检测（每 3 秒），检测到扩展恢复后显示成功确认，5 秒后自动过渡到正常视图。
 struct RecoveryGuidePanel: View {
-    @Environment(AppState.self) private var appState
+    @Environment(ExtensionHealthMonitor.self) private var healthMonitor
+    @Environment(AppFlowCoordinator.self) private var appFlowCoordinator
     @State private var isRecovered = false
     @State private var isActivatingCurrentExtension = false
     @State private var activationError: String?
@@ -34,7 +35,7 @@ struct RecoveryGuidePanel: View {
 
     private var recoveryGuideContent: some View {
         VStack(spacing: 8) {
-            HealthStatusPanel(status: appState.extensionStatus)
+            HealthStatusPanel(status: healthMonitor.extensionStatus)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
 
@@ -47,7 +48,7 @@ struct RecoveryGuidePanel: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let detail = appState.extensionStatusDetail {
+            if let detail = healthMonitor.extensionStatusDetail {
                 Text(detail)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.tertiary)
@@ -72,7 +73,7 @@ struct RecoveryGuidePanel: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if appState.extensionStatus != .otherBuildEnabled {
+            if healthMonitor.extensionStatus != .otherBuildEnabled {
                 Text(PluginKitService.extensionEnableCommand)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.tertiary)
@@ -89,7 +90,7 @@ struct RecoveryGuidePanel: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if appState.extensionStatus == .otherBuildEnabled {
+            if healthMonitor.extensionStatus == .otherBuildEnabled {
                 Button {
                     activateCurrentExtension()
                 } label: {
@@ -101,9 +102,9 @@ struct RecoveryGuidePanel: View {
                 .accessibilityLabel("切换到当前版本扩展")
             }
 
-            if appState.extensionStatus == .otherInstallationEnabled {
+            if healthMonitor.extensionStatus == .otherInstallationEnabled {
                 Button {
-                    appState.beginExtensionCleanup()
+                    appFlowCoordinator.beginExtensionCleanup()
                 } label: {
                     Text("清理旧扩展副本…")
                         .frame(maxWidth: .infinity)
@@ -169,7 +170,7 @@ struct RecoveryGuidePanel: View {
                     withAnimation { isRecovered = true }
                     transitionTask = Task {
                         try? await Task.sleep(for: .seconds(5))
-                        appState.checkExtensionStatus()
+                        healthMonitor.refresh()
                     }
                 }
             }
@@ -184,7 +185,7 @@ struct RecoveryGuidePanel: View {
     }
 
     private var primaryRecoveryText: String {
-        switch appState.extensionStatus {
+        switch healthMonitor.extensionStatus {
         case .otherBuildEnabled:
             return "另一构建版本的 Finder 扩展已启用；两个版本同时工作时会出现重复菜单。请选择当前版本后再试。"
         case .otherInstallationEnabled:
@@ -199,7 +200,7 @@ struct RecoveryGuidePanel: View {
     }
 
     private var recoveryCommandHint: String {
-        switch appState.extensionStatus {
+        switch healthMonitor.extensionStatus {
         case .otherBuildEnabled:
             return "切换操作会停用另一构建版本、启用当前版本并重启 Finder。"
         case .otherInstallationEnabled:
@@ -216,7 +217,7 @@ struct RecoveryGuidePanel: View {
         activationError = nil
         Task { @MainActor in
             do {
-                try await appState.activateCurrentFinderExtension()
+                try await healthMonitor.activateCurrentFinderExtension()
             } catch {
                 activationError = "切换扩展失败：\(error.localizedDescription)"
             }
@@ -226,18 +227,20 @@ struct RecoveryGuidePanel: View {
 }
 
 #Preview("异常状态") {
-    let state = AppState(forPreview: true)
-    state.extensionStatus = .disabled
+    let appModel = AppModel(forPreview: true)
+    appModel.extensionHealthMonitor.extensionStatus = .disabled
     return RecoveryGuidePanel()
-        .environment(state)
+        .environment(appModel.extensionHealthMonitor)
+        .environment(appModel.appFlowCoordinator)
         .frame(width: 300)
 }
 
 #Preview("异常状态 - Dark Mode") {
-    let state = AppState(forPreview: true)
-    state.extensionStatus = .disabled
+    let appModel = AppModel(forPreview: true)
+    appModel.extensionHealthMonitor.extensionStatus = .disabled
     return RecoveryGuidePanel()
-        .environment(state)
+        .environment(appModel.extensionHealthMonitor)
+        .environment(appModel.appFlowCoordinator)
         .frame(width: 300)
         .preferredColorScheme(.dark)
 }

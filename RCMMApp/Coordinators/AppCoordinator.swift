@@ -22,8 +22,9 @@ final class AppCoordinator {
 
     // MARK: - Auto-Repair State
 
-    var autoRepairMessage: String? = nil  // 改为可变，支持 Preview
-    private var hasTriggeredAutoRepair = false
+    var autoRepairMessage: String? = nil
+    private var activePublicationCount = 0
+    private var repairFeedbackGeneration = 0
 
     /// 最近一次脚本发布任务。
     ///
@@ -43,10 +44,7 @@ final class AppCoordinator {
 
         guard startsServices else { return }
 
-        // 启动流程（onboarding 和更新检查由 AppState 处理）
-        setupAutoRepair()
-
-        // 启动时同步脚本（确保脚本文件与配置一致）
+        // 启动同步同时承担已有加载错误的修复，避免连续发布两次。
         syncScriptsInBackground()
     }
 
@@ -84,34 +82,10 @@ final class AppCoordinator {
 
     // MARK: - Auto-Repair
 
-    private func setupAutoRepair() {
-        // 初始检查
-        checkAndTriggerAutoRepair()
-    }
-
-    private func checkAndTriggerAutoRepair() {
-        guard !hasTriggeredAutoRepair else { return }
-        guard configStore.hasScriptFileErrors else { return }
-
-        hasTriggeredAutoRepair = true
-        autoRepairMessage = "正在自动修复脚本文件…"
-
-        publishCurrentConfigurationInBackground { [weak self] outcome in
-            guard let self else { return }
-
-            let repairedNames = Set(
-                outcome.results
-                    .filter { $0.status == .current }
-                    .map(\.displayName)
-            )
-
-            if !repairedNames.isEmpty {
-                self.configStore.clearScriptFileErrors(repairedNames: repairedNames)
-            }
-
-            let didPublishAny = outcome.results.contains { $0.status == .current }
-            self.autoRepairMessage = didPublishAny ? "已自动修复脚本文件" : "自动修复失败，请打开设置检查"
-        }
+    private func startAutoRepairIfNeeded() {
+        guard activePublicationCount == 0 else { return }
+        guard !autoRepairTargets.isEmpty else { return }
+        publishCurrentConfigurationInBackground()
     }
 
     // MARK: - Menu Entry 写入接口
@@ -167,39 +141,89 @@ final class AppCoordinator {
     }
 
     private func syncScriptsInBackground() {
-        publishCurrentConfigurationInBackground { [weak self] _ in
-            guard let self else { return }
-
-            // 检查是否需要触发自动修复（配置变更后可能产生新错误）
-            if !self.hasTriggeredAutoRepair && self.configStore.hasScriptFileErrors {
-                self.checkAndTriggerAutoRepair()
-            }
-        }
+        publishCurrentConfigurationInBackground()
     }
 
-    private func publishCurrentConfigurationInBackground(
-        onComplete: @escaping (ScriptCompilationOutcome) -> Void
-    ) {
+    private func publishCurrentConfigurationInBackground() {
+        let targets = autoRepairTargets
+        let feedbackGeneration = repairFeedbackGeneration
+        activePublicationCount += 1
+        if !targets.isEmpty {
+            autoRepairMessage = "正在自动修复脚本文件…"
+        }
+
         publishTask = Task { @MainActor [weak self] in
             guard let self else { return }
             let outcome = await self.scriptCompilationPipeline.publishCurrentConfiguration()
-            self.configStore.scriptPublishStates = outcome.publishStates
-            self.configStore.errorRecords = outcome.errorRecords
-            onComplete(outcome)
+            self.completePublication(
+                outcome,
+                targets: targets,
+                feedbackGeneration: feedbackGeneration
+            )
         }
+    }
+
+    private func completePublication(
+        _ outcome: ScriptCompilationOutcome,
+        targets: Set<AutoRepairTarget>,
+        feedbackGeneration: Int
+    ) {
+        activePublicationCount -= 1
+        configStore.scriptPublishStates = outcome.publishStates
+        configStore.loadErrors()
+
+        guard !targets.isEmpty else { return }
+
+        let statusByScriptID = Dictionary(
+            outcome.results.map { ($0.entryID, $0.status) },
+            uniquingKeysWith: { _, latest in latest }
+        )
+        let resolvedTargets = targets.filter { target in
+            guard let status = statusByScriptID[target.scriptID] else {
+                return true
+            }
+            return status == .current
+        }
+        configStore.removeErrors(ids: Set(resolvedTargets.map(\.errorID)))
+
+        guard feedbackGeneration == repairFeedbackGeneration else { return }
+
+        if autoRepairTargets.isEmpty {
+            autoRepairMessage = "已自动修复脚本文件"
+        } else if !resolvedTargets.isEmpty {
+            autoRepairMessage = "部分脚本自动修复失败，请打开设置检查"
+        } else {
+            autoRepairMessage = "自动修复失败，请打开设置检查"
+        }
+    }
+
+    private var autoRepairTargets: Set<AutoRepairTarget> {
+        Set(configStore.errorRecords.compactMap { record in
+            guard record.kind == .scriptLoad,
+                  let scriptID = record.runtimeScriptID else {
+                return nil
+            }
+            return AutoRepairTarget(errorID: record.id, scriptID: scriptID)
+        })
     }
 
     func loadErrors() {
         configStore.loadErrors()
+        startAutoRepairIfNeeded()
     }
 
     func dismissAllErrors() {
         configStore.dismissAllErrors()
-        hasTriggeredAutoRepair = false
+        repairFeedbackGeneration += 1
         autoRepairMessage = nil
     }
 
     func clearAutoRepairMessage() {
         autoRepairMessage = nil
     }
+}
+
+private struct AutoRepairTarget: Hashable {
+    let errorID: UUID
+    let scriptID: String
 }

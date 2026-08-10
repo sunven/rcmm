@@ -2,7 +2,7 @@ import RCMMShared
 import SwiftUI
 
 struct MenuConfigTab: View {
-    @Environment(AppState.self) private var appState
+    @Environment(ApplicationDiscoveryCoordinator.self) private var applicationDiscovery
     @Environment(AppCoordinator.self) private var appCoordinator
     @Environment(MenuConfigStore.self) private var configStore
 
@@ -307,8 +307,10 @@ struct MenuConfigTab: View {
                         showingAppSelection = true
                     }
                     Button("VS Code + Terminal") {
-                        appState.addEditorTerminalPreset { id in
-                            selectEntry(id.uuidString)
+                        Task { @MainActor in
+                            if let id = await applicationDiscovery.addEditorTerminalPreset() {
+                                selectEntry(id.uuidString)
+                            }
                         }
                     }
                     Button("Git Pull 命令") {
@@ -330,7 +332,7 @@ struct MenuConfigTab: View {
                 Spacer()
             }
 
-            if let message = appState.compositePresetMessage {
+            if let message = applicationDiscovery.presetMessage {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(.yellow)
@@ -545,8 +547,7 @@ struct MenuConfigTab: View {
             appCoordinator.preview {
                 $0.moveEntry(
                     from: IndexSet(integer: sourceIndex),
-                    to: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex,
-                    save: false
+                    to: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
                 )
             }
             dragPreviewEntries = configStore.menuEntries

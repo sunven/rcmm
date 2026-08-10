@@ -21,7 +21,7 @@ final class PipelineHarness {
     let errorQueue: SharedErrorQueue
     let pipeline: ScriptCompilationPipeline
 
-    init() throws {
+    init(compiler compilerOverride: AppleScriptCompiling? = nil) throws {
         suiteName = "script.pipeline.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)!
         fileManager = .default
@@ -44,7 +44,7 @@ final class PipelineHarness {
             configService: configService,
             publishStore: publishStore,
             errorQueue: errorQueue,
-            compiler: compiler,
+            compiler: compilerOverride ?? compiler,
             sourceGenerator: ScriptSourceGenerator(),
             fileManager: fileManager,
             scriptsDirectory: scriptsDirectory,
@@ -63,14 +63,17 @@ final class PipelineHarness {
         )
     }
 
-    /// 用这份脚手架构建 AppCoordinator。`startsServices: false` 跳过启动时同步，
-    /// 让测试能从一个确定的发布计数开始。
+    /// 用这份脚手架构建 AppCoordinator。默认跳过启动时同步，
+    /// 让写接口测试能从一个确定的发布计数开始。
     @MainActor
-    func makeCoordinator(configStore: MenuConfigStore? = nil) -> AppCoordinator {
+    func makeCoordinator(
+        configStore: MenuConfigStore? = nil,
+        startsServices: Bool = false
+    ) -> AppCoordinator {
         AppCoordinator(
             configStore: configStore ?? makeConfigStore(),
             scriptCompilationPipeline: pipeline,
-            startsServices: false
+            startsServices: startsServices
         )
     }
 
@@ -120,10 +123,19 @@ final class DeletingOutputAppleScriptCompiler: AppleScriptCompiling {
 }
 
 final class RecordingScriptCompilationNotifier: ScriptCompilationNotifying {
-    private(set) var postedConfigChangedCount = 0
+    private let lock = NSLock()
+    private var recordedPostCount = 0
+
+    var postedConfigChangedCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedPostCount
+    }
 
     func postConfigChanged() {
-        postedConfigChangedCount += 1
+        lock.lock()
+        recordedPostCount += 1
+        lock.unlock()
     }
 }
 

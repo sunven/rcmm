@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 正常状态弹出窗口，展示扩展状态 + 错误信息 + 打开设置 + 退出按钮
 struct NormalPopoverView: View {
-    @Environment(AppState.self) private var appState
+    @Environment(ExtensionHealthMonitor.self) private var healthMonitor
     @Environment(AppCoordinator.self) private var appCoordinator
     @Environment(MenuConfigStore.self) private var configStore
     @Environment(\.dismiss) private var dismiss
@@ -12,7 +12,7 @@ struct NormalPopoverView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            HealthStatusPanel(status: appState.extensionStatus)
+            HealthStatusPanel(status: healthMonitor.extensionStatus)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
 
@@ -61,9 +61,10 @@ struct NormalPopoverView: View {
     let appModel = AppModel(forPreview: true)
 
     NormalPopoverView()
-        .environment(appModel.appState)
         .environment(appModel.appCoordinator)
         .environment(appModel.appCoordinator.configStore)
+        .environment(appModel.extensionHealthMonitor)
+        .environment(appModel.appFlowCoordinator)
         .frame(width: 220)
 }
 
@@ -71,12 +72,18 @@ struct NormalPopoverView: View {
     let appModel = AppModel(forPreview: true)
 
     appModel.appCoordinator.configStore.errorRecords = [
-        ErrorRecord(source: "ScriptExecutor", message: "脚本执行失败: exit code 1", context: "VS Code"),
+        ErrorRecord(
+            source: "ScriptExecutor",
+            message: "脚本执行失败: exit code 1",
+            context: "VS Code",
+            kind: .scriptExecution
+        ),
     ]
 
     return NormalPopoverView()
-        .environment(appModel.appState)
         .environment(appModel.appCoordinator)
         .environment(appModel.appCoordinator.configStore)
+        .environment(appModel.extensionHealthMonitor)
+        .environment(appModel.appFlowCoordinator)
         .frame(width: 220)
 }

@@ -2,16 +2,14 @@ import RCMMShared
 import SwiftUI
 
 struct AppSelectionSheet: View {
-    @Environment(AppState.self) private var appState
+    @Environment(ApplicationDiscoveryCoordinator.self) private var applicationDiscovery
     @Environment(AppCoordinator.self) private var appCoordinator
     @Environment(MenuConfigStore.self) private var configStore
     @Environment(\.dismiss) private var dismiss
 
     var onAdded: (([UUID]) -> Void)?
 
-    @State private var discoveredApps: [AppInfo] = []
     @State private var selectedAppIds: Set<UUID> = []
-    @State private var isLoading = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,10 +23,10 @@ struct AppSelectionSheet: View {
             .padding()
 
             AppPickerListView(
-                apps: discoveredApps,
+                apps: applicationDiscovery.apps,
                 existingEntries: configStore.menuEntries,
                 selectedAppIds: $selectedAppIds,
-                isLoading: isLoading,
+                isLoading: applicationDiscovery.isScanning,
                 loadingTitle: "正在扫描应用…",
                 emptyTitle: "未发现可添加应用",
                 emptySubtitle: "仅支持从 /Applications 和 ~/Applications 添加应用"
@@ -56,23 +54,12 @@ struct AppSelectionSheet: View {
         }
         .frame(width: 400, height: 500)
         .task {
-            await loadApps()
+            await applicationDiscovery.refresh()
         }
     }
 
-    private func loadApps() async {
-        isLoading = true
-        let discoveryService = AppDiscoveryService()
-        let apps = await Task.detached {
-            discoveryService.scanApplications()
-        }.value
-        discoveredApps = apps
-        appState.discoveredApps = apps
-        isLoading = false
-    }
-
     private func addSelectedApps() {
-        let appsToAdd = discoveredApps.filter { selectedAppIds.contains($0.id) }
+        let appsToAdd = applicationDiscovery.apps.filter { selectedAppIds.contains($0.id) }
         let addedIDs = appCoordinator.edit { $0.addMenuItems(from: appsToAdd) }
         onAdded?(addedIDs)
     }

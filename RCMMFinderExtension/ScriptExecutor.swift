@@ -119,7 +119,7 @@ final class ScriptExecutor {
             source: "extension",
             message: message,
             context: context,
-            key: "script.\(scriptId).\(kind.rawValue)",
+            key: ErrorRecord.runtimeScriptKey(scriptID: scriptId, kind: kind),
             kind: kind
         )
         errorQueue.upsert(record)

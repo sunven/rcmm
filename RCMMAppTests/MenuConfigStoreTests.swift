@@ -7,6 +7,32 @@ import Testing
 @Suite("MenuConfigStore 领域规则", .serialized)
 @MainActor
 struct MenuConfigStoreTests {
+    @Test("具名变更只修改内存，不直接落盘")
+    func namedMutationsDoNotPersistDirectly() throws {
+        let harness = try PipelineHarness()
+        defer { harness.cleanup() }
+        let store = harness.makeConfigStore()
+        let persistedBefore = harness.configService.loadEntries()
+        let customID = try #require(store.menuEntries.compactMap { entry -> UUID? in
+            guard case .custom(let config) = entry else { return nil }
+            return config.id
+        }.first)
+        let newFileMenuID = try #require(store.primaryNewFileMenu?.id)
+
+        store.updateCustomCommand(
+            for: customID,
+            command: "echo changed",
+            executionMode: .currentDirectory
+        )
+        let compositeID = store.addEmptyCompositeCommand()
+        store.updateCompositeName(for: compositeID, name: "Changed Composite")
+        store.addNewFileTemplate(to: newFileMenuID)
+        store.moveEntry(from: IndexSet(integer: 0), to: store.menuEntries.endIndex)
+
+        #expect(store.menuEntries != persistedBefore)
+        #expect(harness.configService.loadEntries() == persistedBefore)
+    }
+
     @Test("添加应用按非空 bundleId 优先，缺失时按路径去重")
     func deduplicatesApplicationsByBundleThenPath() throws {
         let harness = try PipelineHarness()

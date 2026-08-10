@@ -106,13 +106,16 @@ struct ErrorBannerView: View {
     }
 
     private func recoveryAdvice(for record: ErrorRecord) -> String {
-        if record.message.contains("脚本文件不存在") {
-            return "已自动修复，请重试"
-        } else if record.message.contains("脚本执行失败") {
-            return "请检查应用是否已安装，或在设置中移除"
-        } else if record.message.contains("脚本目录不可用") {
-            return "请重新安装应用"
-        } else {
+        switch record.kind {
+        case .scriptCompile:
+            return "请在设置中检查命令内容"
+        case .scriptPublish:
+            return "请检查脚本目录权限后重试"
+        case .scriptLoad:
+            return "请重试；如仍失败，请打开设置检查"
+        case .scriptExecution:
+            return "请检查菜单配置和目标路径"
+        case nil:
             return "请在设置中检查菜单配置"
         }
     }
@@ -123,8 +126,18 @@ struct ErrorBannerView: View {
 
     // 直接设置到 configStore
     appModel.appCoordinator.configStore.errorRecords = [
-        ErrorRecord(source: "extension", message: "脚本执行失败: exit code 1", context: "VS Code"),
-        ErrorRecord(source: "extension", message: "脚本文件不存在或无法加载: vscode.scpt", context: "VS Code"),
+        ErrorRecord(
+            source: "extension",
+            message: "脚本执行失败: exit code 1",
+            context: "VS Code",
+            kind: .scriptExecution
+        ),
+        ErrorRecord(
+            source: "extension",
+            message: "脚本文件不存在或无法加载: vscode.scpt",
+            context: "VS Code",
+            kind: .scriptLoad
+        ),
     ]
 
     return ErrorBannerView()
@@ -138,7 +151,12 @@ struct ErrorBannerView: View {
     let appModel = AppModel(forPreview: true)
 
     appModel.appCoordinator.configStore.errorRecords = [
-        ErrorRecord(source: "extension", message: "脚本文件不存在或无法加载: vscode.scpt", context: "VS Code"),
+        ErrorRecord(
+            source: "extension",
+            message: "脚本文件不存在或无法加载: vscode.scpt",
+            context: "VS Code",
+            kind: .scriptLoad
+        ),
     ]
     appModel.appCoordinator.autoRepairMessage = "已自动修复脚本文件"
 

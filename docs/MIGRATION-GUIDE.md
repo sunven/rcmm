@@ -87,7 +87,7 @@ xcodebuild -project rcmm.xcodeproj -target rcmm -configuration Debug -showBuildS
 | `appState.extensionStatusDetail` | `appCoordinator.windowCoordinator.extensionStatusDetail` |
 | `appState.updateState` | `appCoordinator.windowCoordinator.updateState` |
 | `appState.updateStatusText` | `appCoordinator.windowCoordinator.updateStatusText` |
-| `appState.isOnboardingCompleted` | `appCoordinator.windowCoordinator.isOnboardingCompleted` |
+| `appState.isOnboardingCompleted` | 由 `AppFlowCoordinator` 私有持有 |
 | `appState.currentDisplayVersion` | `appCoordinator.windowCoordinator.currentDisplayVersion` |
 | `appState.isShowingExtensionCleanupSheet` | `appCoordinator.windowCoordinator.isShowingExtensionCleanupSheet` |
 | `appState.extensionCleanupFlowState` | `appCoordinator.windowCoordinator.extensionCleanupFlowState` |

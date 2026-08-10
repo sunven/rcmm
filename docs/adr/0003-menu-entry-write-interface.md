@@ -83,8 +83,12 @@ seam 是真的，而且已经在那儿。再抽一层 protocol 是在一个真 s
 
 - 视图需要注入两个 environment 值（`AppCoordinator` + `MenuConfigStore`）
 - `MenuConfigStore.menuEntries` 仍然可写，「写只走四个入口」靠纪律而非类型系统
-- `edit` 与 store 具名方法都会 `saveEntries()`，每次编辑落盘两次（无正确性问题，
-  待具名方法内部的 save 收敛到 `edit` 后消除）
+
+### 后续落实（2026-08-10）
+
+`MenuConfigStore` 的具名用户变更已改为只修改内存，持久化由 `edit` / `commitPreview`
+统一触发；`moveEntry` 的 `save` 布尔参数同时删除。初始化、迁移与加载修复仍可直接落盘，
+Script Compilation Pipeline 仍负责写入发布阶段生成的 New File Template Fingerprint。
 
 ## 与既有 ADR 的关系
 
@@ -92,8 +96,9 @@ seam 是真的，而且已经在那儿。再抽一层 protocol 是在一个真 s
 只改写 `AppCoordinator` 编排接口的具体形状。不影响 [ADR-0002](0002-deepen-script-compilation-pipeline.md)
 的 `ScriptCompilationPipeline` seam —— 四个入口都落在它的 `publishCurrentConfiguration()` 上。
 
-`AppState` 剩余的展示职责（窗口生命周期、更新检查、健康监控、扩展清理）仍待
-ADR-0001 规划的 `WindowCoordinator` 承接，本 ADR 不涉及。
+`AppState` 的窗口生命周期与健康监控已分别迁入 `WindowCoordinator` 和
+`ExtensionHealthMonitor`，扩展清理状态机与更新检查已分别迁入
+`ExtensionCleanupCoordinator` 和 `UpdateCoordinator`；本 ADR 不涉及这些模块的内部接口。
 
 ## 参考
 

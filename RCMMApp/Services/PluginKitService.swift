@@ -32,7 +32,7 @@ enum PluginKitService {
     /// 优先使用 `pluginkit` 判断系统当前真正接管的是哪一份 Finder 扩展。
     /// 只有在 `pluginkit` 不可用时，才回退到 `FIFinderSyncController.isExtensionEnabled`。
     ///
-    /// `.unknown` 作为 `AppState.extensionStatus` 的初始默认值，表示应用启动后尚未执行首次检测的状态。
+    /// `.unknown` 作为健康监控的初始默认值，表示应用启动后尚未执行首次检测的状态。
     static func checkHealth() -> ExtensionStatus {
         let report = healthReport()
         logger.info("健康检测: Extension 状态 = \(report.status.rawValue)")

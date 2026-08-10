@@ -8,18 +8,22 @@ struct rcmmApp: App {
     var body: some Scene {
         MenuBarExtra {
             PopoverContainerView()
-                .environment(appModel.appState)
                 .environment(appModel.appCoordinator)
                 .environment(appModel.appCoordinator.configStore)
+                .environment(appModel.extensionHealthMonitor)
+                .environment(appModel.appFlowCoordinator)
         } label: {
-            MenuBarStatusIcon(status: appModel.appState.extensionStatus)
+            MenuBarStatusIcon(status: appModel.extensionHealthMonitor.extensionStatus)
         }
         .menuBarExtraStyle(.window)
         Settings {
             SettingsView()
-                .environment(appModel.appState)
                 .environment(appModel.appCoordinator)
                 .environment(appModel.appCoordinator.configStore)
+                .environment(appModel.updateCoordinator)
+                .environment(appModel.extensionHealthMonitor)
+                .environment(appModel.appFlowCoordinator)
+                .environment(appModel.applicationDiscoveryCoordinator)
                 .onDisappear {
                     ActivationPolicyManager.hideToMenuBar()
                 }

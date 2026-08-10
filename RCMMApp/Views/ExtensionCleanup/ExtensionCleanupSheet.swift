@@ -2,7 +2,12 @@ import RCMMShared
 import SwiftUI
 
 struct ExtensionCleanupSheet: View {
-    @Environment(AppState.self) private var appState
+    @Environment(ExtensionCleanupCoordinator.self) private var cleanupCoordinator
+    let onDismiss: () -> Void
+
+    init(onDismiss: @escaping () -> Void = {}) {
+        self.onDismiss = onDismiss
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -15,7 +20,7 @@ struct ExtensionCleanupSheet: View {
 
     @ViewBuilder
     private var content: some View {
-        switch appState.extensionCleanupFlowState {
+        switch cleanupCoordinator.state {
         case .idle:
             Text("未开始清理。")
 
@@ -26,7 +31,7 @@ struct ExtensionCleanupSheet: View {
                 Spacer(minLength: 20)
 
                 Button("取消") {
-                    appState.dismissExtensionCleanupSheet()
+                    onDismiss()
                 }
                 .keyboardShortcut(.cancelAction)
             }
@@ -123,14 +128,14 @@ struct ExtensionCleanupSheet: View {
 
                 HStack {
                     Button("取消") {
-                        appState.dismissExtensionCleanupSheet()
+                        onDismiss()
                     }
                     .keyboardShortcut(.cancelAction)
 
                     Spacer()
 
                     Button("确认清理") {
-                        appState.confirmExtensionCleanup(plan: plan)
+                        cleanupCoordinator.confirm(plan: plan)
                     }
                     .buttonStyle(AppPrimaryButtonStyle())
                     .disabled(!plan.hasWork)
@@ -170,7 +175,7 @@ struct ExtensionCleanupSheet: View {
                 HStack {
                     Spacer()
                     Button("完成") {
-                        appState.dismissExtensionCleanupSheet()
+                        onDismiss()
                     }
                     .buttonStyle(AppPrimaryButtonStyle())
                     .keyboardShortcut(.defaultAction)
@@ -200,9 +205,20 @@ struct ExtensionCleanupSheet: View {
 }
 
 #Preview("Planning") {
-    let state = AppState(forPreview: true)
-    state.isShowingExtensionCleanupSheet = true
-    state.extensionCleanupFlowState = .planning
+    let plan = ExtensionCleanupPlan(
+        currentAppPath: nil,
+        deleteCandidates: [],
+        skippedCandidates: [],
+        processesToTerminate: [],
+        postCleanupCommands: []
+    )!
+    let coordinator = ExtensionCleanupCoordinator(
+        initialState: .planning,
+        preparePlan: { plan },
+        execute: { _, _ in
+            ExtensionCleanupResult.noOp(message: "", followUpAdvice: [])
+        }
+    )
     return ExtensionCleanupSheet()
-        .environment(state)
+        .environment(coordinator)
 }
