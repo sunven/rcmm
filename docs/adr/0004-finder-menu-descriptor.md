@@ -50,10 +50,10 @@ Composite 时，标题匹配被直接放在回退链第一位。也就是说，�
 
 ### 1. Finder Menu Descriptor 同时拥有构造与反解
 
-`FinderMenuDescriptorBuilder.descriptors(...)` 产出树形描述，
-`FinderMenuSnapshot.scriptBackedEntry(for:)` 反解点击。标题格式、图标选择、身份字段写入
+`FinderMenuDescriptorBuilder.layout(...)` 产出树形描述与身份索引，
+`FinderMenuSnapshot.resolve(_:)` 反解点击。标题格式、图标选择、身份字段写入
 规则都只在这一个模块里定义一次。`FinderSync` 退化为 `descriptor → NSMenuItem` 的 adapter
-（548 → 386 行），不再直接引用 `MenuItemResolver`、`FinderMenuPresenter`、
+（548 → 412 行），不再直接引用 `MenuItemResolver`、`FinderMenuPresenter`、
 `FinderMenuIconPolicy`、`MenuEntryScriptPolicy`。
 
 `MenuEntryScriptPolicy` 保持在模块外部——App 侧的 `ScriptInstallerService` 也消费它，
@@ -63,10 +63,11 @@ Composite 时，标题匹配被直接放在回退链第一位。也就是说，�
 
 ### 2. MenuItemFields 作为纯值中间层
 
-`RCMMShared` 不能依赖 AppKit，因此引入 `MenuItemFields`（`title` / `tag` / `identifier` /
-`representedObject` / `parentMenuTitle`，`representedObject` 收窄为 `String?`）。
-扩展侧只做 fields ↔ `NSMenuItem` 的机械转换，往返正确性在 `swift test` 内可验证，
-无需给 `RCMMFinderExtension` 建测试 target、无需把 Finder 宿主拖进 CI。
+`RCMMShared` 不能依赖 AppKit，因此引入 `MenuItemFields`。第②步它携带 `NSMenuItem`
+上全部五个可能回传的字段以保持行为等价；第③步收敛为只剩 `title` 与 `tag` ——
+其余三个既然实测永远拿不到，就不该出现在接口里。扩展侧只做 fields ↔ `NSMenuItem`
+的机械转换，往返正确性在 `swift test` 内可验证，无需给 `RCMMFinderExtension`
+建测试 target、无需把 Finder 宿主拖进 CI。
 
 图标以 `FinderMenuIconSource` 描述来源（`.symbol` / `.applicationIcon(data:fallbackSymbolName:)` /
 `.none`），由 adapter 转 `NSImage`；`fallbackSymbolName` 保留了原有的「图标解码失败退化为
@@ -81,9 +82,8 @@ Composite 时，标题匹配被直接放在回退链第一位。也就是说，�
 
 ### 4. 实测保真度编码进代码
 
-`MenuItemFields.finderObserved(title:tag:)` 按上表构造输入：只保留 `title` 与 `tag`，
-`identifier` 置为 selector 名，其余为 nil。往返不变量必须用这个保真度作输入——用理想
-输入（全字段可用）测出来的绿色是假的。
+`MenuItemFields.finderObserved(title:tag:)` 按上表构造输入：只保留 `title` 与 `tag`。
+往返不变量必须用这个保真度作输入——用理想输入（全字段可用）测出来的绿色是假的。
 
 ### 5. 分三步落地
 
@@ -148,7 +148,7 @@ generation 编进 `tag`（`generation << 16 | index`），跨快照直接失效�
 ### 正面
 
 - 菜单项身份的编码与解码同处一个模块，标题格式只定义一次
-- `FinderSync` 548 → 400 行，不再直接引用 4 个 policy 模块
+- `FinderSync` 548 → 412 行，不再直接引用 4 个 policy 模块
 - 往返不变量（构造 → Finder 保真度退化 → 反解）首次被测试覆盖
 - 三个此前无人知晓的路由缺陷被确证并修复：同名 custom 项不再静默误路由、
   同名 composite 与跨菜单同名模板不再点不动
@@ -167,8 +167,13 @@ generation 编进 `tag`（`generation << 16 | index`），跨快照直接失效�
 ### 风险
 
 `RCMMApp` 的测试目前在本机无法执行（`The test runner hung before establishing connection.`），
-与本决策无关，基线提交上同样失败。第②步的验证依据是 `RCMMShared` 的 262 个用例
+与本决策无关，基线提交上同样失败。验证依据是 `RCMMShared` 的 254 个用例（零 known issue）
 加上两个 target 的编译通过。
+
+第②步的真机回归已完成：8 次点击覆盖 custom / composite / New File Template ×
+`flat` / `nestedUnderRCMM` 六格，全部命中且字段与第①步基线一致。
+**第③步的真机回归尚未进行** —— 它真正改变了路由载体，必须重跑同一组点击，
+并补上同名 composite、跨菜单同名模板两个此前点不动的场景。
 
 ## 参考
 
