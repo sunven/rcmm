@@ -115,6 +115,8 @@ struct ErrorBannerView: View {
             return "请重试；如仍失败，请打开设置检查"
         case .scriptExecution:
             return "请检查菜单配置和目标路径"
+        case .menuRouting:
+            return "请重新打开 Finder 右键菜单后再试"
         case nil:
             return "请在设置中检查菜单配置"
         }

@@ -1,6 +1,6 @@
 # ADR-0004: Finder 菜单项身份的构造与反解收归一个模块
 
-状态：已接受 (Accepted) - 2026-08-11（第③步待落地）
+状态：已接受 (Accepted) - 2026-08-11
 
 ## 背景
 
@@ -91,11 +91,27 @@ Composite 时，标题匹配被直接放在回退链第一位。也就是说，�
 |---|---|---|
 | ① | `#if DEBUG` 临时诊断，取得上表事实 | 已完成并回滚 |
 | ② | 引入 Descriptor / Snapshot / MenuItemFields，回退链**原样**搬入，补往返不变量测试，行为零变更 | 已完成 |
-| ③ | `tag` 升级为全局索引 + 快照 generation 编码，砍掉死分支，兜底命中写错误队列 | 待落地 |
+| ③ | `tag` 升级为全局索引 + 快照 generation 编码，砍掉死分支，兜底命中写错误队列 | 已完成 |
 
-第②步刻意不改路由行为：先把测试网架好，再动逻辑。三个现存缺陷已用
-`withKnownIssue` 固定在 `FinderMenuDescriptorTests` 里，既留下缺陷曾经存在的证据，
-也构成第③步的验收标准——修好后 `withKnownIssue` 会因「预期失败却通过」而报错。
+第②步刻意不改路由行为：先把测试网架好，再动逻辑。三个现存缺陷曾用
+`withKnownIssue` 固定在 `FinderMenuDescriptorTests` 里，第③步落地后全部转绿，标记已摘除。
+
+### 第③步的最终形状
+
+- `tag` 编码为 `generation << 16 | index`，`index` 覆盖**全部** Script-Backed 项
+  （此前只有 custom 项分配序号）。`generation` 从 1 起，因此有效编码不会等于
+  非 Script-Backed 项的 `0`。
+- 反解主路径是 tag 索引，标题相等校验作纵深防御；结果是
+  `FinderMenuResolution`（`resolved` / `staleSnapshot` / `titleMismatch` / `notScriptBacked`），
+  失败按类型写入错误队列（新增 `ErrorRecordKind.menuRouting`）。用户此前的感受是
+  「点了没反应」且 App 侧毫不知情，现在看得见。
+- `MenuItemResolver` 及其 299 行测试整体删除；`MenuItemFields` 收敛为只剩
+  `title` 与 `tag` —— 其余字段既然永远拿不到，就不该出现在接口里。
+- `ErrorRecord` 的 `kind` 解码改为容错：未知值降级为 nil 而非抛错。此前
+  `decodeIfPresent` 遇到未知 rawValue 会抛错，配合 `loadAll` 的 `try?` 会让**整个**
+  错误队列被当成空。加新 kind 前必须先修掉这个。
+- `reloadMenuSnapshot` 只允许更大的 generation 覆盖当前快照，防止并发刷新时慢的一次
+  后完成、把旧快照写回去（那会让已发出菜单的 tag 全部失配）。
 
 ## 理由
 
@@ -132,16 +148,21 @@ generation 编进 `tag`（`generation << 16 | index`），跨快照直接失效�
 ### 正面
 
 - 菜单项身份的编码与解码同处一个模块，标题格式只定义一次
-- `FinderSync` 548 → 386 行，不再直接引用 4 个 policy 模块
-- 往返不变量（构造 → Finder 保真度退化 → 反解）首次被测试覆盖，262 个用例全绿
-- 三个此前无人知晓的路由缺陷被确证并固定为验收标准
-- 构造与解析绑定同一快照，消除跨进程时间窗
+- `FinderSync` 548 → 400 行，不再直接引用 4 个 policy 模块
+- 往返不变量（构造 → Finder 保真度退化 → 反解）首次被测试覆盖
+- 三个此前无人知晓的路由缺陷被确证并修复：同名 custom 项不再静默误路由、
+  同名 composite 与跨菜单同名模板不再点不动
+- 构造与解析绑定同一快照并由 generation 保证，跨快照点击判为过期而非错位命中
+- 路由失败进入错误队列，用户与 App 侧都能看见
+- 删除 `MenuItemResolver`（134 行）与其测试（299 行）
 
 ### 负面
 
 - 多一个 `MenuItemFields` 中间类型
-- 第②步之后 `MenuItemResolver` 仍是 public 且带 3 条死分支，要到第③步才清理
-- 真机回归依赖手工点击（6 次），无法进 CI
+- `tag` 的 index 上限 65535；超限项退化为不可路由（会上报），实际不可达
+- 扩展进程重启后 generation 归零重来，理论上可与旧菜单碰撞；但进程重启后
+  Finder 的菜单也已失效，实际不可达
+- 真机回归依赖手工点击，无法进 CI
 
 ### 风险
 

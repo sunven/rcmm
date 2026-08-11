@@ -12,10 +12,13 @@ class FinderSync: FIFinderSync {
     private let publishStore = ScriptPublishStore()
     private let iconStore = ApplicationIconStore()
     private let scriptExecutor = ScriptExecutor()
+    private let errorQueue = SharedErrorQueue()
     private let preferencesURL = SharedPaths.extensionScriptsPreferencesURL()
     private let menuSnapshotLock = NSLock()
     private var menuSnapshot = FinderMenuSnapshot.empty
     private var menuCacheMetadata: FinderMenuCacheMetadata?
+    /// 快照序号，编进菜单项 tag。从 1 起，每次重新读盘递增。
+    private var snapshotGeneration = 0
     private var configObservation: DarwinObservation?
     private var currentMenuKind: FIMenuKind?
 
@@ -189,14 +192,11 @@ class FinderSync: FIFinderSync {
     }
 
     @objc func openScriptBackedEntry(_ sender: NSMenuItem) {
-        guard let entry = resolveScriptBackedEntry(sender) else {
-            logger.error(
-                """
-                找不到菜单项配置：title=\(sender.title, privacy: .public)，\
-                tag=\(sender.tag, privacy: .public)，\
-                representedObject=\(String(describing: sender.representedObject), privacy: .private)
-                """
-            )
+        let fields = MenuItemFields(title: sender.title, tag: sender.tag)
+        let resolution = currentMenuSnapshot().resolve(fields)
+
+        guard let entry = resolution.entry else {
+            reportRoutingFailure(resolution, fields: fields)
             return
         }
 
@@ -222,25 +222,41 @@ class FinderSync: FIFinderSync {
         openScriptBackedEntry(sender)
     }
 
-    private func resolveScriptBackedEntry(_ sender: NSMenuItem) -> ScriptBackedMenuEntry? {
-        let fields = MenuItemFields(
-            title: sender.title,
-            tag: sender.tag,
-            identifier: sender.identifier?.rawValue,
-            representedObject: sender.representedObject as? String,
-            parentMenuTitle: parentMenuTitle(for: sender)
+    /// 路由失败写入错误队列，让 App 侧看得见。
+    ///
+    /// 此前这里只打日志，用户的感受是「点了没反应」而 App 完全不知情。
+    private func reportRoutingFailure(
+        _ resolution: FinderMenuResolution,
+        fields: MenuItemFields
+    ) {
+        let message: String
+        switch resolution {
+        case .resolved:
+            return
+        case .staleSnapshot:
+            message = "菜单已过期，请重新打开右键菜单"
+        case .titleMismatch(let expected, let actual):
+            message = "菜单项标题不一致：期望 \(expected)，实际 \(actual)"
+        case .notScriptBacked:
+            message = "菜单项缺少可路由的标识"
+        }
+
+        logger.error(
+            """
+            菜单路由失败：\(message, privacy: .public)，\
+            title=\(fields.title, privacy: .public)，tag=\(fields.tag, privacy: .public)
+            """
         )
 
-        logger.debug(
-            """
-            解析脚本菜单：title=\(fields.title, privacy: .public)，\
-            tag=\(fields.tag, privacy: .public)，\
-            representedID=\(fields.representedObject ?? "nil", privacy: .public)，\
-            identifier=\(fields.identifier ?? "nil", privacy: .public)
-            """
+        errorQueue.upsert(
+            ErrorRecord(
+                source: "extension",
+                message: message,
+                context: fields.title,
+                key: "menu.routing.\(fields.tag)",
+                kind: .menuRouting
+            )
         )
-
-        return currentMenuSnapshot().scriptBackedEntry(for: fields)
     }
 
     private func currentMenuSnapshot() -> FinderMenuSnapshot {
@@ -284,19 +300,29 @@ class FinderSync: FIFinderSync {
         preferencesModificationDate: Date?,
         loadedAt: Date
     ) {
+        menuSnapshotLock.lock()
+        snapshotGeneration += 1
+        let generation = snapshotGeneration
+        menuSnapshotLock.unlock()
+
         let snapshot = FinderMenuSnapshot(
             entries: configService.loadEntries(),
             publishStates: publishStore.loadAll(),
             presentationMode: configService.loadMenuPresentationMode(),
-            applicationIcons: iconStore.loadIcons()
+            applicationIcons: iconStore.loadIcons(),
+            generation: generation
         )
 
         menuSnapshotLock.lock()
-        menuSnapshot = snapshot
-        menuCacheMetadata = FinderMenuCacheMetadata(
-            preferencesModificationDate: preferencesModificationDate,
-            loadedAt: loadedAt
-        )
+        // 并发刷新时慢的那次可能后完成，不能让旧快照覆盖新快照 ——
+        // 否则已发出菜单的 tag generation 会与当前快照不符，点击全部落空。
+        if generation >= menuSnapshot.generation {
+            menuSnapshot = snapshot
+            menuCacheMetadata = FinderMenuCacheMetadata(
+                preferencesModificationDate: preferencesModificationDate,
+                loadedAt: loadedAt
+            )
+        }
         menuSnapshotLock.unlock()
     }
 

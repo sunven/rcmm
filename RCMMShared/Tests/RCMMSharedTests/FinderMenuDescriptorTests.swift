@@ -84,7 +84,8 @@ struct FinderMenuDescriptorTests {
             entries: entries,
             publishStates: currentPublishStates(for: entries),
             presentationMode: mode,
-            applicationIcons: [:]
+            applicationIcons: [:],
+            generation: 1
         )
 
         let clicks = snapshot.observedScriptBackedClicks
@@ -92,7 +93,7 @@ struct FinderMenuDescriptorTests {
         #expect(clicks.count == 5)
 
         for click in clicks {
-            let resolved = snapshot.scriptBackedEntry(for: click.fields)
+            let resolved = snapshot.resolve(click.fields).entry
             #expect(
                 resolved?.id == click.scriptID,
                 "标题 \(click.fields.title) 反解到 \(resolved?.id ?? "nil")，期望 \(click.scriptID)"
@@ -107,7 +108,8 @@ struct FinderMenuDescriptorTests {
             entries: entries,
             publishStates: currentPublishStates(for: entries),
             presentationMode: .nestedUnderRCMM,
-            applicationIcons: [:]
+            applicationIcons: [:],
+            generation: 1
         )
 
         #expect(snapshot.descriptors.count == 1)
@@ -122,7 +124,8 @@ struct FinderMenuDescriptorTests {
             entries: [],
             publishStates: [:],
             presentationMode: .nestedUnderRCMM,
-            applicationIcons: [:]
+            applicationIcons: [:],
+            generation: 1
         )
 
         #expect(snapshot.descriptors.isEmpty)
@@ -143,14 +146,18 @@ struct FinderMenuDescriptorTests {
             entries: entries,
             publishStates: currentPublishStates(for: entries),
             presentationMode: .flat,
-            applicationIcons: [config.id.uuidString: iconData]
+            applicationIcons: [config.id.uuidString: iconData],
+            generation: 1
         )
 
         let descriptor = snapshot.descriptors.first
         #expect(descriptor?.title == "用 Code 打开")
         #expect(descriptor?.icon == .applicationIcon(data: iconData, fallbackSymbolName: "app"))
         #expect(descriptor?.action == .scriptBacked(
-            FinderMenuItemIdentity(scriptID: config.id.uuidString, tag: 0)
+            FinderMenuItemIdentity(
+                scriptID: config.id.uuidString,
+                tag: FinderMenuItemTag.encode(generation: 1, index: 0)
+            )
         ))
     }
 
@@ -161,7 +168,8 @@ struct FinderMenuDescriptorTests {
             entries: entries,
             publishStates: currentPublishStates(for: entries),
             presentationMode: .flat,
-            applicationIcons: [:]
+            applicationIcons: [:],
+            generation: 1
         )
 
         let parent = snapshot.descriptors.first
@@ -183,15 +191,12 @@ struct FinderMenuDescriptorTests {
             entries: entries,
             publishStates: currentPublishStates(for: entries),
             presentationMode: .flat,
-            applicationIcons: [:]
+            applicationIcons: [:],
+            generation: 1
         )
 
-        withKnownIssue(
-            "标题相同使唯一匹配失效，回退链会把两项都解析到第一个 —— 静默路由到错误的应用。第③步改用 tag 全局索引后修复。"
-        ) {
-            for click in snapshot.observedScriptBackedClicks {
-                #expect(snapshot.scriptBackedEntry(for: click.fields)?.id == click.scriptID)
-            }
+        for click in snapshot.observedScriptBackedClicks {
+            #expect(snapshot.resolve(click.fields).entry?.id == click.scriptID)
         }
     }
 
@@ -205,15 +210,12 @@ struct FinderMenuDescriptorTests {
             entries: entries,
             publishStates: currentPublishStates(for: entries),
             presentationMode: .flat,
-            applicationIcons: [:]
+            applicationIcons: [:],
+            generation: 1
         )
 
-        withKnownIssue(
-            "composite 的 tag 恒为 -1，标题唯一匹配失败后无索引可用，点击落空。第③步改用 tag 全局索引后修复。"
-        ) {
-            for click in snapshot.observedScriptBackedClicks {
-                #expect(snapshot.scriptBackedEntry(for: click.fields)?.id == click.scriptID)
-            }
+        for click in snapshot.observedScriptBackedClicks {
+            #expect(snapshot.resolve(click.fields).entry?.id == click.scriptID)
         }
     }
 
@@ -227,15 +229,12 @@ struct FinderMenuDescriptorTests {
             entries: entries,
             publishStates: currentPublishStates(for: entries),
             presentationMode: .flat,
-            applicationIcons: [:]
+            applicationIcons: [:],
+            generation: 1
         )
 
-        withKnownIssue(
-            "Finder 不回传父菜单标题，parentMenuTitle 恒为 nil，模板的父菜单区分从未生效，两个同名模板都点不动。第③步改用 tag 全局索引后修复。"
-        ) {
-            for click in snapshot.observedScriptBackedClicks {
-                #expect(snapshot.scriptBackedEntry(for: click.fields)?.id == click.scriptID)
-            }
+        for click in snapshot.observedScriptBackedClicks {
+            #expect(snapshot.resolve(click.fields).entry?.id == click.scriptID)
         }
     }
 
@@ -251,7 +250,8 @@ struct FinderMenuDescriptorTests {
             entries: oldEntries,
             publishStates: currentPublishStates(for: oldEntries),
             presentationMode: .flat,
-            applicationIcons: [:]
+            applicationIcons: [:],
+            generation: 1
         )
 
         let newEntries = [kept]
@@ -259,7 +259,8 @@ struct FinderMenuDescriptorTests {
             entries: newEntries,
             publishStates: currentPublishStates(for: newEntries),
             presentationMode: .flat,
-            applicationIcons: [:]
+            applicationIcons: [:],
+            generation: 1
         )
 
         let removedScriptID = MenuEntryScriptPolicy.scriptBackedEntry(for: removed)!.id
@@ -268,7 +269,103 @@ struct FinderMenuDescriptorTests {
         }!
 
         // 已删除的菜单项要么解析不出，要么仍指向自己 —— 绝不能落到 kept 上。
-        let resolved = newSnapshot.scriptBackedEntry(for: staleClick.fields)
+        let resolved = newSnapshot.resolve(staleClick.fields).entry
         #expect(resolved?.id != MenuEntryScriptPolicy.scriptBackedEntry(for: kept)!.id)
+    }
+
+    // MARK: - tag 编码与失配
+
+    @Test("tag 编码可往返，非 script-backed 项解码为 nil")
+    func tagRoundTrips() {
+        let tag = FinderMenuItemTag.encode(generation: 7, index: 42)
+        let decoded = FinderMenuItemTag.decode(tag)
+
+        #expect(decoded?.generation == 7)
+        #expect(decoded?.index == 42)
+        #expect(FinderMenuItemTag.decode(FinderMenuItemTag.none) == nil)
+        #expect(FinderMenuItemTag.decode(-1) == nil)
+    }
+
+    @Test("generation 从 1 起，编码结果不会与非 script-backed 的 0 冲突")
+    func firstGenerationNeverEncodesToNone() {
+        #expect(FinderMenuItemTag.encode(generation: 1, index: 0) != FinderMenuItemTag.none)
+        // generation 非法时退化为 none，宁可无法路由也不错位命中
+        #expect(FinderMenuItemTag.encode(generation: 0, index: 5) == FinderMenuItemTag.none)
+        #expect(
+            FinderMenuItemTag.encode(
+                generation: 1,
+                index: FinderMenuItemTag.maximumIndex + 1
+            ) == FinderMenuItemTag.none
+        )
+    }
+
+    @Test("旧快照的点击在新快照上判为过期，而不是错位命中")
+    func clickFromPreviousGenerationIsStale() {
+        let entries = [
+            customEntry(appName: "Code", path: "/Applications/Code.app"),
+            customEntry(appName: "Ghostty", path: "/Applications/Ghostty.app"),
+        ]
+        let states = currentPublishStates(for: entries)
+
+        let old = FinderMenuSnapshot(
+            entries: entries,
+            publishStates: states,
+            presentationMode: .flat,
+            applicationIcons: [:],
+            generation: 1
+        )
+        // 同样的配置，但快照换了一代
+        let new = FinderMenuSnapshot(
+            entries: entries,
+            publishStates: states,
+            presentationMode: .flat,
+            applicationIcons: [:],
+            generation: 2
+        )
+
+        for click in old.observedScriptBackedClicks {
+            #expect(new.resolve(click.fields) == .staleSnapshot)
+        }
+    }
+
+    @Test("索引命中但标题不符时报告失配，不执行")
+    func titleMismatchIsReported() {
+        let entries = [customEntry(appName: "Code", path: "/Applications/Code.app")]
+        let snapshot = FinderMenuSnapshot(
+            entries: entries,
+            publishStates: currentPublishStates(for: entries),
+            presentationMode: .flat,
+            applicationIcons: [:],
+            generation: 1
+        )
+
+        let click = snapshot.observedScriptBackedClicks[0]
+        let tampered = MenuItemFields(title: "用 别的东西 打开", tag: click.fields.tag)
+
+        #expect(
+            snapshot.resolve(tampered)
+                == .titleMismatch(expected: "用 Code 打开", actual: "用 别的东西 打开")
+        )
+    }
+
+    @Test("内置项与父项的 tag 判为非 script-backed")
+    func containerAndBuiltInAreNotScriptBacked() {
+        let entries = [
+            MenuEntry.builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
+        ]
+        let snapshot = FinderMenuSnapshot(
+            entries: entries,
+            publishStates: currentPublishStates(for: entries),
+            presentationMode: .flat,
+            applicationIcons: [:],
+            generation: 1
+        )
+
+        #expect(snapshot.observedScriptBackedClicks.isEmpty)
+        #expect(
+            snapshot.resolve(
+                MenuItemFields(title: "复制路径", tag: FinderMenuItemTag.none)
+            ) == .notScriptBacked
+        )
     }
 }

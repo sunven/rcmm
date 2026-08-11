@@ -11,21 +11,74 @@ public enum FinderMenuIconSource: Equatable, Sendable {
     case none
 }
 
+/// `NSMenuItem.tag` 的编码。
+///
+/// `tag` 是实测唯一可靠的结构化载体（见 ADR-0004），因此身份走它而非标题。
+/// 高位放快照 generation，低 16 位放菜单内序号：菜单打开后配置若发生变更，
+/// 旧菜单的 tag 会因 generation 不符而直接失效，不会错位到另一个脚本。
+public enum FinderMenuItemTag: Sendable {
+    public static let indexBits = 16
+    public static let maximumIndex = (1 << indexBits) - 1
+
+    /// 非 Script-Backed 菜单项（内置项、父项）的 tag。
+    ///
+    /// generation 从 1 起，因此任何有效编码都不会等于 0。
+    public static let none = 0
+
+    /// 超出索引上限时返回 `none`，该项将无法路由并在点击时上报，而不是错位命中。
+    public static func encode(generation: Int, index: Int) -> Int {
+        guard generation >= 1, index >= 0, index <= maximumIndex else {
+            return none
+        }
+        return (generation << indexBits) | index
+    }
+
+    public static func decode(_ tag: Int) -> (generation: Int, index: Int)? {
+        guard tag > none else { return nil }
+        return (tag >> indexBits, tag & maximumIndex)
+    }
+}
+
 /// 写入 `NSMenuItem` 的身份字段。
 ///
 /// 构造侧与反解侧共用同一个定义，避免菜单项身份的编码与解码分居两个 target。
-/// 哪些字段能真正跨进程回传见 ADR-0004。
 public struct FinderMenuItemIdentity: Equatable, Sendable {
-    /// Script-Backed Entry 的 id，写入 `representedObject` 与 `identifier`。
+    /// Script-Backed Entry 的 id。
     public let scriptID: String
-    /// 菜单项序号。当前仅 custom 项有意义，其余为 `unindexedTag`。
+    /// 编码了快照 generation 与菜单内序号的 tag。
     public let tag: Int
-
-    public static let unindexedTag = -1
 
     public init(scriptID: String, tag: Int) {
         self.scriptID = scriptID
         self.tag = tag
+    }
+}
+
+/// 按 tag 序号排列的 Script-Backed 菜单项。
+public struct FinderMenuIndexedItem: Equatable, Sendable {
+    public let scriptID: String
+    /// 构造时写入的标题，反解时用于相等校验。
+    public let title: String
+
+    public init(scriptID: String, title: String) {
+        self.scriptID = scriptID
+        self.title = title
+    }
+}
+
+/// 一次菜单构造的产物：描述树与身份索引同源。
+public struct FinderMenuLayout: Sendable {
+    public let descriptors: [FinderMenuItemDescriptor]
+    public let indexedItems: [FinderMenuIndexedItem]
+
+    public static let empty = FinderMenuLayout(descriptors: [], indexedItems: [])
+
+    public init(
+        descriptors: [FinderMenuItemDescriptor],
+        indexedItems: [FinderMenuIndexedItem]
+    ) {
+        self.descriptors = descriptors
+        self.indexedItems = indexedItems
     }
 }
 
@@ -61,40 +114,65 @@ public struct FinderMenuItemDescriptor: Equatable, Sendable {
     }
 }
 
-/// 由 Menu Entry 构造 Finder 右键菜单的描述树。
+/// 按构造顺序分配 tag，并记录反解所需的索引。
+private struct TagAllocator {
+    let generation: Int
+    private(set) var indexedItems: [FinderMenuIndexedItem] = []
+
+    mutating func identity(scriptID: String, title: String) -> FinderMenuItemIdentity {
+        let index = indexedItems.count
+        indexedItems.append(
+            FinderMenuIndexedItem(scriptID: scriptID, title: title)
+        )
+        return FinderMenuItemIdentity(
+            scriptID: scriptID,
+            tag: FinderMenuItemTag.encode(generation: generation, index: index)
+        )
+    }
+}
+
+/// 由 Menu Entry 构造 Finder 右键菜单的描述树与身份索引。
 ///
 /// 标题格式、图标选择与身份字段的写入规则都只在这里定义一次；反解见
-/// `FinderMenuSnapshot.scriptBackedEntry(for:)`。
+/// `FinderMenuSnapshot.resolve(_:)`。
 public enum FinderMenuDescriptorBuilder: Sendable {
     public static let rootTitle = "RCMM"
     public static let rootSymbolName = "contextualmenu.and.cursorarrow"
 
-    public static func descriptors(
+    public static func layout(
         visibleEntries: [MenuEntry],
         publishStates: [String: ScriptPublishState],
         presentationMode: MenuPresentationMode,
-        applicationIcons: [String: Data]
-    ) -> [FinderMenuItemDescriptor] {
+        applicationIcons: [String: Data],
+        generation: Int
+    ) -> FinderMenuLayout {
+        var allocator = TagAllocator(generation: generation)
         let items = menuItemDescriptors(
             visibleEntries: visibleEntries,
             publishStates: publishStates,
-            applicationIcons: applicationIcons
+            applicationIcons: applicationIcons,
+            allocator: &allocator
         )
 
-        guard !items.isEmpty else { return [] }
+        guard !items.isEmpty else { return .empty }
 
         switch presentationMode {
         case .flat:
-            return items
+            return FinderMenuLayout(
+                descriptors: items,
+                indexedItems: allocator.indexedItems
+            )
         case .nestedUnderRCMM:
-            return [
-                FinderMenuItemDescriptor(
-                    title: rootTitle,
-                    icon: .symbol(rootSymbolName),
-                    action: .container,
-                    children: items
-                )
-            ]
+            let root = FinderMenuItemDescriptor(
+                title: rootTitle,
+                icon: .symbol(rootSymbolName),
+                action: .container,
+                children: items
+            )
+            return FinderMenuLayout(
+                descriptors: [root],
+                indexedItems: allocator.indexedItems
+            )
         }
     }
 
@@ -124,10 +202,10 @@ public enum FinderMenuDescriptorBuilder: Sendable {
     private static func menuItemDescriptors(
         visibleEntries: [MenuEntry],
         publishStates: [String: ScriptPublishState],
-        applicationIcons: [String: Data]
+        applicationIcons: [String: Data],
+        allocator: inout TagAllocator
     ) -> [FinderMenuItemDescriptor] {
         var descriptors: [FinderMenuItemDescriptor] = []
-        var customIndex = 0
 
         for entry in visibleEntries {
             switch entry {
@@ -137,17 +215,19 @@ public enum FinderMenuDescriptorBuilder: Sendable {
                 descriptors.append(
                     customDescriptor(
                         for: config,
-                        customIndex: customIndex,
-                        applicationIcons: applicationIcons
+                        applicationIcons: applicationIcons,
+                        allocator: &allocator
                     )
                 )
-                customIndex += 1
             case .composite(let config):
-                descriptors.append(compositeDescriptor(for: config))
+                descriptors.append(
+                    compositeDescriptor(for: config, allocator: &allocator)
+                )
             case .newFile(let config):
                 if let descriptor = newFileDescriptor(
                     for: config,
-                    publishStates: publishStates
+                    publishStates: publishStates,
+                    allocator: &allocator
                 ) {
                     descriptors.append(descriptor)
                 }
@@ -168,8 +248,8 @@ public enum FinderMenuDescriptorBuilder: Sendable {
 
     private static func customDescriptor(
         for config: MenuItemConfig,
-        customIndex: Int,
-        applicationIcons: [String: Data]
+        applicationIcons: [String: Data],
+        allocator: inout TagAllocator
     ) -> FinderMenuItemDescriptor {
         let icon: FinderMenuIconSource
         let placeholderSymbolName = FinderMenuIconPolicy.placeholderSymbolName(for: config)
@@ -185,36 +265,33 @@ public enum FinderMenuDescriptorBuilder: Sendable {
             icon = .symbol(placeholderSymbolName)
         }
 
+        let title = customMenuTitle(for: config)
         return FinderMenuItemDescriptor(
-            title: customMenuTitle(for: config),
+            title: title,
             icon: icon,
             action: .scriptBacked(
-                FinderMenuItemIdentity(
-                    scriptID: config.id.uuidString,
-                    tag: customIndex
-                )
+                allocator.identity(scriptID: config.id.uuidString, title: title)
             )
         )
     }
 
     private static func compositeDescriptor(
-        for config: CompositeMenuItemConfig
+        for config: CompositeMenuItemConfig,
+        allocator: inout TagAllocator
     ) -> FinderMenuItemDescriptor {
         FinderMenuItemDescriptor(
             title: config.name,
             icon: config.iconName.map(FinderMenuIconSource.symbol) ?? .none,
             action: .scriptBacked(
-                FinderMenuItemIdentity(
-                    scriptID: config.id.uuidString,
-                    tag: FinderMenuItemIdentity.unindexedTag
-                )
+                allocator.identity(scriptID: config.id.uuidString, title: config.name)
             )
         )
     }
 
     private static func newFileDescriptor(
         for config: NewFileMenuConfig,
-        publishStates: [String: ScriptPublishState]
+        publishStates: [String: ScriptPublishState],
+        allocator: inout TagAllocator
     ) -> FinderMenuItemDescriptor? {
         let templates = FinderMenuPresenter.visibleNewFileTemplates(
             for: config,
@@ -222,17 +299,21 @@ public enum FinderMenuDescriptorBuilder: Sendable {
         )
         guard !templates.isEmpty else { return nil }
 
-        let children = templates.map { template in
-            FinderMenuItemDescriptor(
-                title: template.displayName,
-                icon: .symbol(symbolName(for: template)),
-                action: .scriptBacked(
-                    FinderMenuItemIdentity(
-                        scriptID: MenuEntryScriptPolicy.newFileScriptID(
-                            menuID: config.id,
-                            templateID: template.id
-                        ),
-                        tag: FinderMenuItemIdentity.unindexedTag
+        var children: [FinderMenuItemDescriptor] = []
+        for template in templates {
+            let scriptID = MenuEntryScriptPolicy.newFileScriptID(
+                menuID: config.id,
+                templateID: template.id
+            )
+            children.append(
+                FinderMenuItemDescriptor(
+                    title: template.displayName,
+                    icon: .symbol(symbolName(for: template)),
+                    action: .scriptBacked(
+                        allocator.identity(
+                            scriptID: scriptID,
+                            title: template.displayName
+                        )
                     )
                 )
             )
