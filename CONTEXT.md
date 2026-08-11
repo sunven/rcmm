@@ -17,22 +17,27 @@
 
 ### Finder Menu Descriptor（Finder 菜单描述）
 
-> 状态：已设计，尚未落地。
-
 Menu Entry 在 Finder 右键菜单里的投影，扩展侧构造菜单与反解点击的唯一入口。树形结构，
 子节点对应 `nestedUnderRCMM` 与 New File Template 的二级子菜单。
 
-接口两端成对：`descriptors(...)` 产出描述树，`entry(for:)` 从点击反解回 Script-Backed Entry。
+接口两端成对：`FinderMenuDescriptorBuilder.descriptors(...)` 产出描述树，
+`FinderMenuSnapshot.scriptBackedEntry(for:)` 从点击反解回 Script-Backed Entry。
 二者同处一个模块，避免菜单项身份的编码与解码分居两个 target。
 
 - **MenuItemFields** — 描述与 `NSMenuItem` 之间的纯值中间层（`title` / `tag` / `identifier` /
   `representedObject` / `parentMenuTitle`）。扩展侧只做 fields ↔ `NSMenuItem` 的机械转换，
   往返正确性在 RCMMShared 内可测。
+- **Finder 保真度** — 实测：Finder 用自己重建的裸 `NSMenuItem` 回调，**只保留
+  `title`、`tag`、`action`**；`representedObject` 与 `parentMenuTitle` 恒为 nil，
+  `identifier` 被覆写为 action selector 名。`MenuItemFields.finderObserved(title:tag:)`
+  即这一事实的可执行形式，往返测试必须用它构造输入。
 - **不变量** — 构造菜单与反解点击必须使用同一份不可变快照。快照生成时一并产出身份索引，
   消除"按旧菜单点击、按新配置解析"的时间窗。
 - **与 Finder Menu Entry Summary 的分工** — Descriptor 面向 Finder 右键菜单（扩展侧，
   负责身份）；Summary 面向设置界面（App 侧，负责状态展示）。两者都从 Menu Entry 派生，
   服务于不同进程。
+
+详见 [ADR-0004](docs/adr/0004-finder-menu-descriptor.md)。
 
 ### Script Compilation Pipeline（脚本编译管线）
 将菜单配置转换为可执行 AppleScript 的流程：
