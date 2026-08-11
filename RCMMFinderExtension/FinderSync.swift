@@ -343,13 +343,7 @@ class FinderSync: FIFinderSync {
     }
 
     @objc func openScriptBackedEntry(_ sender: NSMenuItem) {
-        let resolvedEntry = resolveScriptBackedEntry(sender)
-
-        #if DEBUG
-        logRoutingDiagnostics(sender: sender, resolved: resolvedEntry)
-        #endif
-
-        guard let entry = resolvedEntry else {
+        guard let entry = resolveScriptBackedEntry(sender) else {
             logger.error(
                 """
                 找不到菜单项配置：title=\(sender.title, privacy: .public)，\
@@ -410,37 +404,6 @@ class FinderSync: FIFinderSync {
             parentMenuTitle: parentMenuTitle(for: sender)
         )
     }
-
-    #if DEBUG
-    /// 临时诊断：验证 NSMenuItem 的哪些字段能跨进程可靠回传。
-    ///
-    /// 构造侧写入的 `representedObject` / `identifier` 恒等于 `ScriptBackedMenuEntry.id`，
-    /// 因此可直接对照 resolved 结果判断字段是否正确。验证完成后本提交整体回滚。
-    private func logRoutingDiagnostics(
-        sender: NSMenuItem,
-        resolved: ScriptBackedMenuEntry?
-    ) {
-        let mode = currentMenuSnapshot().presentationMode.rawValue
-        let represented = (sender.representedObject as? String) ?? "<nil>"
-        let identifier = sender.identifier?.rawValue ?? "<nil>"
-        let parentTitle = parentMenuTitle(for: sender) ?? "<nil>"
-        let representedOK = resolved.map { represented == $0.id } ?? false
-        let identifierOK = resolved.map { identifier == $0.id } ?? false
-
-        logger.notice(
-            """
-            [RCMM-DIAG] mode=\(mode, privacy: .public) \
-            kind=\(resolved?.kind.rawValue ?? "<unresolved>", privacy: .public) \
-            resolved=\(resolved?.id ?? "<unresolved>", privacy: .public)
-            [RCMM-DIAG] title=\(sender.title, privacy: .public) \
-            parentMenuTitle=\(parentTitle, privacy: .public) \
-            tag=\(sender.tag, privacy: .public)
-            [RCMM-DIAG] representedObject=\(represented, privacy: .public) ok=\(representedOK, privacy: .public)
-            [RCMM-DIAG] identifier=\(identifier, privacy: .public) ok=\(identifierOK, privacy: .public)
-            """
-        )
-    }
-    #endif
 
     private func currentMenuSnapshot() -> MenuSnapshot {
         menuSnapshotLock.lock()
