@@ -128,6 +128,20 @@ App 和 Extension 运行在独立沙盒进程中，通过以下机制通信：
 
 详见 [ADR-0003](docs/adr/0003-menu-entry-write-interface.md)。
 
+### MenuReorderSession（拖拽重排会话）
+
+拖拽重排的过程态，是四入口里 `preview` / `commitPreview` 的唯一消费者。
+
+- **只管顺序** — 持有 `originalOrder` / `currentOrder`（都是 `[String]`），不认识 MenuEntry、
+  不管选中项、不算 overlay 几何、没有时钟。输出目标顺序，由视图转交
+  `AppCoordinator.preview`；松手时 `hasReordered` 决定要不要 `commitPreview()`。
+- **按位置命中** — `targetIndex(atY:rows:)` 返回第几行而非目标行 id。行的几何位置在拖拽期间
+  稳定，因此对 `PreferenceKey` 滞后一帧免疫。`MenuRowBounds` 只有 `minY` / `maxY`，
+  视图侧须按 `minY` 排序后再交进来。
+- **取消只恢复顺序** — 不覆盖菜单项内容，避免把拖拽期间别处的改动一并回滚。
+- **为什么在 RCMMShared** — `RCMMAppTests` 在本机跑不起来，放 `RCMMApp` 等于抽出来也测不了。
+  详见 [ADR-0005](docs/adr/0005-menu-reorder-session.md)。
+
 ### Module Depth（模块深度）
 接口复杂度与实现复杂度的比值：
 - **Deep Module（深模块）** — 小接口隐藏大量实现，高 leverage

@@ -229,6 +229,21 @@ final class MenuConfigStore {
         menuEntries.move(fromOffsets: source, toOffset: destination)
     }
 
+    /// 按给定的 ID 顺序重排菜单项。
+    ///
+    /// 只调整顺序，不改动内容 —— 取消拖拽时用它恢复原顺序，不会把拖拽期间
+    /// 别处对菜单项的改动一并回滚。ID 集合与当前配置对不上时不做任何事。
+    func reorderEntries(toOrder ids: [String]) {
+        let entriesByID = Dictionary(
+            menuEntries.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let reordered = ids.compactMap { entriesByID[$0] }
+
+        guard reordered.count == menuEntries.count else { return }
+        menuEntries = reordered
+    }
+
     func removeEntry(at offsets: IndexSet) {
         let removableOffsets = offsets.filter { index in
             switch menuEntries[index] {

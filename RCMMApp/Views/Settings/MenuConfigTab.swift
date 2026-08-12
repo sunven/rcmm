@@ -10,8 +10,7 @@ struct MenuConfigTab: View {
     var onOpenNewFileSettings: () -> Void = {}
 
     @State private var showingAppSelection = false
-    @State private var activeDrag: FinderMenuDrag?
-    @State private var dragPreviewEntries: [MenuEntry]?
+    @State private var reorderSession: MenuReorderSession?
     @State private var rowFrames: [String: CGRect] = [:]
     @State private var dragLocation: CGPoint?
     @State private var dragOverlaySize: CGSize = .zero
@@ -88,18 +87,14 @@ struct MenuConfigTab: View {
 
     private var summaries: [FinderMenuEntrySummary] {
         FinderMenuEntrySummaryBuilder.summaries(
-            for: displayedEntries,
+            for: configStore.menuEntries,
             publishStates: configStore.scriptPublishStates
         )
     }
 
-    private var displayedEntries: [MenuEntry] {
-        dragPreviewEntries ?? configStore.menuEntries
-    }
-
     private var selectedEntry: MenuEntry? {
         guard let selectedEntryID else { return nil }
-        return displayedEntries.first { $0.id == selectedEntryID }
+        return configStore.menuEntries.first { $0.id == selectedEntryID }
     }
 
     private var selectedSummary: FinderMenuEntrySummary? {
@@ -227,12 +222,12 @@ struct MenuConfigTab: View {
         ZStack(alignment: .topLeading) {
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(displayedEntries.enumerated()), id: \.element.id) { index, entry in
+                    ForEach(Array(configStore.menuEntries.enumerated()), id: \.element.id) { index, entry in
                         SelectableMenuRow(isSelected: selectedEntryID == entry.id) {
                             row(for: entry, at: index)
                         }
                         .padding(Layout.rowInsets)
-                        .opacity(activeDrag?.entryID == entry.id ? 0.28 : 1)
+                        .opacity(reorderSession?.draggedID == entry.id ? 0.28 : 1)
                         .menuRowFrame(id: entry.id)
                     }
                 }
@@ -251,13 +246,13 @@ struct MenuConfigTab: View {
 
     @ViewBuilder
     private var dragOverlay: some View {
-        if let drag = activeDrag,
+        if let session = reorderSession,
            let location = dragLocation,
-           let entry = drag.originalEntries.first(where: { $0.id == drag.entryID }) {
+           let entry = configStore.menuEntries.first(where: { $0.id == session.draggedID }) {
             SelectableMenuRow(isSelected: true) {
                 row(
                     for: entry,
-                    at: displayedEntries.firstIndex(where: { $0.id == drag.entryID }) ?? 0
+                    at: configStore.menuEntries.firstIndex(where: { $0.id == session.draggedID }) ?? 0
                 )
             }
             .padding(Layout.rowInsets)
@@ -429,7 +424,7 @@ struct MenuConfigTab: View {
         summaries.first { $0.id == entry.id } ?? FinderMenuEntrySummaryBuilder.summary(
             for: entry,
             position: index + 1,
-            total: max(displayedEntries.count, 1),
+            total: max(configStore.menuEntries.count, 1),
             publishStates: configStore.scriptPublishStates
         )
     }
@@ -440,49 +435,41 @@ struct MenuConfigTab: View {
                 startDragIfNeeded(for: entry.id, startLocation: value.startLocation)
                 dragLocation = value.location
 
-                guard let drag = activeDrag, !drag.isExpired else {
-                    cancelDragPreview(activeDrag)
-                    activeDrag = nil
-                    clearDragOverlay()
-                    return
+                guard var session = reorderSession else { return }
+                if let newOrder = session.drag(toY: value.location.y, rows: currentRowBounds()) {
+                    withAnimation(.easeInOut(duration: 0.12)) {
+                        appCoordinator.preview { $0.reorderEntries(toOrder: newOrder) }
+                    }
+                    selectedEntryID = session.draggedID
                 }
-
-                guard let targetID = targetEntryID(at: value.location),
-                      targetID != drag.entryID else {
-                    return
-                }
-
-                previewDraggedEntry(drag.entryID, to: targetID)
+                reorderSession = session
             }
             .onEnded { _ in
-                guard let drag = activeDrag else { return }
-
-                if drag.isExpired {
-                    cancelDragPreview(drag)
-                } else {
-                    _ = commitDraggedEntry(drag)
+                defer {
+                    reorderSession = nil
+                    clearDragOverlay()
                 }
-                activeDrag = nil
-                clearDragOverlay()
+
+                guard let session = reorderSession, session.hasReordered else { return }
+                appCoordinator.commitPreview()
+                selectedEntryID = session.draggedID
             }
         )
     }
 
     private func startDragIfNeeded(for entryID: String, startLocation: CGPoint) {
-        if activeDrag?.entryID == entryID {
+        if reorderSession?.draggedID == entryID {
             return
         }
 
-        if let activeDrag {
-            cancelDragPreview(activeDrag)
+        if reorderSession != nil {
+            cancelReorder()
         }
 
-        let drag = FinderMenuDrag(
-            entryID: entryID,
-            originalEntries: configStore.menuEntries
+        reorderSession = MenuReorderSession(
+            draggedID: entryID,
+            order: configStore.menuEntries.map(\.id)
         )
-        activeDrag = drag
-        dragPreviewEntries = configStore.menuEntries
         if let frame = rowFrames[entryID] {
             dragOverlaySize = frame.size
             dragGrabOffset = CGSize(
@@ -503,28 +490,32 @@ struct MenuConfigTab: View {
         dragGrabOffset = .zero
     }
 
-    private func targetEntryID(at location: CGPoint) -> String? {
-        let orderedFrames: [(id: String, frame: CGRect)] = displayedEntries.compactMap { entry in
-            guard let frame = rowFrames[entry.id] else { return nil }
-            return (entry.id, frame)
+    /// 按纵向位置从上到下取行边界。
+    ///
+    /// 必须按 `minY` 排序而不是按当前顺序：preview 改变顺序后 `rowFrames` 仍是上一帧的，
+    /// 按顺序取会得到非单调的几何序列，命中就会落到错误的位置上。
+    /// 任何一行的边界尚未回传则整体作废，避免行数对不上导致索引错位。
+    private func currentRowBounds() -> [MenuRowBounds] {
+        var frames: [CGRect] = []
+        for entry in configStore.menuEntries {
+            guard let frame = rowFrames[entry.id] else { return [] }
+            frames.append(frame)
         }
 
-        guard let first = orderedFrames.first,
-              let last = orderedFrames.last else {
-            return nil
-        }
+        return frames
+            .sorted { $0.minY < $1.minY }
+            .map { MenuRowBounds(minY: $0.minY, maxY: $0.maxY) }
+    }
 
-        if location.y < first.frame.minY {
-            return first.id
-        }
+    private func cancelReorder() {
+        guard let session = reorderSession else { return }
 
-        if location.y > last.frame.maxY {
-            return last.id
-        }
-
-        return orderedFrames.first { _, frame in
-            location.y >= frame.minY && location.y <= frame.maxY
-        }?.id
+        appCoordinator.preview { $0.reorderEntries(toOrder: session.cancelled()) }
+        reorderSession = nil
+        selectedEntryID = FinderMenuSelection.reconciledSelection(
+            currentID: selectedEntryID,
+            entries: configStore.menuEntries
+        )
     }
 
     private func moveItem(at index: Int, direction: Int) {
@@ -534,51 +525,6 @@ struct MenuConfigTab: View {
         if let movedID {
             selectedEntryID = movedID
         }
-    }
-
-    private func previewDraggedEntry(_ draggedID: String, to targetID: String) {
-        guard draggedID != targetID,
-              let sourceIndex = configStore.menuEntries.firstIndex(where: { $0.id == draggedID }),
-              let targetIndex = configStore.menuEntries.firstIndex(where: { $0.id == targetID }) else {
-            return
-        }
-
-        withAnimation(.easeInOut(duration: 0.12)) {
-            appCoordinator.preview {
-                $0.moveEntry(
-                    from: IndexSet(integer: sourceIndex),
-                    to: targetIndex > sourceIndex ? targetIndex + 1 : targetIndex
-                )
-            }
-            dragPreviewEntries = configStore.menuEntries
-        }
-        selectedEntryID = draggedID
-    }
-
-    private func commitDraggedEntry(_ drag: FinderMenuDrag) -> Bool {
-        guard configStore.menuEntries.map(\.id) != drag.originalEntries.map(\.id) else {
-            dragPreviewEntries = nil
-            return true
-        }
-
-        dragPreviewEntries = nil
-        appCoordinator.commitPreview()
-        selectedEntryID = drag.entryID
-        return true
-    }
-
-    private func cancelDragPreview(_ drag: FinderMenuDrag?) {
-        guard let drag else {
-            dragPreviewEntries = nil
-            return
-        }
-
-        appCoordinator.preview { $0.menuEntries = drag.originalEntries }
-        dragPreviewEntries = nil
-        selectedEntryID = FinderMenuSelection.reconciledSelection(
-            currentID: selectedEntryID,
-            entries: configStore.menuEntries
-        )
     }
 
     private func removeItem(at index: Int) {
@@ -603,26 +549,6 @@ struct MenuConfigTab: View {
         )
     }
 
-}
-
-private struct FinderMenuDrag: Equatable {
-    let entryID: String
-    let startedAt: Date
-    let originalEntries: [MenuEntry]
-
-    init(
-        entryID: String,
-        startedAt: Date = Date(),
-        originalEntries: [MenuEntry]
-    ) {
-        self.entryID = entryID
-        self.startedAt = startedAt
-        self.originalEntries = originalEntries
-    }
-
-    var isExpired: Bool {
-        Date().timeIntervalSince(startedAt) > 120
-    }
 }
 
 private enum MenuRowAlignment {
