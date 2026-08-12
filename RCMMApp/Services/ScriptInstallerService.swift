@@ -444,6 +444,8 @@ final class ScriptInstallerService {
             return "脚本文件不存在或无法加载: \(summary)"
         case .scriptExecution:
             return "脚本执行失败: \(summary)"
+        case .menuRouting:
+            return "菜单路由失败: \(summary)"
         }
     }
 }

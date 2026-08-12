@@ -4,37 +4,6 @@ import RCMMShared
 import os.log
 
 class FinderSync: FIFinderSync {
-    private struct MenuSnapshot {
-        let entries: [MenuEntry]
-        let publishStates: [String: ScriptPublishState]
-        let presentationMode: MenuPresentationMode
-        let applicationIcons: [String: Data]
-        let visibleEntries: [MenuEntry]
-
-        static let empty = MenuSnapshot(
-            entries: [],
-            publishStates: [:],
-            presentationMode: .flat,
-            applicationIcons: [:]
-        )
-
-        init(
-            entries: [MenuEntry],
-            publishStates: [String: ScriptPublishState],
-            presentationMode: MenuPresentationMode,
-            applicationIcons: [String: Data]
-        ) {
-            self.entries = entries
-            self.publishStates = publishStates
-            self.presentationMode = presentationMode
-            self.applicationIcons = applicationIcons
-            self.visibleEntries = FinderMenuPresenter.visibleEntries(
-                entries: self.entries,
-                publishStates: self.publishStates
-            )
-        }
-    }
-
     private let logger = Logger(
         subsystem: RuntimeConfiguration.finderExtensionBundleID,
         category: "menu"
@@ -43,10 +12,13 @@ class FinderSync: FIFinderSync {
     private let publishStore = ScriptPublishStore()
     private let iconStore = ApplicationIconStore()
     private let scriptExecutor = ScriptExecutor()
+    private let errorQueue = SharedErrorQueue()
     private let preferencesURL = SharedPaths.extensionScriptsPreferencesURL()
     private let menuSnapshotLock = NSLock()
-    private var menuSnapshot = MenuSnapshot.empty
+    private var menuSnapshot = FinderMenuSnapshot.empty
     private var menuCacheMetadata: FinderMenuCacheMetadata?
+    /// 快照序号，编进菜单项 tag。从 1 起，每次重新读盘递增。
+    private var snapshotGeneration = 0
     private var configObservation: DarwinObservation?
     private var currentMenuKind: FIMenuKind?
 
@@ -103,214 +75,91 @@ class FinderSync: FIFinderSync {
         let menu = NSMenu(title: "")
         refreshMenuSnapshotIfNeeded()
         let snapshot = currentMenuSnapshot()
-        let entries = snapshot.visibleEntries
 
         logger.debug(
-            "开始构建 Finder 菜单，menuKind=\(String(describing: menuKind), privacy: .public)，启用项数量=\(entries.count)，展示方式=\(snapshot.presentationMode.rawValue, privacy: .public)"
+            "开始构建 Finder 菜单，menuKind=\(String(describing: menuKind), privacy: .public)，启用项数量=\(snapshot.visibleEntries.count)，展示方式=\(snapshot.presentationMode.rawValue, privacy: .public)"
         )
 
-        guard !entries.isEmpty else {
+        guard !snapshot.descriptors.isEmpty else {
             logger.warning("无菜单配置项")
             return menu
         }
 
-        switch snapshot.presentationMode {
-        case .flat:
-            addMenuItems(
-                for: entries,
-                publishStates: snapshot.publishStates,
-                applicationIcons: snapshot.applicationIcons,
-                to: menu
-            )
-        case .nestedUnderRCMM:
-            let parentItem = NSMenuItem(title: "RCMM", action: nil, keyEquivalent: "")
-            parentItem.image = makeMenuSymbolImage(
-                named: "contextualmenu.and.cursorarrow",
-                accessibilityDescription: "RCMM"
-            )
-
-            let submenu = NSMenu(title: "RCMM")
-            addMenuItems(
-                for: entries,
-                publishStates: snapshot.publishStates,
-                applicationIcons: snapshot.applicationIcons,
-                to: submenu
-            )
-            parentItem.submenu = submenu
-            menu.addItem(parentItem)
+        for descriptor in snapshot.descriptors {
+            menu.addItem(makeMenuItem(from: descriptor))
         }
 
         return menu
     }
 
-    private func addMenuItems(
-        for entries: [MenuEntry],
-        publishStates: [String: ScriptPublishState],
-        applicationIcons: [String: Data],
-        to menu: NSMenu
-    ) {
-        var customIndex = 0
-        for entry in entries {
-            switch entry {
-            case .builtIn(let item):
-                menu.addItem(makeBuiltInMenuItem(from: item))
-            case .custom(let config):
-                menu.addItem(makeCustomMenuItem(
-                    config,
-                    customIndex: customIndex,
-                    applicationIcons: applicationIcons
-                ))
-                customIndex += 1
-            case .composite(let config):
-                menu.addItem(makeCompositeMenuItem(config))
-            case .newFile(let config):
-                if let item = makeNewFileMenuItem(config, publishStates: publishStates) {
-                    menu.addItem(item)
-                }
-            }
-        }
-    }
+    // MARK: - Descriptor → NSMenuItem
 
-    private func makeBuiltInMenuItem(from item: BuiltInMenuItem) -> NSMenuItem {
-        let entry = MenuEntry.builtIn(item)
-        let menuItem = NSMenuItem(
-            title: entry.displayName,
-            action: action(for: item.type),
-            keyEquivalent: ""
-        )
-        menuItem.target = self
-
-        if let symbolName = entry.systemSymbolName,
-           let image = makeMenuSymbolImage(
-               named: symbolName,
-               accessibilityDescription: entry.displayName
-           ) {
-            menuItem.image = image
-        }
-
-        return menuItem
-    }
-
-    private func action(for builtInType: BuiltInType) -> Selector {
-        switch builtInType {
-        case .copyPath:
-            return #selector(copyPath(_:))
-        }
-    }
-
-    private func makeCustomMenuItem(
-        _ config: MenuItemConfig,
-        customIndex: Int,
-        applicationIcons: [String: Data]
+    private func makeMenuItem(
+        from descriptor: FinderMenuItemDescriptor
     ) -> NSMenuItem {
         let menuItem = NSMenuItem(
-            title: customMenuTitle(for: config),
-            action: #selector(openScriptBackedEntry(_:)),
+            title: descriptor.title,
+            action: selector(for: descriptor.action),
             keyEquivalent: ""
         )
-        menuItem.representedObject = config.id.uuidString
-        menuItem.identifier = NSUserInterfaceItemIdentifier(config.id.uuidString)
-        menuItem.tag = customIndex
-        menuItem.target = self
 
-        if let iconData = FinderMenuIconPolicy.applicationIconData(
-            for: config,
-            cachedIcons: applicationIcons
-        ), let image = makeApplicationIconImage(from: iconData) {
-            menuItem.image = image
-        } else {
-            menuItem.image = makeMenuSymbolImage(
-                named: FinderMenuIconPolicy.placeholderSymbolName(for: config),
-                accessibilityDescription: config.appName
-            )
+        if case .scriptBacked(let identity) = descriptor.action {
+            menuItem.representedObject = identity.scriptID
+            menuItem.identifier = NSUserInterfaceItemIdentifier(identity.scriptID)
+            menuItem.tag = identity.tag
+        }
+
+        if menuItem.action != nil {
+            menuItem.target = self
+        }
+
+        menuItem.image = makeImage(
+            from: descriptor.icon,
+            accessibilityDescription: descriptor.title
+        )
+
+        if !descriptor.children.isEmpty {
+            let submenu = NSMenu(title: descriptor.title)
+            for child in descriptor.children {
+                submenu.addItem(makeMenuItem(from: child))
+            }
+            menuItem.submenu = submenu
         }
 
         return menuItem
     }
 
-    private func customMenuTitle(for config: MenuItemConfig) -> String {
-        switch config.executionMode {
-        case .selectedPath:
-            return "用 \(config.appName) 打开"
-        case .currentDirectory:
-            return "运行 \(config.appName)"
+    private func selector(for action: FinderMenuItemAction) -> Selector? {
+        switch action {
+        case .builtIn(let builtInType):
+            switch builtInType {
+            case .copyPath:
+                return #selector(copyPath(_:))
+            }
+        case .scriptBacked:
+            return #selector(openScriptBackedEntry(_:))
+        case .container:
+            return nil
         }
     }
 
-    private func makeCompositeMenuItem(_ config: CompositeMenuItemConfig) -> NSMenuItem {
-        let menuItem = NSMenuItem(
-            title: config.name,
-            action: #selector(openScriptBackedEntry(_:)),
-            keyEquivalent: ""
-        )
-        menuItem.representedObject = config.id.uuidString
-        menuItem.identifier = NSUserInterfaceItemIdentifier(config.id.uuidString)
-        menuItem.tag = -1
-        menuItem.target = self
-
-        if let symbolName = config.iconName,
-           let image = makeMenuSymbolImage(
-               named: symbolName,
-               accessibilityDescription: config.name
-           ) {
-            menuItem.image = image
-        }
-
-        return menuItem
-    }
-
-    private func makeNewFileMenuItem(
-        _ config: NewFileMenuConfig,
-        publishStates: [String: ScriptPublishState]
-    ) -> NSMenuItem? {
-        let templates = FinderMenuPresenter.visibleNewFileTemplates(
-            for: config,
-            publishStates: publishStates
-        )
-        guard !templates.isEmpty else { return nil }
-
-        let parentItem = NSMenuItem(title: config.name, action: nil, keyEquivalent: "")
-        if let symbolName = config.iconName,
-           let image = makeMenuSymbolImage(
-               named: symbolName,
-               accessibilityDescription: config.name
-           ) {
-            parentItem.image = image
-        }
-
-        let submenu = NSMenu(title: config.name)
-        for template in templates {
-            let scriptID = MenuEntryScriptPolicy.newFileScriptID(
-                menuID: config.id,
-                templateID: template.id
+    private func makeImage(
+        from icon: FinderMenuIconSource,
+        accessibilityDescription: String
+    ) -> NSImage? {
+        switch icon {
+        case .symbol(let symbolName):
+            return makeMenuSymbolImage(
+                named: symbolName,
+                accessibilityDescription: accessibilityDescription
             )
-            let childItem = NSMenuItem(
-                title: template.displayName,
-                action: #selector(openScriptBackedEntry(_:)),
-                keyEquivalent: ""
+        case .applicationIcon(let data, let fallbackSymbolName):
+            return makeApplicationIconImage(from: data) ?? makeMenuSymbolImage(
+                named: fallbackSymbolName,
+                accessibilityDescription: accessibilityDescription
             )
-            childItem.representedObject = scriptID
-            childItem.identifier = NSUserInterfaceItemIdentifier(scriptID)
-            childItem.tag = -1
-            childItem.target = self
-            childItem.image = makeMenuSymbolImage(
-                named: symbolName(for: template),
-                accessibilityDescription: template.displayName
-            )
-            submenu.addItem(childItem)
-        }
-        parentItem.submenu = submenu
-        return parentItem
-    }
-
-    private func symbolName(for template: NewFileTemplateConfig) -> String {
-        switch template.creationMode {
-        case .emptyFile:
-            return "doc"
-        case .textContent:
-            return "doc.text"
-        case .copyTemplate:
-            return "doc.on.doc"
+        case .none:
+            return nil
         }
     }
 
@@ -343,14 +192,11 @@ class FinderSync: FIFinderSync {
     }
 
     @objc func openScriptBackedEntry(_ sender: NSMenuItem) {
-        guard let entry = resolveScriptBackedEntry(sender) else {
-            logger.error(
-                """
-                找不到菜单项配置：title=\(sender.title, privacy: .public)，\
-                tag=\(sender.tag, privacy: .public)，\
-                representedObject=\(String(describing: sender.representedObject), privacy: .private)
-                """
-            )
+        let fields = MenuItemFields(title: sender.title, tag: sender.tag)
+        let resolution = currentMenuSnapshot().resolve(fields)
+
+        guard let entry = resolution.entry else {
+            reportRoutingFailure(resolution, fields: fields)
             return
         }
 
@@ -376,36 +222,44 @@ class FinderSync: FIFinderSync {
         openScriptBackedEntry(sender)
     }
 
-    private func resolveScriptBackedEntry(_ sender: NSMenuItem) -> ScriptBackedMenuEntry? {
-        let visibleEntries = currentMenuSnapshot().visibleEntries
-        let scriptBackedEntries = visibleEntries.flatMap(MenuEntryScriptPolicy.scriptBackedEntries)
-
-        let customItems = visibleEntries.compactMap { entry -> MenuItemConfig? in
-            if case .custom(let config) = entry { return config }
-            return nil
+    /// 路由失败写入错误队列，让 App 侧看得见。
+    ///
+    /// 此前这里只打日志，用户的感受是「点了没反应」而 App 完全不知情。
+    private func reportRoutingFailure(
+        _ resolution: FinderMenuResolution,
+        fields: MenuItemFields
+    ) {
+        let message: String
+        switch resolution {
+        case .resolved:
+            return
+        case .staleSnapshot:
+            message = "菜单已过期，请重新打开右键菜单"
+        case .titleMismatch(let expected, let actual):
+            message = "菜单项标题不一致：期望 \(expected)，实际 \(actual)"
+        case .notScriptBacked:
+            message = "菜单项缺少可路由的标识"
         }
 
-        logger.debug(
+        logger.error(
             """
-            解析脚本菜单：title=\(sender.title, privacy: .public)，\
-            tag=\(sender.tag, privacy: .public)，\
-            representedID=\((sender.representedObject as? String) ?? "nil", privacy: .public)，\
-            identifier=\(sender.identifier?.rawValue ?? "nil", privacy: .public)
+            菜单路由失败：\(message, privacy: .public)，\
+            title=\(fields.title, privacy: .public)，tag=\(fields.tag, privacy: .public)
             """
         )
 
-        return MenuItemResolver.scriptBackedEntry(
-            in: scriptBackedEntries,
-            customItems: customItems,
-            representedObject: sender.representedObject,
-            identifier: sender.identifier?.rawValue,
-            tag: sender.tag,
-            title: sender.title,
-            parentMenuTitle: parentMenuTitle(for: sender)
+        errorQueue.upsert(
+            ErrorRecord(
+                source: "extension",
+                message: message,
+                context: fields.title,
+                key: "menu.routing.\(fields.tag)",
+                kind: .menuRouting
+            )
         )
     }
 
-    private func currentMenuSnapshot() -> MenuSnapshot {
+    private func currentMenuSnapshot() -> FinderMenuSnapshot {
         menuSnapshotLock.lock()
         defer { menuSnapshotLock.unlock() }
         return menuSnapshot
@@ -446,19 +300,29 @@ class FinderSync: FIFinderSync {
         preferencesModificationDate: Date?,
         loadedAt: Date
     ) {
-        let snapshot = MenuSnapshot(
+        menuSnapshotLock.lock()
+        snapshotGeneration += 1
+        let generation = snapshotGeneration
+        menuSnapshotLock.unlock()
+
+        let snapshot = FinderMenuSnapshot(
             entries: configService.loadEntries(),
             publishStates: publishStore.loadAll(),
             presentationMode: configService.loadMenuPresentationMode(),
-            applicationIcons: iconStore.loadIcons()
+            applicationIcons: iconStore.loadIcons(),
+            generation: generation
         )
 
         menuSnapshotLock.lock()
-        menuSnapshot = snapshot
-        menuCacheMetadata = FinderMenuCacheMetadata(
-            preferencesModificationDate: preferencesModificationDate,
-            loadedAt: loadedAt
-        )
+        // 并发刷新时慢的那次可能后完成，不能让旧快照覆盖新快照 ——
+        // 否则已发出菜单的 tag generation 会与当前快照不符，点击全部落空。
+        if generation >= menuSnapshot.generation {
+            menuSnapshot = snapshot
+            menuCacheMetadata = FinderMenuCacheMetadata(
+                preferencesModificationDate: preferencesModificationDate,
+                loadedAt: loadedAt
+            )
+        }
         menuSnapshotLock.unlock()
     }
 

@@ -5,6 +5,8 @@ public enum ErrorRecordKind: String, Codable, Hashable, Sendable {
     case scriptPublish
     case scriptLoad
     case scriptExecution
+    /// 菜单点击无法路由回 Menu Entry。见 ADR-0004。
+    case menuRouting
 }
 
 public struct ErrorRecord: Codable, Identifiable, Hashable, Sendable {
@@ -46,7 +48,11 @@ public struct ErrorRecord: Codable, Identifiable, Hashable, Sendable {
         message = try container.decode(String.self, forKey: .message)
         context = try container.decodeIfPresent(String.self, forKey: .context)
         key = try container.decodeIfPresent(String.self, forKey: .key)
-        kind = try container.decodeIfPresent(ErrorRecordKind.self, forKey: .kind)
+        // 未知 kind 降级为 nil 而非抛错：错误队列是跨进程共享的，一条无法识别的记录
+        // 不应该让整个队列解码失败（`loadAll` 的 `try?` 会把它变成空队列）。
+        kind = (try? container.decodeIfPresent(String.self, forKey: .kind))
+            .flatMap { $0 }
+            .flatMap(ErrorRecordKind.init(rawValue:))
     }
 
     /// Finder 运行期错误使用的稳定 key。脚本 ID 可以包含 `.`，因此消费端按固定前后缀解析。
