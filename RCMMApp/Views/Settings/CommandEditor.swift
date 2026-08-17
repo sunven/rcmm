@@ -71,14 +71,16 @@ struct CommandEditor: View {
         executionMode == .selectedPath && !editedCommand.isEmpty && !editedCommand.contains("{path}")
     }
 
-    private var validationIssues: [CustomCommandValidationIssue] {
+    private var validationIssues: [MenuEntryIssue] {
         let item = MenuItemConfig(
             appName: editedName,
             appPath: appPath,
             customCommand: editedCommand.isEmpty ? nil : editedCommand,
             executionMode: executionMode
         )
-        return CustomCommandValidator.validate(item).issues
+        return MenuEntryEvaluator
+            .evaluate(.custom(item), environment: .filesystemAware)
+            .issues
     }
 
     private var hasChanges: Bool {

@@ -24,7 +24,7 @@ struct FinderMenuPresenterTests {
             appPath: "/Applications/Utilities/Terminal.app"
         )
         let entry = MenuEntry.custom(config)
-        let fingerprint = MenuEntryScriptPolicy.fingerprint(for: config)
+        let fingerprint = MenuEntryEvaluator.fingerprint(for: config)
 
         let visible = FinderMenuPresenter.visibleEntries(
             entries: [entry],
@@ -79,7 +79,7 @@ struct FinderMenuPresenterTests {
             ]
         )
         let entry = MenuEntry.composite(composite)
-        let scriptBackedEntry = MenuEntryScriptPolicy.scriptBackedEntry(for: entry)!
+        let scriptBackedEntry = MenuEntryEvaluator.evaluate(entry).scriptBacked.first!
 
         let visible = FinderMenuPresenter.visibleEntries(
             entries: [entry],
@@ -136,7 +136,7 @@ struct FinderMenuPresenterTests {
             ]
         )
         let entry = MenuEntry.newFile(menu)
-        let scriptBackedEntries = MenuEntryScriptPolicy.scriptBackedEntries(for: entry)
+        let scriptBackedEntries = MenuEntryEvaluator.evaluate(entry).scriptBacked
         let current = scriptBackedEntries[0]
 
         let visible = FinderMenuPresenter.visibleEntries(
@@ -179,7 +179,7 @@ struct FinderMenuPresenterTests {
             ]
         )
         let entry = MenuEntry.newFile(menu)
-        let scriptBackedEntry = MenuEntryScriptPolicy.scriptBackedEntries(for: entry)[0]
+        let scriptBackedEntry = MenuEntryEvaluator.evaluate(entry).scriptBacked[0]
 
         let visible = FinderMenuPresenter.visibleEntries(
             entries: [entry],

@@ -221,7 +221,7 @@ struct MenuEntryTests {
         )
 
         let scriptBackedEntry = try #require(
-            MenuEntryScriptPolicy.scriptBackedEntries(for: entry).first
+            MenuEntryEvaluator.evaluate(entry).scriptBacked.first
         )
 
         #expect(scriptBackedEntry.id == "\(menuID.uuidString).\(templateID.uuidString)")
@@ -240,7 +240,7 @@ struct MenuEntryTests {
         )
 
         let scriptBackedEntry = try #require(
-            MenuEntryScriptPolicy.scriptBackedEntry(for: .custom(config))
+            MenuEntryEvaluator.evaluate(.custom(config)).scriptBacked.first
         )
 
         #expect(scriptBackedEntry.displayName == "Git Pull")
@@ -266,8 +266,8 @@ struct MenuEntryTests {
         )
 
         #expect(
-            MenuEntryScriptPolicy.fingerprint(for: selectedPath)
-                != MenuEntryScriptPolicy.fingerprint(for: currentDirectory)
+            MenuEntryEvaluator.fingerprint(for: selectedPath)
+                != MenuEntryEvaluator.fingerprint(for: currentDirectory)
         )
     }
 }

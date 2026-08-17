@@ -12,7 +12,7 @@ public enum FinderMenuPresenter: Sendable {
             case .builtIn:
                 return true
             case .custom, .composite:
-                guard let scriptBackedEntry = MenuEntryScriptPolicy.scriptBackedEntry(for: entry) else {
+                guard let scriptBackedEntry = MenuEntryEvaluator.evaluate(entry).scriptBacked.first else {
                     return false
                 }
                 return isCurrent(scriptBackedEntry, publishStates: publishStates)
@@ -32,8 +32,8 @@ public enum FinderMenuPresenter: Sendable {
         guard config.isEnabled else { return [] }
 
         let scriptBackedByTemplateID = Dictionary(
-            uniqueKeysWithValues: MenuEntryScriptPolicy
-                .scriptBackedEntries(for: .newFile(config))
+            uniqueKeysWithValues: MenuEntryEvaluator
+                .evaluate(.newFile(config)).scriptBacked
                 .compactMap { scriptBackedEntry -> (UUID, ScriptBackedMenuEntry)? in
                     guard case .newFileTemplate(_, let templateID) = scriptBackedEntry.source else {
                         return nil

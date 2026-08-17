@@ -12,7 +12,7 @@ struct FinderMenuDescriptorTests {
     ) -> [String: ScriptPublishState] {
         var states: [String: ScriptPublishState] = [:]
         for entry in entries {
-            for scriptBackedEntry in MenuEntryScriptPolicy.scriptBackedEntries(for: entry) {
+            for scriptBackedEntry in MenuEntryEvaluator.evaluate(entry).scriptBacked {
                 states[scriptBackedEntry.id] = ScriptPublishState(
                     entryID: scriptBackedEntry.id,
                     status: .current,
@@ -263,14 +263,14 @@ struct FinderMenuDescriptorTests {
             generation: 1
         )
 
-        let removedScriptID = MenuEntryScriptPolicy.scriptBackedEntry(for: removed)!.id
+        let removedScriptID = MenuEntryEvaluator.evaluate(removed).scriptBacked.first!.id
         let staleClick = oldSnapshot.observedScriptBackedClicks.first {
             $0.scriptID == removedScriptID
         }!
 
         // 已删除的菜单项要么解析不出，要么仍指向自己 —— 绝不能落到 kept 上。
         let resolved = newSnapshot.resolve(staleClick.fields).entry
-        #expect(resolved?.id != MenuEntryScriptPolicy.scriptBackedEntry(for: kept)!.id)
+        #expect(resolved?.id != MenuEntryEvaluator.evaluate(kept).scriptBacked.first!.id)
     }
 
     // MARK: - tag 编码与失配

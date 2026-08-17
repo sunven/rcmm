@@ -82,89 +82,12 @@ public struct ScriptBackedMenuEntry: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+/// New File Template 的脚本 ID 格式。
+///
+/// 「哪些 Menu Entry 产出脚本」已迁入 `MenuEntryEvaluator` —— 那和「哪里有问题」是同一个问题。
+/// 这里只留下 ID 的拼装规则，因为 `FinderMenuDescriptor` 需要独立于评估结果构造它。
 public enum MenuEntryScriptPolicy: Sendable {
-    public static func scriptBackedEntries(for entry: MenuEntry) -> [ScriptBackedMenuEntry] {
-        switch entry {
-        case .builtIn:
-            return []
-        case .custom, .composite:
-            return scriptBackedEntry(for: entry).map { [$0] } ?? []
-        case .newFile(let config):
-            let validation = NewFileMenuValidator.validate(
-                config,
-                fileInfo: configurationOnlyFileInfo
-            )
-            guard validation.isExecutable else { return [] }
-            return config.templates.compactMap { template in
-                guard validation.executableTemplateIDs.contains(template.id),
-                      let fingerprint = validation.fingerprintByTemplateID[template.id] else {
-                    return nil
-                }
-                return ScriptBackedMenuEntry(
-                    id: newFileScriptID(menuID: config.id, templateID: template.id),
-                    kind: .newFileTemplate,
-                    displayName: template.displayName,
-                    fingerprint: fingerprint,
-                    source: .newFileTemplate(menuID: config.id, templateID: template.id),
-                    targetPolicy: .containingDirectory,
-                    parentDisplayName: config.name
-                )
-            }
-        }
-    }
-
-    public static func scriptBackedEntry(for entry: MenuEntry) -> ScriptBackedMenuEntry? {
-        switch entry {
-        case .builtIn, .newFile:
-            return nil
-        case .custom(let config):
-            guard CustomCommandValidator.validate(config).isExecutable else { return nil }
-            return ScriptBackedMenuEntry(
-                id: config.id.uuidString,
-                kind: .custom,
-                displayName: config.appName,
-                fingerprint: fingerprint(for: config),
-                source: .custom(id: config.id),
-                targetPolicy: config.executionMode == .currentDirectory ? .containingDirectory : .selectedPath
-            )
-        case .composite(let config):
-            let validation = CompositeMenuItemValidator.validate(config)
-            guard validation.isExecutable else { return nil }
-            return ScriptBackedMenuEntry(
-                id: config.id.uuidString,
-                kind: .composite,
-                displayName: config.name,
-                fingerprint: validation.fingerprint,
-                source: .composite(id: config.id, executableStepIDs: validation.executableStepIDs),
-                targetPolicy: .selectedPath
-            )
-        }
-    }
-
-    public static func fingerprint(for config: MenuItemConfig) -> String {
-        ScriptFingerprint.make(fields: [
-            "custom-v2",
-            config.id.uuidString.lowercased(),
-            config.appName,
-            config.bundleId ?? "",
-            config.appPath,
-            config.customCommand ?? "",
-            config.executionMode.rawValue,
-            String(config.isEnabled),
-        ])
-    }
-
     public static func newFileScriptID(menuID: UUID, templateID: UUID) -> String {
         "\(menuID.uuidString).\(templateID.uuidString)"
-    }
-
-    private static func configurationOnlyFileInfo(path: String) -> NewFileTemplateFileInfo? {
-        let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedPath.isEmpty else { return nil }
-
-        return NewFileTemplateFileInfo(
-            isDirectory: false,
-            pathExtension: URL(fileURLWithPath: trimmedPath).pathExtension
-        )
     }
 }

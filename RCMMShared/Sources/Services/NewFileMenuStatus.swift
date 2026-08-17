@@ -34,7 +34,7 @@ public enum NewFileMenuStatusResolver: Sendable {
         )
     }
 
-    public static func resolve(
+    static func resolve(
         config: NewFileMenuConfig,
         validation: NewFileValidationResult,
         publishedTemplateCount: Int

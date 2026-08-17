@@ -95,8 +95,7 @@ public struct FinderMenuSnapshot: Sendable {
             generation: generation
         )
         self.entriesByScriptID = Dictionary(
-            visibleEntries
-                .flatMap(MenuEntryScriptPolicy.scriptBackedEntries)
+            MenuEntryEvaluator.evaluate(visibleEntries)
                 .map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
