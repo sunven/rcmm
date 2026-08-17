@@ -15,7 +15,10 @@ enum CustomCommandValidator: Sendable {
     static let maxNameLength = 80
     static let maxCommandLength = 2_000
 
-    static func validate(_ item: MenuItemConfig) -> CustomCommandValidationResult {
+    static func validate(
+        _ item: MenuItemConfig,
+        appExists: (String) -> Bool = { _ in true }
+    ) -> CustomCommandValidationResult {
         var issues: [MenuEntryIssue] = []
         let trimmedName = item.appName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAppPath = item.appPath.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -48,6 +51,21 @@ enum CustomCommandValidator: Sendable {
                     .blankAppPath,
                     .error,
                     "目标路径模式需要应用路径。"
+                )
+            )
+        }
+
+        // 只在 .filesystemAware 下成立 —— 发布门必须继续为「应用临时不在」的条目编译脚本，
+        // 否则用户卸载一次应用就会丢掉 .scpt。
+        if item.executionMode == .selectedPath,
+           !trimmedAppPath.isEmpty,
+           !appExists(trimmedAppPath) {
+            issues.append(
+                issue(
+                    .applicationMissing,
+                    .error,
+                    "找不到应用，它可能已被移动或卸载。",
+                    detail: trimmedAppPath
                 )
             )
         }

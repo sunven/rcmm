@@ -53,6 +53,16 @@ enum MenuEntryCorpus {
         isEnabled: false
     )
 
+    /// 应用路径指向一个确定不存在的 bundle。
+    ///
+    /// 只用于 `.filesystemAware` 的注入探针测试 —— **不要**把它拿去和真实文件系统比对，
+    /// 那样断言会随开发机 `/Applications` 里装了什么而变化。
+    static let customAppMissingBundle = MenuItemConfig(
+        id: uuid("000000000006"),
+        appName: "Missing",
+        appPath: "/Applications/rcmm-does-not-exist-9f3a2b.app"
+    )
+
     // MARK: - composite
 
     static let compositeValid = CompositeMenuItemConfig(

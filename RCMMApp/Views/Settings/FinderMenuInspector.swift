@@ -267,8 +267,6 @@ struct FinderMenuInspector: View {
             return "配置可用，但存在建议修复的警告。"
         case .disabled:
             return "用户已停用此项，Finder 菜单不会显示它。"
-        case .command:
-            return "这是直接在 Finder 当前目录执行的命令项。"
         case .system:
             return "这是 rcmm 内置的系统菜单项。"
         }
@@ -276,7 +274,7 @@ struct FinderMenuInspector: View {
 
     private func nextStep(for summary: FinderMenuEntrySummary) -> String {
         switch summary.statusKind {
-        case .ready, .command, .system:
+        case .ready, .system:
             return "可在 Finder 右键菜单中使用。"
         case .syncing:
             return "等待同步完成，完成后状态会变为就绪。"
@@ -299,8 +297,6 @@ struct FinderMenuInspector: View {
             return "exclamationmark.circle.fill"
         case .disabled:
             return "pause.circle.fill"
-        case .command:
-            return "terminal.fill"
         case .system:
             return "gearshape.fill"
         }
@@ -312,7 +308,7 @@ struct FinderMenuInspector: View {
             return .red
         case .partiallyAvailable, .warning:
             return .orange
-        case .syncing, .command:
+        case .syncing:
             return .blue
         case .ready:
             return .green

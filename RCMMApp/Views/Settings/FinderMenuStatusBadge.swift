@@ -35,8 +35,6 @@ struct FinderMenuStatusBadge: View {
             return "exclamationmark.circle.fill"
         case .disabled:
             return "pause.circle.fill"
-        case .command:
-            return "terminal.fill"
         case .system:
             return "gearshape.fill"
         }
@@ -52,8 +50,6 @@ struct FinderMenuStatusBadge: View {
             return .blue
         case .ready:
             return .green
-        case .command:
-            return .blue
         case .disabled, .system:
             return .secondary
         }

@@ -111,7 +111,7 @@ struct MenuConfigTab: View {
             switch summary.statusKind {
             case .failed, .unavailable, .partiallyAvailable, .warning, .syncing:
                 return true
-            case .ready, .disabled, .command, .system:
+            case .ready, .disabled, .system:
                 return false
             }
         }.count

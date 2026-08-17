@@ -59,9 +59,12 @@ struct MenuEntryEvaluatorTests {
     func directoryTemplatePathIsRejected() {
         let evaluation = MenuEntryEvaluator.evaluate(
             .newFile(MenuEntryCorpus.newFileMissingTemplateFile),
-            probe: MenuEntryFileProbe { _ in
-                NewFileTemplateFileInfo(isDirectory: true, pathExtension: "docx")
-            }
+            probe: MenuEntryFileProbe(
+                    templateFileInfo: { _ in
+                        NewFileTemplateFileInfo(isDirectory: true, pathExtension: "docx")
+                    },
+                    applicationExists: { _ in true }
+            )
         )
 
         #expect(evaluation.errors.map(\.code) == [.templatePathIsDirectory])
@@ -73,9 +76,12 @@ struct MenuEntryEvaluatorTests {
     func mismatchedTemplateExtensionIsWarningOnly() {
         let evaluation = MenuEntryEvaluator.evaluate(
             .newFile(MenuEntryCorpus.newFileMissingTemplateFile),
-            probe: MenuEntryFileProbe { _ in
-                NewFileTemplateFileInfo(isDirectory: false, pathExtension: "rtf")
-            }
+            probe: MenuEntryFileProbe(
+                    templateFileInfo: { _ in
+                        NewFileTemplateFileInfo(isDirectory: false, pathExtension: "rtf")
+                    },
+                    applicationExists: { _ in true }
+            )
         )
 
         #expect(evaluation.errors.isEmpty)

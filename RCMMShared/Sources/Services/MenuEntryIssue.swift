@@ -21,6 +21,8 @@ public enum MenuEntryIssueCode: String, Hashable, Sendable {
     case blankCommand
     case commandTooLong
     case unsupportedPlaceholder
+    /// 配置指向的应用不在了。只在 `.filesystemAware` 下产生。
+    case applicationMissing
 
     // MARK: custom + composite 共有
 

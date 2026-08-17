@@ -22,7 +22,7 @@ struct FinderMenuEntrySummaryTests {
         #expect(summary.allowsDelete == false)
     }
 
-    @Test("自定义命令生成 command summary")
+    @Test("自定义命令的徽章是运行状态，类型放在 typeLabel")
     func customCommandSummary() {
         let config = MenuItemConfig(
             id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
@@ -36,37 +36,106 @@ struct FinderMenuEntrySummaryTests {
             for: .custom(config),
             position: 1,
             total: 1,
-            publishStates: [:],
-            appExists: { _ in false }
+            publishStates: [:]
         )
 
         #expect(summary.kind == .customCommand)
-        #expect(summary.statusKind == .command)
-        #expect(summary.statusText == "命令")
+        #expect(summary.typeLabel == "命令")
+        // 此前这里恒为「命令」——一个类型标签占着徽章位，脚本有没有发布看不出来。
+        #expect(summary.statusKind == .syncing)
+        #expect(summary.statusText == "同步中")
         #expect(summary.symbolName == "terminal")
         #expect(summary.allowsDelete == true)
     }
 
-    @Test("缺失应用生成 unavailable summary")
+    @Test("应用不存在时为不可用")
     func missingAppSummary() {
         let config = MenuItemConfig(
             id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
             appName: "Missing",
             appPath: "/Applications/Missing.app"
         )
+        let entry = MenuEntry.custom(config)
 
         let summary = FinderMenuEntrySummaryBuilder.summary(
-            for: .custom(config),
+            for: entry,
             position: 1,
             total: 1,
             publishStates: [:],
-            appExists: { _ in false }
+            evaluation: MenuEntryEvaluator.evaluate(
+                entry,
+                probe: MenuEntryFileProbe(
+                    templateFileInfo: { _ in nil },
+                    applicationExists: { _ in false }
+                )
+            )
         )
 
         #expect(summary.kind == .customApp)
         #expect(summary.statusKind == .unavailable)
-        #expect(summary.statusText == "未找到")
-        #expect(summary.statusDetail == "/Applications/Missing.app")
+        #expect(summary.statusText == "不可用")
+        #expect(summary.statusDetail == "找不到应用，它可能已被移动或卸载。")
+    }
+
+    @Test("已发布的应用项就绪，detail 给出应用路径")
+    func readyAppSummary() {
+        let config = MenuItemConfig(
+            id: UUID(uuidString: "66666666-6666-6666-6666-666666666666")!,
+            appName: "Terminal",
+            appPath: "/System/Applications/Utilities/Terminal.app"
+        )
+        let entry = MenuEntry.custom(config)
+        let evaluation = MenuEntryEvaluator.evaluate(entry)
+        let scriptBackedEntry = evaluation.scriptBacked[0]
+
+        let summary = FinderMenuEntrySummaryBuilder.summary(
+            for: entry,
+            position: 1,
+            total: 1,
+            publishStates: [
+                scriptBackedEntry.id: ScriptPublishState(
+                    entryID: scriptBackedEntry.id,
+                    status: .current,
+                    fingerprint: scriptBackedEntry.fingerprint
+                ),
+            ],
+            evaluation: evaluation
+        )
+
+        #expect(summary.statusKind == .ready)
+        #expect(summary.statusText == "就绪")
+        #expect(summary.statusDetail == "/System/Applications/Utilities/Terminal.app")
+    }
+
+    @Test("应用项编译失败时为同步失败")
+    func failedAppSummary() {
+        let config = MenuItemConfig(
+            id: UUID(uuidString: "77777777-7777-7777-7777-777777777777")!,
+            appName: "Terminal",
+            appPath: "/System/Applications/Utilities/Terminal.app"
+        )
+        let entry = MenuEntry.custom(config)
+        let evaluation = MenuEntryEvaluator.evaluate(entry)
+        let scriptBackedEntry = evaluation.scriptBacked[0]
+
+        let summary = FinderMenuEntrySummaryBuilder.summary(
+            for: entry,
+            position: 1,
+            total: 1,
+            publishStates: [
+                scriptBackedEntry.id: ScriptPublishState(
+                    entryID: scriptBackedEntry.id,
+                    status: .compileFailed,
+                    fingerprint: scriptBackedEntry.fingerprint,
+                    errorSummary: "compile failed"
+                ),
+            ],
+            evaluation: evaluation
+        )
+
+        // 此前 custom 项完全不读 Publish State，编译失败也显示「就绪」。
+        #expect(summary.statusKind == .failed)
+        #expect(summary.statusDetail == "compile failed")
     }
 
     @Test("组合命令无 publish state 时为 syncing")
@@ -89,19 +158,20 @@ struct FinderMenuEntrySummaryTests {
     @Test("组合命令 publish 编译失败时为 failed")
     func compositeFailedSummary() {
         let config = makeComposite()
-        let validation = CompositeMenuItemValidator.validate(config)
+        let entry = MenuEntry.composite(config)
+        let scriptBackedEntry = MenuEntryEvaluator.evaluate(entry).scriptBacked[0]
         let publishState = ScriptPublishState(
-            entryID: config.id.uuidString,
+            entryID: scriptBackedEntry.id,
             status: .compileFailed,
-            fingerprint: validation.fingerprint,
+            fingerprint: scriptBackedEntry.fingerprint,
             errorSummary: "compile failed"
         )
 
         let summary = FinderMenuEntrySummaryBuilder.summary(
-            for: .composite(config),
+            for: entry,
             position: 1,
             total: 1,
-            publishStates: [config.id.uuidString: publishState]
+            publishStates: [scriptBackedEntry.id: publishState]
         )
 
         #expect(summary.statusKind == .failed)
@@ -109,7 +179,7 @@ struct FinderMenuEntrySummaryTests {
         #expect(summary.statusDetail == "compile failed")
     }
 
-    @Test("新建文件菜单映射 resolver 状态")
+    @Test("新建文件菜单走同一条阶梯")
     func newFileSummary() {
         let config = NewFileMenuConfig(
             id: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!,
@@ -143,8 +213,7 @@ struct FinderMenuEntrySummaryTests {
             for: .custom(config),
             position: 1,
             total: 1,
-            publishStates: [:],
-            appExists: { _ in true }
+            publishStates: [:]
         )
 
         #expect(summary.statusKind == .disabled)

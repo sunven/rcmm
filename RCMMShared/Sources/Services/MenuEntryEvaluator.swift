@@ -36,14 +36,26 @@ public struct MenuEntryEvaluation: Hashable, Sendable {
     /// 菜单项，派生会让它读成不可用。
     public let isExecutable: Bool
 
+    /// 条目内部是否存在至少一个通过校验的子项。
+    ///
+    /// composite 是「可执行步骤」，New File Menu 是「可执行模板」，custom 与 Built-in Entry
+    /// 没有子项因此恒为 false。两者的 ID 集合语义不同（步骤被写进同一个脚本，模板各自
+    /// 就是一个脚本），所以这里只暴露状态阶梯真正需要的那个布尔量，不合并 ID 集合。
+    ///
+    /// 它与 `isExecutable` 会分叉：组合命令名称为空时条目不可执行（无脚本产出），
+    /// 但步骤本身可能全都合法 —— 那是「部分可用」而不是「不可用」。
+    public let hasExecutableChildren: Bool
+
     public init(
         scriptBacked: [ScriptBackedMenuEntry],
         issues: [MenuEntryIssue],
-        isExecutable: Bool
+        isExecutable: Bool,
+        hasExecutableChildren: Bool = false
     ) {
         self.scriptBacked = scriptBacked
         self.issues = issues
         self.isExecutable = isExecutable
+        self.hasExecutableChildren = hasExecutableChildren
     }
 
     public var errors: [MenuEntryIssue] { issues.errors }
@@ -85,7 +97,10 @@ public enum MenuEntryEvaluator: Sendable {
             )
 
         case .custom(let config):
-            let validation = CustomCommandValidator.validate(config)
+            let validation = CustomCommandValidator.validate(
+                config,
+                appExists: probe.applicationExists
+            )
             return MenuEntryEvaluation(
                 scriptBacked: validation.isExecutable
                     ? [
@@ -124,7 +139,8 @@ public enum MenuEntryEvaluator: Sendable {
                     ]
                     : [],
                 issues: validation.issues,
-                isExecutable: validation.isExecutable
+                isExecutable: validation.isExecutable,
+                hasExecutableChildren: !validation.executableStepIDs.isEmpty
             )
 
         case .newFile(let config):
@@ -155,7 +171,8 @@ public enum MenuEntryEvaluator: Sendable {
             return MenuEntryEvaluation(
                 scriptBacked: scriptBacked,
                 issues: validation.issues,
-                isExecutable: validation.isExecutable
+                isExecutable: validation.isExecutable,
+                hasExecutableChildren: !validation.executableTemplateIDs.isEmpty
             )
         }
     }
@@ -179,29 +196,38 @@ public enum MenuEntryEvaluator: Sendable {
 /// 单独成型是为了让测试能注入固定的文件信息，而不必把探针形态暴露在公开接口上。
 struct MenuEntryFileProbe: Sendable {
     let templateFileInfo: @Sendable (String) -> NewFileTemplateFileInfo?
+    let applicationExists: @Sendable (String) -> Bool
 
-    /// 不碰文件系统：只从路径字符串推断扩展名，目录判定恒为 false。
-    static let configurationOnly = MenuEntryFileProbe { path in
-        let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedPath.isEmpty else { return nil }
+    /// 不碰文件系统：只从路径字符串推断扩展名，目录判定恒为 false，应用一律视为存在。
+    static let configurationOnly = MenuEntryFileProbe(
+        templateFileInfo: { path in
+            let trimmedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedPath.isEmpty else { return nil }
 
-        return NewFileTemplateFileInfo(
-            isDirectory: false,
-            pathExtension: URL(fileURLWithPath: trimmedPath).pathExtension
-        )
-    }
+            return NewFileTemplateFileInfo(
+                isDirectory: false,
+                pathExtension: URL(fileURLWithPath: trimmedPath).pathExtension
+            )
+        },
+        applicationExists: { _ in true }
+    )
 
-    static let filesystem = MenuEntryFileProbe { path in
-        var isDirectory = ObjCBool(false)
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
-            return nil
+    static let filesystem = MenuEntryFileProbe(
+        templateFileInfo: { path in
+            var isDirectory = ObjCBool(false)
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
+                return nil
+            }
+
+            return NewFileTemplateFileInfo(
+                isDirectory: isDirectory.boolValue,
+                pathExtension: URL(fileURLWithPath: path).pathExtension
+            )
+        },
+        applicationExists: { path in
+            FileManager.default.fileExists(atPath: path)
         }
-
-        return NewFileTemplateFileInfo(
-            isDirectory: isDirectory.boolValue,
-            pathExtension: URL(fileURLWithPath: path).pathExtension
-        )
-    }
+    )
 }
 
 extension MenuEntryValidationEnvironment {

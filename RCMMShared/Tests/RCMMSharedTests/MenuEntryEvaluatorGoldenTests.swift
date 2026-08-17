@@ -20,40 +20,52 @@ struct MenuEntryEvaluatorGoldenTests {
     }
 
     @Test(
-        "只有模板文件丢失这一格会随 environment 变化",
+        "configurationOnly 不产生任何依赖文件系统的问题",
         arguments: MenuEntryCorpus.all
     )
-    func onlyMissingTemplateFileDiffersByEnvironment(named name: String, entry: MenuEntry) {
-        let configurationOnly = Self.render(
-            MenuEntryEvaluator.evaluate(entry, environment: .configurationOnly)
-        )
-        let filesystemAware = Self.render(
-            MenuEntryEvaluator.evaluate(entry, environment: .filesystemAware)
-        )
+    func configurationOnlyReportsNoFilesystemIssues(named name: String, entry: MenuEntry) {
+        // 直接断言不变量本身，而不是比对两种 environment 的输出 —— 后者会随开发机
+        // /Applications 里装了什么而变化，是个假绿灯。
+        let codes = Set(MenuEntryEvaluator.evaluate(entry, environment: .configurationOnly).issues.map(\.code))
 
-        if let expected = Self.filesystemAwareOverrides[name] {
-            #expect(filesystemAware == expected, "语料 \(name) 的 FS-aware 输出与 golden 不符")
-            #expect(filesystemAware != configurationOnly)
-        } else {
-            #expect(
-                filesystemAware == configurationOnly,
-                "语料 \(name) 不该随 environment 变化 —— 发布门路径不得依赖文件系统"
-            )
-        }
-    }
-
-    @Test("配置指向的模板文件丢失时，发布门仍然产出脚本")
-    func missingTemplateFileStillPublishes() {
-        let entry = MenuEntry.newFile(MenuEntryCorpus.newFileMissingTemplateFile)
-
-        // 用户可能只是临时移走了模板文件；发布门不该因此删掉已有的 .scpt。
-        #expect(MenuEntryEvaluator.evaluate(entry).scriptBacked.count == 1)
-        // 但设置界面必须看得见。
         #expect(
-            MenuEntryEvaluator.evaluate(entry, environment: .filesystemAware)
-                .errors.map(\.code) == [.templatePathMissing]
+            codes.intersection(Self.filesystemDerivedCodes).isEmpty,
+            "语料 \(name) 在发布门路径上产生了依赖文件系统的问题"
         )
     }
+
+    @Test("filesystemAware 才会报出文件系统层面的问题")
+    func filesystemAwareSurfacesFilesystemIssues() {
+        let missingApp = MenuEntry.custom(MenuEntryCorpus.customAppMissingBundle)
+        let missingTemplate = MenuEntry.newFile(MenuEntryCorpus.newFileMissingTemplateFile)
+
+        // 用注入探针给出确定答案，不依赖开发机上装了什么。
+        let probe = MenuEntryFileProbe(
+            templateFileInfo: { _ in nil },
+            applicationExists: { _ in false }
+        )
+
+        #expect(
+            MenuEntryEvaluator.evaluate(missingApp, probe: probe).errors.map(\.code)
+                == [.applicationMissing]
+        )
+        #expect(
+            MenuEntryEvaluator.evaluate(missingTemplate, probe: probe).errors.map(\.code)
+                == [.templatePathMissing]
+        )
+        // 同样两个条目，发布门一个问题都不报，且照常产出脚本。
+        #expect(MenuEntryEvaluator.evaluate(missingApp).issues.isEmpty)
+        #expect(MenuEntryEvaluator.evaluate(missingApp).scriptBacked.count == 1)
+        #expect(MenuEntryEvaluator.evaluate(missingTemplate).issues.isEmpty)
+        #expect(MenuEntryEvaluator.evaluate(missingTemplate).scriptBacked.count == 1)
+    }
+
+    static let filesystemDerivedCodes: Set<MenuEntryIssueCode> = [
+        .applicationMissing,
+        .templatePathMissing,
+        .templatePathIsDirectory,
+        .templateExtensionMismatch,
+    ]
 
     // MARK: - Rendering
 
@@ -163,14 +175,6 @@ struct MenuEntryEvaluatorGoldenTests {
 
         "builtInDisabled": """
         EXEC false
-        """,
-    ]
-
-    /// 唯一一格 FS-aware 与 config-only 不同的语料。
-    static let filesystemAwareOverrides: [String: String] = [
-        "newFileMissingTemplateFile": """
-        EXEC false
-        ISSUE templatePathMissing error child=00000000-0000-4000-8000-000000000221 detail=-
         """,
     ]
 }
