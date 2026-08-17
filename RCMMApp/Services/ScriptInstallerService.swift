@@ -78,7 +78,7 @@ final class ScriptInstallerService {
             )
         }
         let scriptBackedEntries = refreshedEntries.flatMap { entry -> [(MenuEntry, ScriptBackedMenuEntry)] in
-            MenuEntryScriptPolicy.scriptBackedEntries(for: entry).map { scriptBackedEntry in
+            MenuEntryEvaluator.evaluate(entry).scriptBacked.map { scriptBackedEntry in
                 (entry, scriptBackedEntry)
             }
         }
@@ -483,10 +483,11 @@ private final class ScriptCurrencyValidator {
         }
 
         cachedCurrentScripts = Set(
-            NewFileTemplateMetadataPolicy.refreshingTemplateFingerprints(
-                in: configService.loadEntries()
+            MenuEntryEvaluator.evaluate(
+                NewFileTemplateMetadataPolicy.refreshingTemplateFingerprints(
+                    in: configService.loadEntries()
+                )
             )
-                .flatMap(MenuEntryScriptPolicy.scriptBackedEntries)
                 .map { ScriptCurrencyKey(id: $0.id, fingerprint: $0.fingerprint) }
         )
         cachedModificationDate = modificationDate

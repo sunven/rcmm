@@ -1,71 +1,25 @@
 import Foundation
 
-public enum CustomCommandValidationIssueSeverity: String, Codable, Hashable, Sendable {
-    case error
-    case warning
+struct CustomCommandValidationResult: Hashable, Sendable {
+    let issues: [MenuEntryIssue]
+    let isExecutable: Bool
+
+    var errors: [MenuEntryIssue] { issues.errors }
+    var warnings: [MenuEntryIssue] { issues.warnings }
+    var hasErrors: Bool { issues.hasErrors }
+    var hasWarnings: Bool { issues.hasWarnings }
 }
 
-public enum CustomCommandValidationIssueCode: String, Codable, Hashable, Sendable {
-    case blankName
-    case nameTooLong
-    case blankAppPath
-    case blankCommand
-    case commandTooLong
-    case unsupportedPlaceholder
-    case dangerousCommandPattern
-}
+/// custom 项的规则。`MenuEntryEvaluator` 的实现，调用方走 evaluator。
+enum CustomCommandValidator: Sendable {
+    static let maxNameLength = 80
+    static let maxCommandLength = 2_000
 
-public struct CustomCommandValidationIssue: Codable, Identifiable, Hashable, Sendable {
-    public let id: String
-    public let code: CustomCommandValidationIssueCode
-    public let severity: CustomCommandValidationIssueSeverity
-    public let message: String
-    public let pattern: String?
-
-    public init(
-        code: CustomCommandValidationIssueCode,
-        severity: CustomCommandValidationIssueSeverity,
-        message: String,
-        pattern: String? = nil
-    ) {
-        self.code = code
-        self.severity = severity
-        self.message = message
-        self.pattern = pattern
-        id = [
-            code.rawValue,
-            pattern ?? "",
-        ].joined(separator: ":")
-    }
-}
-
-public struct CustomCommandValidationResult: Codable, Hashable, Sendable {
-    public let issues: [CustomCommandValidationIssue]
-    public let isExecutable: Bool
-
-    public var errors: [CustomCommandValidationIssue] {
-        issues.filter { $0.severity == .error }
-    }
-
-    public var warnings: [CustomCommandValidationIssue] {
-        issues.filter { $0.severity == .warning }
-    }
-
-    public var hasErrors: Bool {
-        !errors.isEmpty
-    }
-
-    public var hasWarnings: Bool {
-        !warnings.isEmpty
-    }
-}
-
-public enum CustomCommandValidator: Sendable {
-    public static let maxNameLength = 80
-    public static let maxCommandLength = 2_000
-
-    public static func validate(_ item: MenuItemConfig) -> CustomCommandValidationResult {
-        var issues: [CustomCommandValidationIssue] = []
+    static func validate(
+        _ item: MenuItemConfig,
+        appExists: (String) -> Bool = { _ in true }
+    ) -> CustomCommandValidationResult {
+        var issues: [MenuEntryIssue] = []
         let trimmedName = item.appName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAppPath = item.appPath.trimmingCharacters(in: .whitespacesAndNewlines)
         let command = item.customCommand ?? ""
@@ -101,6 +55,21 @@ public enum CustomCommandValidator: Sendable {
             )
         }
 
+        // 只在 .filesystemAware 下成立 —— 发布门必须继续为「应用临时不在」的条目编译脚本，
+        // 否则用户卸载一次应用就会丢掉 .scpt。
+        if item.executionMode == .selectedPath,
+           !trimmedAppPath.isEmpty,
+           !appExists(trimmedAppPath) {
+            issues.append(
+                issue(
+                    .applicationMissing,
+                    .error,
+                    "找不到应用，它可能已被移动或卸载。",
+                    detail: trimmedAppPath
+                )
+            )
+        }
+
         if item.executionMode == .currentDirectory && trimmedCommand.isEmpty {
             issues.append(
                 issue(
@@ -128,7 +97,7 @@ public enum CustomCommandValidator: Sendable {
                         .unsupportedPlaceholder,
                         .warning,
                         "当前目录模式不会展开占位符。",
-                        pattern: placeholder
+                        detail: placeholder
                     )
                 )
             }
@@ -140,28 +109,28 @@ public enum CustomCommandValidator: Sendable {
                     .dangerousCommandPattern,
                     .warning,
                     "命令包含潜在危险的 shell 片段。",
-                    pattern: pattern
+                    detail: pattern
                 )
             )
         }
 
         return CustomCommandValidationResult(
             issues: issues,
-            isExecutable: item.isEnabled && !issues.contains { $0.severity == .error }
+            isExecutable: item.isEnabled && !issues.hasErrors
         )
     }
 
     private static func issue(
-        _ code: CustomCommandValidationIssueCode,
-        _ severity: CustomCommandValidationIssueSeverity,
+        _ code: MenuEntryIssueCode,
+        _ severity: MenuEntryIssueSeverity,
         _ message: String,
-        pattern: String? = nil
-    ) -> CustomCommandValidationIssue {
-        CustomCommandValidationIssue(
+        detail: String? = nil
+    ) -> MenuEntryIssue {
+        MenuEntryIssue(
             code: code,
             severity: severity,
             message: message,
-            pattern: pattern
+            detail: detail
         )
     }
 }

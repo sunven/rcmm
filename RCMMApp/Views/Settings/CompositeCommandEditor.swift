@@ -30,8 +30,10 @@ struct CompositeCommandEditor: View {
         _editedName = State(initialValue: config.name)
     }
 
-    private var validation: CompositeValidationResult {
-        CompositeMenuItemValidator.validate(config)
+    private var issues: [MenuEntryIssue] {
+        MenuEntryEvaluator
+            .evaluate(.composite(config), environment: .filesystemAware)
+            .issues
     }
 
     var body: some View {
@@ -68,9 +70,9 @@ struct CompositeCommandEditor: View {
                 .controlSize(.small)
             }
 
-            if !validation.issues.isEmpty {
+            if !issues.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
-                    ForEach(validation.issues.prefix(4)) { issue in
+                    ForEach(issues.prefix(4)) { issue in
                         ValidationIssueRow(isError: issue.severity == .error, message: issue.message)
                     }
                 }
@@ -104,7 +106,7 @@ struct CompositeCommandEditor: View {
                     ForEach(Array(config.steps.enumerated()), id: \.element.id) { index, step in
                         CompositeStepEditorRow(
                             step: step,
-                            issues: validation.issues.filter { $0.stepID == step.id },
+                            issues: issues.filter { $0.childID == step.id },
                             canMoveUp: index > 0,
                             canMoveDown: index < config.steps.count - 1,
                             onUpdate: { name, commandTemplate, appPath, bundleId, isEnabled in
@@ -152,7 +154,7 @@ struct CompositeCommandEditor: View {
 
 private struct CompositeStepEditorRow: View {
     let step: CompositeCommandStep
-    let issues: [CompositeValidationIssue]
+    let issues: [MenuEntryIssue]
     let canMoveUp: Bool
     let canMoveDown: Bool
     let onUpdate: (String, String, String?, String?, Bool) -> Void
@@ -170,7 +172,7 @@ private struct CompositeStepEditorRow: View {
 
     init(
         step: CompositeCommandStep,
-        issues: [CompositeValidationIssue],
+        issues: [MenuEntryIssue],
         canMoveUp: Bool,
         canMoveDown: Bool,
         onUpdate: @escaping (String, String, String?, String?, Bool) -> Void,

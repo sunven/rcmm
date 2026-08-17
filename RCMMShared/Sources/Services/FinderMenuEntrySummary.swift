@@ -8,6 +8,10 @@ public enum FinderMenuEntryKind: String, Codable, Hashable, Sendable {
     case newFile
 }
 
+/// 徽章状态。与 DESIGN.md「Finder Menu Row」的六个状态对应，外加 `.system`
+/// 供没有脚本、也就没有发布状态的 Built-in Entry 使用。
+///
+/// 不含类型标签 —— 「命令」「系统」这类描述属于 `FinderMenuEntrySummary.typeLabel`。
 public enum FinderMenuEntryStatusKind: String, Codable, Hashable, Sendable {
     case ready
     case syncing
@@ -16,7 +20,6 @@ public enum FinderMenuEntryStatusKind: String, Codable, Hashable, Sendable {
     case partiallyAvailable
     case warning
     case disabled
-    case command
     case system
 }
 
@@ -72,18 +75,14 @@ public struct FinderMenuEntrySummary: Codable, Hashable, Identifiable, Sendable 
 public enum FinderMenuEntrySummaryBuilder: Sendable {
     public static func summaries(
         for entries: [MenuEntry],
-        publishStates: [String: ScriptPublishState],
-        appExists: @Sendable (String) -> Bool = { path in
-            FileManager.default.fileExists(atPath: path)
-        }
+        publishStates: [String: ScriptPublishState]
     ) -> [FinderMenuEntrySummary] {
         entries.enumerated().map { index, entry in
             summary(
                 for: entry,
                 position: index + 1,
                 total: entries.count,
-                publishStates: publishStates,
-                appExists: appExists
+                publishStates: publishStates
             )
         }
     }
@@ -92,199 +91,123 @@ public enum FinderMenuEntrySummaryBuilder: Sendable {
         for entry: MenuEntry,
         position: Int,
         total: Int,
-        publishStates: [String: ScriptPublishState],
-        appExists: @Sendable (String) -> Bool = { path in
-            FileManager.default.fileExists(atPath: path)
-        }
+        publishStates: [String: ScriptPublishState]
     ) -> FinderMenuEntrySummary {
-        switch entry {
-        case .builtIn(let item):
-            return builtInSummary(item, entryID: entry.id, position: position, total: total)
-        case .custom(let config):
-            return customSummary(config, position: position, total: total, appExists: appExists)
-        case .composite(let config):
-            return compositeSummary(
-                config,
-                publishState: publishStates[config.id.uuidString],
-                position: position,
-                total: total
-            )
-        case .newFile(let config):
-            return newFileSummary(
-                config,
-                publishStates: publishStates,
-                position: position,
-                total: total
-            )
-        }
-    }
-
-    private static func builtInSummary(
-        _ item: BuiltInMenuItem,
-        entryID: String,
-        position: Int,
-        total: Int
-    ) -> FinderMenuEntrySummary {
-        FinderMenuEntrySummary(
-            id: entryID,
-            title: item.displayName,
-            subtitle: "系统菜单项",
-            kind: .builtIn,
-            typeLabel: "系统",
-            symbolName: item.iconName,
-            appPath: nil,
-            isEnabled: item.isEnabled,
+        summary(
+            for: entry,
             position: position,
             total: total,
-            statusKind: item.isEnabled ? .system : .disabled,
-            statusText: item.isEnabled ? "系统" : "已停用",
-            statusDetail: item.isEnabled ? "内置 Finder 菜单功能" : "此内置菜单项已停用",
-            allowsDelete: false
+            publishStates: publishStates,
+            // 设置界面要让用户看见「应用没了」「模板文件没了」，因此走 filesystemAware。
+            evaluation: MenuEntryEvaluator.evaluate(entry, environment: .filesystemAware)
         )
     }
 
-    private static func customSummary(
-        _ config: MenuItemConfig,
+    static func summary(
+        for entry: MenuEntry,
         position: Int,
         total: Int,
-        appExists: @Sendable (String) -> Bool
-    ) -> FinderMenuEntrySummary {
-        let isShellCommand = config.executionMode == .currentDirectory
-        let exists = isShellCommand || appExists(config.appPath)
-        let status: (FinderMenuEntryStatusKind, String, String?)
-
-        if !config.isEnabled {
-            status = (.disabled, "已停用", "此菜单项已停用")
-        } else if isShellCommand {
-            status = (.command, "命令", config.customCommand ?? "自定义命令")
-        } else if exists {
-            status = (.ready, "就绪", config.appPath)
-        } else {
-            status = (.unavailable, "未找到", config.appPath)
-        }
-
-        return FinderMenuEntrySummary(
-            id: config.id.uuidString,
-            title: config.appName,
-            subtitle: isShellCommand ? config.executionMode.displayName : config.appPath,
-            kind: isShellCommand ? .customCommand : .customApp,
-            typeLabel: isShellCommand ? "命令" : "应用",
-            symbolName: isShellCommand ? "terminal" : nil,
-            appPath: isShellCommand ? nil : config.appPath,
-            isEnabled: config.isEnabled,
-            position: position,
-            total: total,
-            statusKind: status.0,
-            statusText: status.1,
-            statusDetail: status.2,
-            allowsDelete: true
-        )
-    }
-
-    private static func compositeSummary(
-        _ config: CompositeMenuItemConfig,
-        publishState: ScriptPublishState?,
-        position: Int,
-        total: Int
-    ) -> FinderMenuEntrySummary {
-        let validation = CompositeMenuItemValidator.validate(config)
-        let status: (FinderMenuEntryStatusKind, String, String?)
-
-        if !config.isEnabled {
-            status = (.disabled, "已停用", "此组合命令已停用")
-        } else if validation.hasErrors && validation.executableStepIDs.isEmpty {
-            status = (.unavailable, "不可用", validation.errors.first?.message)
-        } else if validation.hasErrors {
-            status = (.partiallyAvailable, "部分可用", validation.errors.first?.message)
-        } else if validation.hasWarnings {
-            status = (.warning, "有警告", validation.warnings.first?.message)
-        } else if let publishState {
-            if publishState.fingerprint != validation.fingerprint {
-                status = (.syncing, "同步中", "脚本指纹已变化，等待重新同步")
-            } else {
-                switch publishState.status {
-                case .current:
-                    status = (.ready, "就绪", "脚本已同步")
-                case .compileFailed:
-                    status = (.failed, "同步失败", publishState.errorSummary)
-                }
-            }
-        } else {
-            status = (.syncing, "同步中", "等待脚本同步")
-        }
-
-        return FinderMenuEntrySummary(
-            id: config.id.uuidString,
-            title: config.name,
-            subtitle: "\(config.steps.count) 个步骤",
-            kind: .composite,
-            typeLabel: "组合命令",
-            symbolName: config.iconName ?? "rectangle.stack.badge.play",
-            appPath: nil,
-            isEnabled: config.isEnabled,
-            position: position,
-            total: total,
-            statusKind: status.0,
-            statusText: status.1,
-            statusDetail: status.2,
-            allowsDelete: true
-        )
-    }
-
-    private static func newFileSummary(
-        _ config: NewFileMenuConfig,
         publishStates: [String: ScriptPublishState],
-        position: Int,
-        total: Int
+        evaluation: MenuEntryEvaluation
     ) -> FinderMenuEntrySummary {
-        let status = NewFileMenuStatusResolver.resolve(
-            config: config,
+        let status = MenuEntryStatusResolver.status(
+            for: entry,
+            evaluation: evaluation,
             publishStates: publishStates
         )
+        let presentation = presentation(for: entry)
 
         return FinderMenuEntrySummary(
-            id: config.id.uuidString,
-            title: config.name,
-            subtitle: "\(config.templates.count) 个模板",
-            kind: .newFile,
-            typeLabel: "新建文件",
-            symbolName: config.iconName ?? "document.badge.plus",
-            appPath: nil,
-            isEnabled: config.isEnabled,
+            id: entry.id,
+            title: entry.displayName,
+            subtitle: presentation.subtitle,
+            kind: presentation.kind,
+            typeLabel: presentation.typeLabel,
+            symbolName: presentation.symbolName,
+            appPath: presentation.appPath,
+            isEnabled: entry.isEnabled,
             position: position,
             total: total,
-            statusKind: statusKind(for: status.kind),
-            statusText: status.displayName,
-            statusDetail: newFileDetail(for: config, status: status),
-            allowsDelete: false
+            statusKind: status.kind,
+            statusText: status.text,
+            statusDetail: presentation.statusDetail(for: status),
+            allowsDelete: presentation.allowsDelete
         )
     }
 
-    private static func statusKind(for status: NewFileMenuStatusKind) -> FinderMenuEntryStatusKind {
-        switch status {
-        case .disabled:
-            return .disabled
-        case .unavailable:
-            return .unavailable
-        case .partiallyAvailable:
-            return .partiallyAvailable
-        case .warning:
-            return .warning
-        case .syncing:
-            return .syncing
-        case .ready:
-            return .ready
+    // MARK: - 展示信息
+
+    /// 与状态阶梯正交的部分：条目长什么样、归为哪一类、能不能删。
+    private struct Presentation {
+        let kind: FinderMenuEntryKind
+        let typeLabel: String
+        let subtitle: String?
+        let symbolName: String?
+        let appPath: String?
+        let allowsDelete: Bool
+        /// 就绪时用条目自己的信息替换阶梯给的通用文案；其余状态一律用阶梯的。
+        let readyDetail: String?
+
+        func statusDetail(for status: MenuEntryStatus) -> String? {
+            status.kind == .ready ? (readyDetail ?? status.detail) : status.detail
         }
     }
 
-    private static func newFileDetail(
-        for config: NewFileMenuConfig,
-        status: NewFileMenuStatus
-    ) -> String? {
-        if config.templates.isEmpty {
+    private static func presentation(for entry: MenuEntry) -> Presentation {
+        switch entry {
+        case .builtIn(let item):
+            return Presentation(
+                kind: .builtIn,
+                typeLabel: "系统",
+                subtitle: "系统菜单项",
+                symbolName: item.iconName,
+                appPath: nil,
+                allowsDelete: false,
+                readyDetail: nil
+            )
+
+        case .custom(let config):
+            let isShellCommand = config.executionMode == .currentDirectory
+            return Presentation(
+                kind: isShellCommand ? .customCommand : .customApp,
+                typeLabel: isShellCommand ? "命令" : "应用",
+                subtitle: isShellCommand ? config.executionMode.displayName : config.appPath,
+                symbolName: isShellCommand ? "terminal" : nil,
+                appPath: isShellCommand ? nil : config.appPath,
+                allowsDelete: true,
+                readyDetail: isShellCommand
+                    ? (config.customCommand ?? "自定义命令")
+                    : config.appPath
+            )
+
+        case .composite(let config):
+            return Presentation(
+                kind: .composite,
+                typeLabel: "组合命令",
+                subtitle: "\(config.steps.count) 个步骤",
+                symbolName: config.iconName ?? "rectangle.stack.badge.play",
+                appPath: nil,
+                allowsDelete: true,
+                readyDetail: nil
+            )
+
+        case .newFile(let config):
+            return Presentation(
+                kind: .newFile,
+                typeLabel: "新建文件",
+                subtitle: "\(config.templates.count) 个模板",
+                symbolName: config.iconName ?? "document.badge.plus",
+                appPath: nil,
+                allowsDelete: false,
+                readyDetail: newFileReadyDetail(for: config)
+            )
+        }
+    }
+
+    private static func newFileReadyDetail(for config: NewFileMenuConfig) -> String? {
+        guard !config.templates.isEmpty else {
             return "暂无模板"
         }
-        let names = config.templates.prefix(3).map(\.displayName).joined(separator: "、")
-        return "\(status.displayName)：\(names)"
+        return config.templates.prefix(3).map(\.displayName).joined(separator: "、")
     }
 }

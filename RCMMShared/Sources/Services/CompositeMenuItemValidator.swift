@@ -1,86 +1,29 @@
 import Foundation
 
-public enum CompositeValidationIssueSeverity: String, Codable, Hashable, Sendable {
-    case error
-    case warning
+struct CompositeValidationResult: Hashable, Sendable {
+    let issues: [MenuEntryIssue]
+    let executableStepIDs: Set<UUID>
+    let fingerprint: String
+    let isExecutable: Bool
+
+    var errors: [MenuEntryIssue] { issues.errors }
+    var warnings: [MenuEntryIssue] { issues.warnings }
+    var hasErrors: Bool { issues.hasErrors }
+    var hasWarnings: Bool { issues.hasWarnings }
 }
 
-public enum CompositeValidationIssueCode: String, Codable, Hashable, Sendable {
-    case blankCompositeName
-    case compositeNameTooLong
-    case noSteps
-    case tooManySteps
-    case blankStepName
-    case stepNameTooLong
-    case blankCommandTemplate
-    case commandTemplateTooLong
-    case appStepMissingAppPath
-    case appStepMissingBundleId
-    case appStepMissingAppPlaceholder
-    case shellStepContainsAppPlaceholder
-    case missingPathPlaceholder
-    case dangerousCommandPattern
-}
+/// composite 项的规则。`MenuEntryEvaluator` 的实现，调用方走 evaluator。
+///
+/// `executableStepIDs` 是「哪些步骤会被写进那**一个**脚本」，与 New File Menu 的
+/// `executableTemplateIDs`（哪些子项**本身就是**脚本）语义不同，因此没有合并到一个字段里。
+enum CompositeMenuItemValidator: Sendable {
+    static let maxCompositeNameLength = 80
+    static let maxStepNameLength = 80
+    static let maxCommandTemplateLength = 2_000
+    static let maxStepCount = 20
 
-public struct CompositeValidationIssue: Codable, Identifiable, Hashable, Sendable {
-    public let id: String
-    public let code: CompositeValidationIssueCode
-    public let severity: CompositeValidationIssueSeverity
-    public let message: String
-    public let stepID: UUID?
-    public let pattern: String?
-
-    public init(
-        code: CompositeValidationIssueCode,
-        severity: CompositeValidationIssueSeverity,
-        message: String,
-        stepID: UUID? = nil,
-        pattern: String? = nil
-    ) {
-        self.code = code
-        self.severity = severity
-        self.message = message
-        self.stepID = stepID
-        self.pattern = pattern
-        id = [
-            stepID?.uuidString ?? "composite",
-            code.rawValue,
-            pattern ?? "",
-        ].joined(separator: ":")
-    }
-}
-
-public struct CompositeValidationResult: Codable, Hashable, Sendable {
-    public let issues: [CompositeValidationIssue]
-    public let executableStepIDs: Set<UUID>
-    public let fingerprint: String
-    public let isExecutable: Bool
-
-    public var errors: [CompositeValidationIssue] {
-        issues.filter { $0.severity == .error }
-    }
-
-    public var warnings: [CompositeValidationIssue] {
-        issues.filter { $0.severity == .warning }
-    }
-
-    public var hasErrors: Bool {
-        !errors.isEmpty
-    }
-
-    public var hasWarnings: Bool {
-        !warnings.isEmpty
-    }
-}
-
-public enum CompositeMenuItemValidator: Sendable {
-    public static let maxCompositeNameLength = 80
-    public static let maxStepNameLength = 80
-    public static let maxCommandTemplateLength = 2_000
-    public static let maxStepCount = 20
-
-    public static func validate(_ composite: CompositeMenuItemConfig) -> CompositeValidationResult {
-        var issues: [CompositeValidationIssue] = []
+    static func validate(_ composite: CompositeMenuItemConfig) -> CompositeValidationResult {
+        var issues: [MenuEntryIssue] = []
         var hasCompositeBlockingError = false
 
         if composite.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -88,7 +31,7 @@ public enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .blankCompositeName,
                     .error,
-                    "Composite menu name is required."
+                    "组合命令名称不能为空。"
                 )
             )
             hasCompositeBlockingError = true
@@ -99,7 +42,7 @@ public enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .compositeNameTooLong,
                     .error,
-                    "Composite menu name must be \(maxCompositeNameLength) characters or fewer."
+                    "组合命令名称不能超过 \(maxCompositeNameLength) 个字符。"
                 )
             )
             hasCompositeBlockingError = true
@@ -110,7 +53,7 @@ public enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .noSteps,
                     .error,
-                    "Composite menu must contain at least one step."
+                    "组合命令至少需要一个步骤。"
                 )
             )
             hasCompositeBlockingError = true
@@ -121,7 +64,7 @@ public enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .tooManySteps,
                     .error,
-                    "Composite menu can contain at most \(maxStepCount) steps."
+                    "组合命令最多只能有 \(maxStepCount) 个步骤。"
                 )
             )
             hasCompositeBlockingError = true
@@ -132,7 +75,7 @@ public enum CompositeMenuItemValidator: Sendable {
             let stepIssues = validateStep(step)
             issues.append(contentsOf: stepIssues)
 
-            let stepHasBlockingError = stepIssues.contains { $0.severity == .error }
+            let stepHasBlockingError = stepIssues.hasErrors
             if step.isEnabled && !stepHasBlockingError {
                 executableStepIDs.insert(step.id)
             }
@@ -147,12 +90,12 @@ public enum CompositeMenuItemValidator: Sendable {
         )
     }
 
-    private static func validateStep(_ step: CompositeCommandStep) -> [CompositeValidationIssue] {
+    private static func validateStep(_ step: CompositeCommandStep) -> [MenuEntryIssue] {
         guard step.isEnabled else {
             return []
         }
 
-        var issues: [CompositeValidationIssue] = []
+        var issues: [MenuEntryIssue] = []
         let trimmedName = step.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedTemplate = step.commandTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -161,8 +104,8 @@ public enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .blankStepName,
                     .error,
-                    "Step name is required.",
-                    stepID: step.id
+                    "步骤名称不能为空。",
+                    childID: step.id
                 )
             )
         }
@@ -172,8 +115,8 @@ public enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .stepNameTooLong,
                     .error,
-                    "Step name must be \(maxStepNameLength) characters or fewer.",
-                    stepID: step.id
+                    "步骤名称不能超过 \(maxStepNameLength) 个字符。",
+                    childID: step.id
                 )
             )
         }
@@ -183,8 +126,8 @@ public enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .blankCommandTemplate,
                     .error,
-                    "Command template is required.",
-                    stepID: step.id
+                    "命令模板不能为空。",
+                    childID: step.id
                 )
             )
         }
@@ -194,8 +137,8 @@ public enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .commandTemplateTooLong,
                     .error,
-                    "Command template must be \(maxCommandTemplateLength) characters or fewer.",
-                    stepID: step.id
+                    "命令模板不能超过 \(maxCommandTemplateLength) 个字符。",
+                    childID: step.id
                 )
             )
         }
@@ -207,8 +150,8 @@ public enum CompositeMenuItemValidator: Sendable {
                     issue(
                         .appStepMissingAppPath,
                         .error,
-                        "App step requires an app path.",
-                        stepID: step.id
+                        "应用步骤需要应用路径。",
+                        childID: step.id
                     )
                 )
             }
@@ -218,8 +161,8 @@ public enum CompositeMenuItemValidator: Sendable {
                     issue(
                         .appStepMissingBundleId,
                         .error,
-                        "App step command uses {bundle}, so it requires a bundle ID.",
-                        stepID: step.id
+                        "命令里用了 {bundle}，因此需要填写 Bundle ID。",
+                        childID: step.id
                     )
                 )
             }
@@ -228,8 +171,8 @@ public enum CompositeMenuItemValidator: Sendable {
                     issue(
                         .appStepMissingAppPlaceholder,
                         .error,
-                        "App step command must include {app} or {bundle}.",
-                        stepID: step.id
+                        "应用步骤的命令必须包含 {app} 或 {bundle}。",
+                        childID: step.id
                     )
                 )
             }
@@ -239,8 +182,8 @@ public enum CompositeMenuItemValidator: Sendable {
                     issue(
                         .shellStepContainsAppPlaceholder,
                         .error,
-                        "Shell step cannot use {app}.",
-                        stepID: step.id
+                        "Shell 步骤不能使用 {app}。",
+                        childID: step.id
                     )
                 )
             }
@@ -251,8 +194,8 @@ public enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .missingPathPlaceholder,
                     .warning,
-                    "Command does not include {path}; it will not receive the Finder selection.",
-                    stepID: step.id
+                    "命令未包含 {path}，不会收到 Finder 选中的目标。",
+                    childID: step.id
                 )
             )
         }
@@ -262,9 +205,9 @@ public enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .dangerousCommandPattern,
                     .warning,
-                    "Command contains a potentially dangerous shell pattern.",
-                    stepID: step.id,
-                    pattern: pattern
+                    "命令包含潜在危险的 shell 片段。",
+                    childID: step.id,
+                    detail: pattern
                 )
             )
         }
@@ -273,18 +216,18 @@ public enum CompositeMenuItemValidator: Sendable {
     }
 
     private static func issue(
-        _ code: CompositeValidationIssueCode,
-        _ severity: CompositeValidationIssueSeverity,
+        _ code: MenuEntryIssueCode,
+        _ severity: MenuEntryIssueSeverity,
         _ message: String,
-        stepID: UUID? = nil,
-        pattern: String? = nil
-    ) -> CompositeValidationIssue {
-        CompositeValidationIssue(
+        childID: UUID? = nil,
+        detail: String? = nil
+    ) -> MenuEntryIssue {
+        MenuEntryIssue(
             code: code,
             severity: severity,
             message: message,
-            stepID: stepID,
-            pattern: pattern
+            childID: childID,
+            detail: detail
         )
     }
 

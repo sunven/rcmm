@@ -1,94 +1,36 @@
 import Foundation
 
-public enum NewFileValidationIssueSeverity: String, Codable, Hashable, Sendable {
-    case error
-    case warning
+struct NewFileValidationResult: Hashable, Sendable {
+    let issues: [MenuEntryIssue]
+    let executableTemplateIDs: Set<UUID>
+    let fingerprintByTemplateID: [UUID: String]
+    let isExecutable: Bool
+
+    var errors: [MenuEntryIssue] { issues.errors }
+    var warnings: [MenuEntryIssue] { issues.warnings }
+    var hasErrors: Bool { issues.hasErrors }
+    var hasWarnings: Bool { issues.hasWarnings }
 }
 
-public enum NewFileValidationIssueCode: String, Codable, Hashable, Sendable {
-    case blankMenuName
-    case menuNameTooLong
-    case noTemplates
-    case blankTemplateName
-    case templateNameTooLong
-    case duplicateTemplateName
-    case blankBaseName
-    case baseNameContainsSeparator
-    case blankExtension
-    case extensionContainsDot
-    case extensionContainsInvalidCharacters
-    case textContentTooLong
-    case missingTemplatePath
-    case templatePathIsDirectory
-    case templatePathMissing
-    case templateExtensionMismatch
-}
+/// New File Menu 的规则。`MenuEntryEvaluator` 的实现，调用方走 evaluator。
+///
+/// `executableTemplateIDs` 是「哪些模板**本身就是**一个脚本」—— 与 composite 的
+/// `executableStepIDs`（哪些步骤被写进同一个脚本）语义不同。
+enum NewFileMenuValidator: Sendable {
+    static let maxMenuNameLength = 80
+    static let maxTemplateNameLength = 40
+    static let maxTextContentLength = 100_000
 
-public struct NewFileValidationIssue: Codable, Identifiable, Hashable, Sendable {
-    public let id: String
-    public let code: NewFileValidationIssueCode
-    public let severity: NewFileValidationIssueSeverity
-    public let message: String
-    public let templateID: UUID?
-    public let detail: String?
-
-    public init(
-        code: NewFileValidationIssueCode,
-        severity: NewFileValidationIssueSeverity,
-        message: String,
-        templateID: UUID? = nil,
-        detail: String? = nil
-    ) {
-        self.code = code
-        self.severity = severity
-        self.message = message
-        self.templateID = templateID
-        self.detail = detail
-        id = [
-            templateID?.uuidString ?? "newFile",
-            code.rawValue,
-            detail ?? "",
-        ].joined(separator: ":")
-    }
-}
-
-public struct NewFileValidationResult: Codable, Hashable, Sendable {
-    public let issues: [NewFileValidationIssue]
-    public let executableTemplateIDs: Set<UUID>
-    public let fingerprintByTemplateID: [UUID: String]
-    public let isExecutable: Bool
-
-    public var errors: [NewFileValidationIssue] {
-        issues.filter { $0.severity == .error }
+    /// 读文件系统的默认模式。扩展进程与发布门必须走带 `fileInfo` 的重载。
+    static func validate(_ menu: NewFileMenuConfig) -> NewFileValidationResult {
+        validate(menu, fileInfo: MenuEntryFileProbe.filesystem.templateFileInfo)
     }
 
-    public var warnings: [NewFileValidationIssue] {
-        issues.filter { $0.severity == .warning }
-    }
-
-    public var hasErrors: Bool {
-        !errors.isEmpty
-    }
-
-    public var hasWarnings: Bool {
-        !warnings.isEmpty
-    }
-}
-
-public enum NewFileMenuValidator: Sendable {
-    public static let maxMenuNameLength = 80
-    public static let maxTemplateNameLength = 40
-    public static let maxTextContentLength = 100_000
-
-    public static func validate(_ menu: NewFileMenuConfig) -> NewFileValidationResult {
-        validate(menu, fileInfo: defaultFileInfo)
-    }
-
-    public static func validate(
+    static func validate(
         _ menu: NewFileMenuConfig,
         fileInfo: (String) -> NewFileTemplateFileInfo?
     ) -> NewFileValidationResult {
-        var issues: [NewFileValidationIssue] = []
+        var issues: [MenuEntryIssue] = []
         var hasParentBlockingError = false
 
         let trimmedName = menu.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -134,7 +76,7 @@ public enum NewFileMenuValidator: Sendable {
             )
             issues.append(contentsOf: templateIssues)
 
-            let templateHasBlockingError = templateIssues.contains { $0.severity == .error }
+            let templateHasBlockingError = templateIssues.hasErrors
             if template.isEnabled && !templateHasBlockingError {
                 executableTemplateIDs.insert(template.id)
                 fingerprintByTemplateID[template.id] = fingerprint(for: menu, template: template)
@@ -149,7 +91,7 @@ public enum NewFileMenuValidator: Sendable {
         )
     }
 
-    public static func fingerprint(
+    static func fingerprint(
         for menu: NewFileMenuConfig,
         template: NewFileTemplateConfig
     ) -> String {
@@ -177,19 +119,19 @@ public enum NewFileMenuValidator: Sendable {
         _ template: NewFileTemplateConfig,
         duplicateNames: Set<String>,
         fileInfo: (String) -> NewFileTemplateFileInfo?
-    ) -> [NewFileValidationIssue] {
+    ) -> [MenuEntryIssue] {
         guard template.isEnabled else {
             return []
         }
 
-        var issues: [NewFileValidationIssue] = []
+        var issues: [MenuEntryIssue] = []
         let trimmedName = template.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedBaseName = template.baseName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedExtension = template.fileExtension.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if trimmedName.isEmpty {
             issues.append(
-                issue(.blankTemplateName, .error, "模板名称不能为空。", templateID: template.id)
+                issue(.blankTemplateName, .error, "模板名称不能为空。", childID: template.id)
             )
         }
 
@@ -199,7 +141,7 @@ public enum NewFileMenuValidator: Sendable {
                     .templateNameTooLong,
                     .error,
                     "模板名称不能超过 \(maxTemplateNameLength) 个字符。",
-                    templateID: template.id
+                    childID: template.id
                 )
             )
         }
@@ -210,7 +152,7 @@ public enum NewFileMenuValidator: Sendable {
                     .duplicateTemplateName,
                     .error,
                     "同一个新建菜单下不能有重复的模板菜单名。",
-                    templateID: template.id,
+                    childID: template.id,
                     detail: trimmedName
                 )
             )
@@ -218,7 +160,7 @@ public enum NewFileMenuValidator: Sendable {
 
         if trimmedBaseName.isEmpty {
             issues.append(
-                issue(.blankBaseName, .error, "基础文件名不能为空。", templateID: template.id)
+                issue(.blankBaseName, .error, "基础文件名不能为空。", childID: template.id)
             )
         }
 
@@ -228,20 +170,20 @@ public enum NewFileMenuValidator: Sendable {
                     .baseNameContainsSeparator,
                     .error,
                     "基础文件名不能包含路径分隔符。",
-                    templateID: template.id
+                    childID: template.id
                 )
             )
         }
 
         if trimmedExtension.isEmpty {
             issues.append(
-                issue(.blankExtension, .error, "文件扩展名不能为空。", templateID: template.id)
+                issue(.blankExtension, .error, "文件扩展名不能为空。", childID: template.id)
             )
         }
 
         if trimmedExtension.contains(".") {
             issues.append(
-                issue(.extensionContainsDot, .error, "扩展名不需要包含点号。", templateID: template.id)
+                issue(.extensionContainsDot, .error, "扩展名不需要包含点号。", childID: template.id)
             )
         }
 
@@ -251,7 +193,7 @@ public enum NewFileMenuValidator: Sendable {
                     .extensionContainsInvalidCharacters,
                     .error,
                     "扩展名不能包含空白、路径分隔符或空字符。",
-                    templateID: template.id
+                    childID: template.id
                 )
             )
         }
@@ -264,7 +206,7 @@ public enum NewFileMenuValidator: Sendable {
                     .textContentTooLong,
                     .error,
                     "默认文本内容不能超过 \(maxTextContentLength) 字节。",
-                    templateID: template.id
+                    childID: template.id
                 )
             )
         }
@@ -274,12 +216,12 @@ public enum NewFileMenuValidator: Sendable {
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if trimmedPath.isEmpty {
                 issues.append(
-                    issue(.missingTemplatePath, .error, "复制模板模式需要模板文件路径。", templateID: template.id)
+                    issue(.missingTemplatePath, .error, "复制模板模式需要模板文件路径。", childID: template.id)
                 )
             } else if let info = fileInfo(trimmedPath) {
                 if info.isDirectory {
                     issues.append(
-                        issue(.templatePathIsDirectory, .error, "模板路径不能是目录。", templateID: template.id)
+                        issue(.templatePathIsDirectory, .error, "模板路径不能是目录。", childID: template.id)
                     )
                 }
                 if !info.pathExtension.isEmpty,
@@ -289,14 +231,14 @@ public enum NewFileMenuValidator: Sendable {
                             .templateExtensionMismatch,
                             .warning,
                             "模板文件扩展名和配置扩展名不一致。",
-                            templateID: template.id,
+                            childID: template.id,
                             detail: info.pathExtension
                         )
                     )
                 }
             } else {
                 issues.append(
-                    issue(.templatePathMissing, .error, "模板文件不存在或无法读取。", templateID: template.id)
+                    issue(.templatePathMissing, .error, "模板文件不存在或无法读取。", childID: template.id)
                 )
             }
         }
@@ -305,17 +247,17 @@ public enum NewFileMenuValidator: Sendable {
     }
 
     private static func issue(
-        _ code: NewFileValidationIssueCode,
-        _ severity: NewFileValidationIssueSeverity,
+        _ code: MenuEntryIssueCode,
+        _ severity: MenuEntryIssueSeverity,
         _ message: String,
-        templateID: UUID? = nil,
+        childID: UUID? = nil,
         detail: String? = nil
-    ) -> NewFileValidationIssue {
-        NewFileValidationIssue(
+    ) -> MenuEntryIssue {
+        MenuEntryIssue(
             code: code,
             severity: severity,
             message: message,
-            templateID: templateID,
+            childID: childID,
             detail: detail
         )
     }
@@ -326,19 +268,6 @@ public enum NewFileMenuValidator: Sendable {
 
     private static func containsInvalidExtensionCharacters(_ value: String) -> Bool {
         containsPathSeparator(value) || value.rangeOfCharacter(from: .whitespacesAndNewlines) != nil
-    }
-
-    private static func defaultFileInfo(path: String) -> NewFileTemplateFileInfo? {
-        var isDirectory = ObjCBool(false)
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) else {
-            return nil
-        }
-
-        let url = URL(fileURLWithPath: path)
-        return NewFileTemplateFileInfo(
-            isDirectory: isDirectory.boolValue,
-            pathExtension: url.pathExtension
-        )
     }
 }
 

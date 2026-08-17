@@ -38,12 +38,49 @@ Menu Entry 在 Finder 右键菜单里的投影，扩展侧构造菜单与反解�
   消除"按旧菜单点击、按新配置解析"的时间窗。
 - **与 Finder Menu Entry Summary 的分工** — Descriptor 面向 Finder 右键菜单（扩展侧，
   负责身份）；Summary 面向设置界面（App 侧，负责状态展示）。两者都从 Menu Entry 派生，
-  服务于不同进程。
+  服务于不同进程。两者的「哪些项是 Script-Backed」都来自 [Menu Entry Evaluation](#menu-entry-evaluation菜单项评估)。
 
 详见 [ADR-0004](docs/adr/0004-finder-menu-descriptor.md)。
 
-### Script Compilation Pipeline（脚本编译管线）
-将菜单配置转换为可执行 AppleScript 的流程：
+### Menu Entry Evaluation（菜单项评估）
+
+回答关于一个 Menu Entry 的两个问题 —— **它产出哪些 Script-Backed Entry**、**它哪里有问题** ——
+的唯一入口。二者本来就是同一个问题的两面：能执行的才产出脚本，不能执行的必有原因。
+
+接口：`MenuEntryEvaluator.evaluate(entry, environment:)` → `MenuEntryEvaluation`。
+
+- **为什么合并** — 此前「哪些产出脚本」写在 `MenuEntryScriptPolicy`，「哪里有问题」写在三个
+  互不相识的校验器里，各有一套 Severity / Code / Issue / Result。设置界面因此漏掉了 custom
+  这一路，对不会被发布的条目显示「就绪」。详见 [ADR-0006](docs/adr/0006-menu-entry-evaluator.md)。
+- **两种 environment** — `.configurationOnly`（默认）只看配置，**零文件系统 IO**；
+  `.filesystemAware` 额外检查配置指向的应用与模板文件是否还在。
+  `FinderMenuPresenter` 与发布门路径**不暴露这个参数**：它们在扩展进程里每次右键被调用。
+  默认取安全的那一侧 —— 设置界面漏传只是少一条提示，发布门漏传是每次右键做 IO。
+- **`isExecutable` 不从 `scriptBacked.isEmpty` 派生** — Built-in Entry 没有脚本，却是 Finder 里
+  真实可见的菜单项。
+- **`hasExecutableChildren`** — 条目内部是否存在通过校验的子项。composite 是「可执行步骤」，
+  New File Menu 是「可执行模板」。两者语义不同（步骤被写进同一个脚本，模板各自就是一个脚本），
+  因此只暴露状态阶梯真正需要的那个布尔量，不合并 ID 集合。
+  它与 `isExecutable` 会分叉：组合命令名称为空时条目不产出脚本，但步骤可能全合法 ——
+  那是「部分可用」而不是「不可用」。
+- **`MenuEntryIssue`** — 统一的问题类型。`childID` 指向步骤或模板，条目级问题为 nil；
+  `detail` 是参与身份拼装的区分性字符串。目前没有生产代码按 `code` 分支。
+
+### Menu Entry Status（菜单项状态）
+
+Menu Entry 的运行状态，词汇由 `DESIGN.md` 的「Finder Menu Row」一节规定。
+`MenuEntryStatusResolver.status(for:evaluation:publishStates:)` 是全应用**唯一**一处阶梯：
+
+已停用 → 系统（Built-in Entry，无脚本因而无发布状态）→ 不可用 / 部分可用（看
+`hasExecutableChildren`）→ 有警告 → 同步失败 → 同步中 → 就绪。
+
+- **徽章是运行状态，不是类型标签** — 「命令」「系统」这类描述属于
+  `FinderMenuEntrySummary.typeLabel`。此前 custom 命令项的徽章恒为「命令」，
+  脚本有没有发布看不出来。
+- **发布状态与展示分离** — 阶梯只产出 kind 与文案；条目长什么样、归哪一类、能不能删
+  由 `FinderMenuEntrySummaryBuilder` 的展示信息负责，与阶梯正交。
+
+### Script Compilation Pipeline（脚本编译管线）将菜单配置转换为可执行 AppleScript 的流程：
 
 1. **Config → Script Source** — 从 MenuEntry 生成 AppleScript 源码
 2. **Script Source → Compiled Script** — 用 `osacompile` 编译为 `.scpt` 文件

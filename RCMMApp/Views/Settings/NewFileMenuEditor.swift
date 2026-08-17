@@ -86,7 +86,7 @@ struct NewFileMenuEditor: View {
         return "删除“\(template.displayName.nilIfBlank ?? "未命名模板")”模板？"
     }
 
-    private func issues(for draft: NewFileTemplateConfig) -> [NewFileValidationIssue] {
+    private func issues(for draft: NewFileTemplateConfig) -> [MenuEntryIssue] {
         var menu = config
         guard let index = menu.templates.firstIndex(where: { $0.id == draft.id }) else {
             return []
@@ -94,7 +94,10 @@ struct NewFileMenuEditor: View {
 
         menu.templates[index] = draft
         menu.templates[index].isEnabled = true
-        return NewFileMenuValidator.validate(menu).issues.filter { $0.templateID == draft.id }
+        return MenuEntryEvaluator
+            .evaluate(.newFile(menu), environment: .filesystemAware)
+            .issues
+            .filter { $0.childID == draft.id }
     }
 }
 
@@ -102,7 +105,7 @@ private struct NewFileTemplateCard: View {
     let savedTemplate: NewFileTemplateConfig
     let canMoveUp: Bool
     let canMoveDown: Bool
-    let validateDraft: (NewFileTemplateConfig) -> [NewFileValidationIssue]
+    let validateDraft: (NewFileTemplateConfig) -> [MenuEntryIssue]
     let onUpdate: (NewFileTemplateConfig) -> Void
     let onRequestDelete: () -> Void
     let onMoveUp: () -> Void
@@ -130,7 +133,7 @@ private struct NewFileTemplateCard: View {
         savedTemplate: NewFileTemplateConfig,
         canMoveUp: Bool,
         canMoveDown: Bool,
-        validateDraft: @escaping (NewFileTemplateConfig) -> [NewFileValidationIssue],
+        validateDraft: @escaping (NewFileTemplateConfig) -> [MenuEntryIssue],
         onUpdate: @escaping (NewFileTemplateConfig) -> Void,
         onRequestDelete: @escaping () -> Void,
         onMoveUp: @escaping () -> Void,
@@ -332,7 +335,7 @@ private struct NewFileTemplateCard: View {
         )
     }
 
-    private var currentIssues: [NewFileValidationIssue] {
+    private var currentIssues: [MenuEntryIssue] {
         validateDraft(editedTemplate)
     }
 

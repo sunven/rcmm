@@ -64,8 +64,10 @@ struct NewFileSettingsTab: View {
     }
 
     private func pageHeader(for config: NewFileMenuConfig) -> some View {
-        let status = NewFileMenuStatusResolver.resolve(
-            config: config,
+        let entry = MenuEntry.newFile(config)
+        let status = MenuEntryStatusResolver.status(
+            for: entry,
+            evaluation: MenuEntryEvaluator.evaluate(entry, environment: .filesystemAware),
             publishStates: configStore.scriptPublishStates
         )
 
@@ -128,17 +130,17 @@ struct NewFileSettingsTab: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func headerStatusBadge(_ status: NewFileMenuStatus) -> some View {
-        Label(status.displayName, systemImage: statusSymbol(for: status))
+    private func headerStatusBadge(_ status: MenuEntryStatus) -> some View {
+        Label(status.text, systemImage: statusSymbol(for: status.kind))
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(statusColor(for: status))
+            .foregroundStyle(statusColor(for: status.kind))
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
                 Capsule()
-                    .fill(statusColor(for: status).opacity(0.11))
+                    .fill(statusColor(for: status.kind).opacity(0.11))
             )
-            .accessibilityLabel("状态：\(status.displayName)")
+            .accessibilityLabel("状态：\(status.text)")
     }
 
     private var usageTip: some View {
@@ -167,11 +169,11 @@ struct NewFileSettingsTab: View {
         )
     }
 
-    private func statusSymbol(for status: NewFileMenuStatus) -> String {
-        switch status.kind {
+    private func statusSymbol(for kind: FinderMenuEntryStatusKind) -> String {
+        switch kind {
         case .disabled:
             return "pause.circle.fill"
-        case .unavailable:
+        case .unavailable, .failed:
             return "exclamationmark.triangle.fill"
         case .partiallyAvailable, .warning:
             return "exclamationmark.circle.fill"
@@ -179,16 +181,18 @@ struct NewFileSettingsTab: View {
             return "arrow.triangle.2.circlepath"
         case .ready:
             return "checkmark.circle.fill"
+        case .system:
+            return "gearshape.fill"
         }
     }
 
-    private func statusColor(for status: NewFileMenuStatus) -> Color {
-        switch status.kind {
+    private func statusColor(for kind: FinderMenuEntryStatusKind) -> Color {
+        switch kind {
         case .disabled, .partiallyAvailable, .warning:
             return NewFileSettingsColor.warning
-        case .unavailable:
+        case .unavailable, .failed:
             return NewFileSettingsColor.error
-        case .syncing:
+        case .syncing, .system:
             return NewFileSettingsColor.info
         case .ready:
             return NewFileSettingsColor.success
