@@ -31,7 +31,7 @@ enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .blankCompositeName,
                     .error,
-                    "Composite menu name is required."
+                    "组合命令名称不能为空。"
                 )
             )
             hasCompositeBlockingError = true
@@ -42,7 +42,7 @@ enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .compositeNameTooLong,
                     .error,
-                    "Composite menu name must be \(maxCompositeNameLength) characters or fewer."
+                    "组合命令名称不能超过 \(maxCompositeNameLength) 个字符。"
                 )
             )
             hasCompositeBlockingError = true
@@ -53,7 +53,7 @@ enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .noSteps,
                     .error,
-                    "Composite menu must contain at least one step."
+                    "组合命令至少需要一个步骤。"
                 )
             )
             hasCompositeBlockingError = true
@@ -64,7 +64,7 @@ enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .tooManySteps,
                     .error,
-                    "Composite menu can contain at most \(maxStepCount) steps."
+                    "组合命令最多只能有 \(maxStepCount) 个步骤。"
                 )
             )
             hasCompositeBlockingError = true
@@ -104,7 +104,7 @@ enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .blankStepName,
                     .error,
-                    "Step name is required.",
+                    "步骤名称不能为空。",
                     childID: step.id
                 )
             )
@@ -115,7 +115,7 @@ enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .stepNameTooLong,
                     .error,
-                    "Step name must be \(maxStepNameLength) characters or fewer.",
+                    "步骤名称不能超过 \(maxStepNameLength) 个字符。",
                     childID: step.id
                 )
             )
@@ -126,7 +126,7 @@ enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .blankCommandTemplate,
                     .error,
-                    "Command template is required.",
+                    "命令模板不能为空。",
                     childID: step.id
                 )
             )
@@ -137,7 +137,7 @@ enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .commandTemplateTooLong,
                     .error,
-                    "Command template must be \(maxCommandTemplateLength) characters or fewer.",
+                    "命令模板不能超过 \(maxCommandTemplateLength) 个字符。",
                     childID: step.id
                 )
             )
@@ -150,7 +150,7 @@ enum CompositeMenuItemValidator: Sendable {
                     issue(
                         .appStepMissingAppPath,
                         .error,
-                        "App step requires an app path.",
+                        "应用步骤需要应用路径。",
                         childID: step.id
                     )
                 )
@@ -161,7 +161,7 @@ enum CompositeMenuItemValidator: Sendable {
                     issue(
                         .appStepMissingBundleId,
                         .error,
-                        "App step command uses {bundle}, so it requires a bundle ID.",
+                        "命令里用了 {bundle}，因此需要填写 Bundle ID。",
                         childID: step.id
                     )
                 )
@@ -171,7 +171,7 @@ enum CompositeMenuItemValidator: Sendable {
                     issue(
                         .appStepMissingAppPlaceholder,
                         .error,
-                        "App step command must include {app} or {bundle}.",
+                        "应用步骤的命令必须包含 {app} 或 {bundle}。",
                         childID: step.id
                     )
                 )
@@ -182,7 +182,7 @@ enum CompositeMenuItemValidator: Sendable {
                     issue(
                         .shellStepContainsAppPlaceholder,
                         .error,
-                        "Shell step cannot use {app}.",
+                        "Shell 步骤不能使用 {app}。",
                         childID: step.id
                     )
                 )
@@ -194,7 +194,7 @@ enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .missingPathPlaceholder,
                     .warning,
-                    "Command does not include {path}; it will not receive the Finder selection.",
+                    "命令未包含 {path}，不会收到 Finder 选中的目标。",
                     childID: step.id
                 )
             )
@@ -205,7 +205,7 @@ enum CompositeMenuItemValidator: Sendable {
                 issue(
                     .dangerousCommandPattern,
                     .warning,
-                    "Command contains a potentially dangerous shell pattern.",
+                    "命令包含潜在危险的 shell 片段。",
                     childID: step.id,
                     detail: pattern
                 )
