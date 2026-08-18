@@ -77,7 +77,7 @@ class FinderSync: FIFinderSync {
         let snapshot = currentMenuSnapshot()
 
         logger.debug(
-            "开始构建 Finder 菜单，menuKind=\(String(describing: menuKind), privacy: .public)，启用项数量=\(snapshot.visibleEntries.count)，展示方式=\(snapshot.presentationMode.rawValue, privacy: .public)"
+            "开始构建 Finder 菜单，menuKind=\(String(describing: menuKind), privacy: .public)，启用项数量=\(snapshot.visibleEntryCount)，展示方式=\(snapshot.presentationMode.rawValue, privacy: .public)"
         )
 
         guard !snapshot.descriptors.isEmpty else {

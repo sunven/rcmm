@@ -5,7 +5,7 @@ import Foundation
 /// 「这个 Menu Entry 有效吗」有两个答案，取决于谁在问：
 ///
 /// - `.configurationOnly` —— 只看配置本身，**一次文件系统 IO 都不做**。发布门与
-///   `FinderMenuPresenter` 走这条：它们会在扩展进程里、每次右键被调用。
+///   `FinderMenuSnapshot` 走这条：它们会在扩展进程里、每次右键被调用。
 /// - `.filesystemAware` —— 额外检查配置指向的文件是否还在。设置界面走这条，
 ///   用户需要看到「模板文件不见了」。
 ///

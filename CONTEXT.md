@@ -20,22 +20,23 @@
 Menu Entry 在 Finder 右键菜单里的投影，扩展侧构造菜单与反解点击的唯一入口。树形结构，
 子节点对应 `nestedUnderRCMM` 与 New File Template 的二级子菜单。
 
-接口两端成对：`FinderMenuDescriptorBuilder.layout(...)` 产出描述树与身份索引，
-`FinderMenuSnapshot.resolve(_:)` 从点击反解回 Script-Backed Entry。
-二者同处一个模块，避免菜单项身份的编码与解码分居两个 target。
+接口集中在 `FinderMenuSnapshot`：初始化时产出描述树与身份索引，`resolve(_:)`
+从点击反解回 Script-Backed Entry。Descriptor Builder 是快照内部的 implementation，
+避免菜单项身份的编码与解码分居两个 target。
 
 - **MenuItemFields** — 描述与 `NSMenuItem` 之间的纯值中间层，只有 `title` 与 `tag`
   两个字段（其余字段实测永远拿不到）。扩展侧只做 fields ↔ `NSMenuItem` 的机械转换，
   往返正确性在 RCMMShared 内可测。
-- **身份载体** — `tag` 编码为 `generation << 16 | index`，索引覆盖全部 Script-Backed 项。
-  反解主路径是 tag 索引，标题相等校验作纵深防御；失败按类型（过期 / 标题失配 /
-  非 Script-Backed）写入错误队列。
+- **身份载体** — `tag` 编码为 `generation << 16 | index`，索引直接保存构造该描述项的
+  Script-Backed Entry。反解主路径是 tag 索引，标题相等校验作纵深防御；失败按类型
+  （过期 / 标题失配 / 非 Script-Backed）写入错误队列。
 - **Finder 保真度** — 实测：Finder 用自己重建的裸 `NSMenuItem` 回调，**只保留
   `title`、`tag`、`action`**；`representedObject` 与 `parentMenuTitle` 恒为 nil，
   `identifier` 被覆写为 action selector 名。`MenuItemFields.finderObserved(title:tag:)`
   即这一事实的可执行形式，往返测试必须用它构造输入。
-- **不变量** — 构造菜单与反解点击必须使用同一份不可变快照。快照生成时一并产出身份索引，
-  消除"按旧菜单点击、按新配置解析"的时间窗。
+- **不变量** — 构造菜单与反解点击必须使用同一份不可变快照。快照对每个 Menu Entry
+  只做一次 configuration-only 评估，同一份结果同时决定发布过滤、描述树与身份索引，
+  消除规则分叉和"按旧菜单点击、按新配置解析"的时间窗。
 - **与 Finder Menu Entry Summary 的分工** — Descriptor 面向 Finder 右键菜单（扩展侧，
   负责身份）；Summary 面向设置界面（App 侧，负责状态展示）。两者都从 Menu Entry 派生，
   服务于不同进程。两者的「哪些项是 Script-Backed」都来自 [Menu Entry Evaluation](#menu-entry-evaluation菜单项评估)。
@@ -54,7 +55,7 @@ Menu Entry 在 Finder 右键菜单里的投影，扩展侧构造菜单与反解�
   这一路，对不会被发布的条目显示「就绪」。详见 [ADR-0006](docs/adr/0006-menu-entry-evaluator.md)。
 - **两种 environment** — `.configurationOnly`（默认）只看配置，**零文件系统 IO**；
   `.filesystemAware` 额外检查配置指向的应用与模板文件是否还在。
-  `FinderMenuPresenter` 与发布门路径**不暴露这个参数**：它们在扩展进程里每次右键被调用。
+  `FinderMenuSnapshot` 与发布门路径**不暴露这个参数**：它们在扩展进程里每次右键被调用。
   默认取安全的那一侧 —— 设置界面漏传只是少一条提示，发布门漏传是每次右键做 IO。
 - **`isExecutable` 不从 `scriptBacked.isEmpty` 派生** — Built-in Entry 没有脚本，却是 Finder 里
   真实可见的菜单项。

@@ -44,18 +44,14 @@ public enum FinderMenuResolution: Equatable, Sendable {
 /// **不变量**：构造菜单与反解点击必须使用同一份快照。描述树与身份索引在同一次初始化里
 /// 产出，`generation` 编进 tag，消除「按旧菜单点击、按新配置解析」的时间窗。
 public struct FinderMenuSnapshot: Sendable {
-    public let entries: [MenuEntry]
-    public let publishStates: [String: ScriptPublishState]
     public let presentationMode: MenuPresentationMode
-    public let applicationIcons: [String: Data]
 
-    /// 通过 Publish State 过滤后真正会出现在菜单里的 Menu Entry。
-    public let visibleEntries: [MenuEntry]
+    /// 通过 Publish State 过滤后真正会出现在菜单里的顶层 Menu Entry 数量。
+    public let visibleEntryCount: Int
     /// 本快照的序号，编进每个 Script-Backed 菜单项的 tag。
     public let generation: Int
 
     private let layout: FinderMenuLayout
-    private let entriesByScriptID: [String: ScriptBackedMenuEntry]
 
     /// 构造菜单用的描述树。
     public var descriptors: [FinderMenuItemDescriptor] { layout.descriptors }
@@ -76,28 +72,19 @@ public struct FinderMenuSnapshot: Sendable {
         applicationIcons: [String: Data],
         generation: Int
     ) {
-        self.entries = entries
-        self.publishStates = publishStates
         self.presentationMode = presentationMode
-        self.applicationIcons = applicationIcons
         self.generation = generation
 
-        let visibleEntries = FinderMenuPresenter.visibleEntries(
-            entries: entries,
+        let visibleEntries = Self.visibleEntries(
+            from: entries,
             publishStates: publishStates
         )
-        self.visibleEntries = visibleEntries
+        self.visibleEntryCount = visibleEntries.count
         self.layout = FinderMenuDescriptorBuilder.layout(
             visibleEntries: visibleEntries,
-            publishStates: publishStates,
             presentationMode: presentationMode,
             applicationIcons: applicationIcons,
             generation: generation
-        )
-        self.entriesByScriptID = Dictionary(
-            MenuEntryEvaluator.evaluate(visibleEntries)
-                .map { ($0.id, $0) },
-            uniquingKeysWith: { first, _ in first }
         )
     }
 
@@ -120,18 +107,61 @@ public struct FinderMenuSnapshot: Sendable {
             return .titleMismatch(expected: indexed.title, actual: fields.title)
         }
 
-        guard let entry = entriesByScriptID[indexed.scriptID] else {
-            return .staleSnapshot
-        }
-
-        return .resolved(entry)
+        return .resolved(indexed.entry)
     }
 
     /// 描述树里全部 Script-Backed 项，按 Finder 实测保真度展平成「点击」。
     ///
     /// 往返不变量的输入：每一个 click 都应当能反解回构造它的那个 scriptID。
-    public var observedScriptBackedClicks: [(scriptID: String, fields: MenuItemFields)] {
+    var observedScriptBackedClicks: [(scriptID: String, fields: MenuItemFields)] {
         descriptors.flatMap(Self.observedClicks)
+    }
+
+    private static func visibleEntries(
+        from entries: [MenuEntry],
+        publishStates: [String: ScriptPublishState]
+    ) -> [FinderMenuVisibleEntry] {
+        entries.compactMap { entry in
+            guard entry.isEnabled else { return nil }
+
+            let evaluation = MenuEntryEvaluator.evaluate(entry)
+            let currentScriptBackedEntries = evaluation.scriptBacked.filter {
+                isCurrent($0, publishStates: publishStates)
+            }
+
+            switch entry {
+            case .builtIn:
+                return FinderMenuVisibleEntry(
+                    entry: entry,
+                    scriptBackedEntries: []
+                )
+            case .custom, .composite:
+                guard let scriptBackedEntry = currentScriptBackedEntries.first else {
+                    return nil
+                }
+                return FinderMenuVisibleEntry(
+                    entry: entry,
+                    scriptBackedEntries: [scriptBackedEntry]
+                )
+            case .newFile:
+                guard !currentScriptBackedEntries.isEmpty else { return nil }
+                return FinderMenuVisibleEntry(
+                    entry: entry,
+                    scriptBackedEntries: currentScriptBackedEntries
+                )
+            }
+        }
+    }
+
+    private static func isCurrent(
+        _ scriptBackedEntry: ScriptBackedMenuEntry,
+        publishStates: [String: ScriptPublishState]
+    ) -> Bool {
+        guard let publishState = publishStates[scriptBackedEntry.id] else {
+            return false
+        }
+        return publishState.status == .current
+            && publishState.fingerprint == scriptBackedEntry.fingerprint
     }
 
     private static func observedClicks(

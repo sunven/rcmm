@@ -50,14 +50,14 @@ Composite 时，标题匹配被直接放在回退链第一位。也就是说，�
 
 ### 1. Finder Menu Descriptor 同时拥有构造与反解
 
-`FinderMenuDescriptorBuilder.layout(...)` 产出树形描述与身份索引，
-`FinderMenuSnapshot.resolve(_:)` 反解点击。标题格式、图标选择、身份字段写入
-规则都只在这一个模块里定义一次。`FinderSync` 退化为 `descriptor → NSMenuItem` 的 adapter
-（548 → 412 行），不再直接引用 `MenuItemResolver`、`FinderMenuPresenter`、
-`FinderMenuIconPolicy`、`MenuEntryScriptPolicy`。
+`FinderMenuSnapshot` 初始化时产出树形描述与身份索引，`resolve(_:)` 反解点击。
+标题格式、图标选择、身份字段写入规则都只在这一个模块里定义一次；
+`FinderMenuDescriptorBuilder` 是它的内部 implementation，不形成第二个公开 seam。
+`FinderSync` 退化为 `descriptor → NSMenuItem` 的 adapter（548 → 412 行），
+不再直接引用菜单评估、可见性和身份 policy。
 
-`MenuEntryScriptPolicy` 保持在模块外部——App 侧的 `ScriptInstallerService` 也消费它，
-它是跨两个 target 的共享词汇。`FinderTargetPathResolver`（执行期路径）与
+`MenuEntryScriptPolicy` 保持在模块外部，作为 evaluator 的 New File Template ID 规则；
+Snapshot 只消费 evaluator 产出的 Script-Backed Entry，不再自行重建 ID。`FinderTargetPathResolver`（执行期路径）与
 `FinderMenuCacheInvalidationPolicy`（缓存时机）同样留在外面，它们与「菜单长什么样、
 点中的是哪一项」正交。
 
@@ -80,6 +80,10 @@ Composite 时，标题匹配被直接放在回退链第一位。也就是说，�
 就会出现「按旧菜单点击、按新配置解析」的时间窗——这也是 616025d 那个路由 bug 的一种
 合理成因。绑定快照后该时间窗消失。
 
+快照对每个 Menu Entry 只调用一次 configuration-only evaluator，同一份
+Script-Backed Entry 同时用于 Publish State 过滤、描述树构造和 tag 索引。
+索引直接保存对应条目，点击后不再按 script ID 经过第二份字典查回。
+
 ### 4. 实测保真度编码进代码
 
 `MenuItemFields.finderObserved(title:tag:)` 按上表构造输入：只保留 `title` 与 `tag`。
@@ -92,6 +96,7 @@ Composite 时，标题匹配被直接放在回退链第一位。也就是说，�
 | ① | `#if DEBUG` 临时诊断，取得上表事实 | 已完成并回滚 |
 | ② | 引入 Descriptor / Snapshot / MenuItemFields，回退链**原样**搬入，补往返不变量测试，行为零变更 | 已完成 |
 | ③ | `tag` 升级为全局索引 + 快照 generation 编码，砍掉死分支，兜底命中写错误队列 | 已完成 |
+| ④ | 可见性、描述树和路由索引改为消费同一次评估，删除 `FinderMenuPresenter` 公开面 | 已完成 |
 
 第②步刻意不改路由行为：先把测试网架好，再动逻辑。三个现存缺陷曾用
 `withKnownIssue` 固定在 `FinderMenuDescriptorTests` 里，第③步落地后全部转绿，标记已摘除。
@@ -112,6 +117,15 @@ Composite 时，标题匹配被直接放在回退链第一位。也就是说，�
   错误队列被当成空。加新 kind 前必须先修掉这个。
 - `reloadMenuSnapshot` 只允许更大的 generation 覆盖当前快照，防止并发刷新时慢的一次
   后完成、把旧快照写回去（那会让已发出菜单的 tag 全部失配）。
+
+### 第④步的最终形状
+
+- `FinderMenuSnapshot` 是扩展侧唯一 seam：输入配置、Publish State、展示方式、图标与 generation，
+  输出描述树、可见顶层数量并负责反解点击。
+- 每个 Menu Entry 只评估一次；custom / composite 取当前脚本，New File Menu 保留所有当前模板，
+  Built-in Entry 不依赖发布状态。
+- `FinderMenuPresenter` 删除；可见性测试迁到 Snapshot interface。
+- Descriptor Builder、布局、tag 编解码与测试辅助面全部降为内部 implementation。
 
 ## 理由
 
@@ -153,6 +167,8 @@ generation 编进 `tag`（`generation << 16 | index`），跨快照直接失效�
 - 三个此前无人知晓的路由缺陷被确证并修复：同名 custom 项不再静默误路由、
   同名 composite 与跨菜单同名模板不再点不动
 - 构造与解析绑定同一快照并由 generation 保证，跨快照点击判为过期而非错位命中
+- 发布过滤、New File Template 选择、描述树与路由索引消费同一次评估结果
+- Snapshot interface 收窄，删除 `FinderMenuPresenter` 浅 module
 - 路由失败进入错误队列，用户与 App 侧都能看见
 - 删除 `MenuItemResolver`（134 行）与其测试（299 行）
 
@@ -167,7 +183,7 @@ generation 编进 `tag`（`generation << 16 | index`），跨快照直接失效�
 ### 风险
 
 `RCMMApp` 的测试目前在本机无法执行（`The test runner hung before establishing connection.`），
-与本决策无关，基线提交上同样失败。验证依据是 `RCMMShared` 的 254 个用例（零 known issue）
+与本决策无关，基线提交上同样失败。第④步验证依据是 `RCMMShared` 的 297 个用例（零 known issue）
 加上两个 target 的编译通过。
 
 第②步的真机回归已完成：8 次点击覆盖 custom / composite / New File Template ×

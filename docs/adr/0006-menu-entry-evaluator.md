@@ -63,7 +63,7 @@ newFile N 个条目），所以让 evaluator 直接返回它。
 `configurationOnlyFileInfo`（只从路径字符串编造 FileInfo，一次 IO 都不做）。只有读过那个
 私有函数才知道。
 
-**`FinderMenuPresenter` 与发布门路径连参数都不暴露。** 它们会在扩展进程里、每次右键被调用；
+**`FinderMenuSnapshot` 与发布门路径连参数都不暴露。** 它们会在扩展进程里、每次右键被调用；
 给它们一个能打开文件系统 IO 的开关，等于把「别在这条路上做 IO」从类型系统降级成纪律。
 想传也传不了，比传错了才发现好。
 
