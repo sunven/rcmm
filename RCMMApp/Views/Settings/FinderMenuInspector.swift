@@ -81,8 +81,6 @@ struct FinderMenuInspector: View {
             FinderMenuStatusBadge(summary: summary)
         }
         .padding(.bottom, 2)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(summary.title)，\(summary.typeLabel)，第 \(summary.position) 项，共 \(summary.total) 项，\(summary.statusText)")
     }
 
     private func statusPanel(_ summary: FinderMenuEntrySummary) -> some View {
@@ -216,7 +214,6 @@ struct FinderMenuInspector: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .accessibilityLabel("打开新建文件设置")
         }
     }
 

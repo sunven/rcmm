@@ -12,7 +12,6 @@ struct SettingsSidebar: View {
                     .interpolation(.high)
                     .frame(width: 32, height: 32)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("rcmm")
@@ -34,8 +33,6 @@ struct SettingsSidebar: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(selection == destination ? Color.accentColor : .secondary)
-                .accessibilityLabel(destination.title)
-                .accessibilityAddTraits(selection == destination ? [.isSelected] : [])
                 .padding(.horizontal, 8)
             }
 

@@ -40,7 +40,6 @@ struct OnboardingFlowView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("跳过设置向导")
                 }
 
                 Spacer()
@@ -51,7 +50,6 @@ struct OnboardingFlowView: View {
                             returnToPreviousStep()
                         }
                         .buttonStyle(.bordered)
-                        .accessibilityLabel("返回上一步")
                     }
 
                     if currentStep == .enableExtension {
@@ -60,20 +58,17 @@ struct OnboardingFlowView: View {
                         }
                         .buttonStyle(AppPrimaryButtonStyle())
                         .disabled(!isExtensionEnabled)
-                        .accessibilityLabel("前往下一步")
                     } else if currentStep == .selectApps {
                         Button("下一步") {
                             advanceToNextStep()
                         }
                         .buttonStyle(AppPrimaryButtonStyle())
                         .disabled(selectedAppIds.isEmpty)
-                        .accessibilityLabel("前往下一步")
                     } else if currentStep == .verify {
                         Button("完成") {
                             completeOnboarding()
                         }
                         .buttonStyle(AppPrimaryButtonStyle())
-                        .accessibilityLabel("完成引导设置")
                     }
                 }
             }
@@ -132,11 +127,9 @@ struct OnboardingFlowView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 56))
                 .foregroundStyle(.green)
-                .accessibilityHidden(true)
 
             Text("设置完成！")
                 .font(.title2.bold())
-                .accessibilityLabel("引导设置已完成")
 
             Text("现在可以在 Finder 中右键目录使用 rcmm 了")
                 .font(.body)

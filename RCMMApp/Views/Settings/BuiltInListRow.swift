@@ -7,8 +7,6 @@ struct BuiltInListRow: View {
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
     var onToggle: ((Bool) -> Void)?
-    var position: Int?
-    var total: Int?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -54,17 +52,5 @@ struct BuiltInListRow: View {
         .frame(minHeight: 40)
         .controlSize(.small)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.displayName)，系统功能，\(summary.statusText)")
-        .ifLet(position) { view, pos in
-            view.accessibilityValue("第 \(pos) 项，共 \(total ?? 1) 项")
-        }
-        .accessibilityHint("系统内置菜单功能")
-        .ifLet(onMoveUp) { view, action in
-            view.accessibilityAction(named: "上移", action)
-        }
-        .ifLet(onMoveDown) { view, action in
-            view.accessibilityAction(named: "下移", action)
-        }
     }
 }

@@ -29,7 +29,6 @@ struct SelectAppsStepView: View {
                     Text("已选择 \(selectedAppIds.count) 个应用")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .accessibilityLabel("已选择 \(selectedAppIds.count) 个应用")
 
                     Spacer()
                 }

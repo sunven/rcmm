@@ -102,7 +102,6 @@ struct CommandEditor: View {
             }
             .pickerStyle(.segmented)
             .controlSize(.small)
-            .accessibilityLabel("执行模式")
 
             TextField(defaultCommand, text: $editedCommand)
                 .font(.system(.callout, design: .monospaced))
@@ -124,8 +123,6 @@ struct CommandEditor: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityValue(isUsingDefault ? "默认命令" : "自定义命令")
 
             if !validationIssues.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
@@ -138,7 +135,6 @@ struct CommandEditor: View {
                             spacing: 4,
                             smallIcon: true
                         )
-                        .accessibilityElement(children: .combine)
                     }
                 }
             }
@@ -152,8 +148,6 @@ struct CommandEditor: View {
                         .font(.caption2)
                         .foregroundStyle(.orange)
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("警告：命令中未包含路径占位符")
             }
 
             HStack(spacing: 8) {
@@ -183,8 +177,6 @@ struct CommandEditor: View {
         }
         .padding(.top, 2)
         .padding(.bottom, 4)
-        .accessibilityLabel("自定义命令编辑器")
-        .accessibilityHint("输入命令并选择执行模式")
         .onDisappear {
             if hasChanges {
                 commitChanges()

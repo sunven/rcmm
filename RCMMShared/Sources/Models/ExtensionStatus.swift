@@ -7,7 +7,7 @@ public enum ExtensionStatus: String, Codable, Sendable {
     case disabled
     case unknown
 
-    /// 状态描述文本，用于 UI 显示和 VoiceOver 无障碍读取
+    /// 状态描述文本，用于 UI 显示
     public var statusDescription: String {
         switch self {
         case .enabled: "Finder 扩展已启用"

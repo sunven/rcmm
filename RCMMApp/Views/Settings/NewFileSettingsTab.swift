@@ -140,7 +140,6 @@ struct NewFileSettingsTab: View {
                 Capsule()
                     .fill(FinderMenuStatusStyle.color(for: status.kind).opacity(0.11))
             )
-            .accessibilityLabel("状态：\(status.text)")
     }
 
     private var usageTip: some View {

@@ -20,7 +20,6 @@ struct AboutTab: View {
                 .frame(width: 96, height: 96)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
-                .accessibilityHidden(true)
 
             VStack(spacing: 6) {
                 Text("rcmm")

@@ -29,15 +29,12 @@ struct ErrorBannerView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: showAutoRepair)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("错误信息")
     }
 
     private func autoRepairBanner(message: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "wrench.and.screwdriver.fill")
                 .foregroundStyle(.green)
-                .accessibilityHidden(true)
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -55,7 +52,6 @@ struct ErrorBannerView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)
                 .font(.caption)
-                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 if let context = record.context {
                     Text(context)
@@ -71,8 +67,6 @@ struct ErrorBannerView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(record.context ?? "")，\(record.message)，\(recoveryAdvice(for: record))")
     }
 
     private var actionBar: some View {
@@ -91,7 +85,6 @@ struct ErrorBannerView: View {
             }
             .buttonStyle(AppPrimaryButtonStyle())
             .controlSize(.small)
-            .accessibilityLabel("打开设置以修复问题")
 
             Button {
                 appCoordinator.dismissAllErrors()
@@ -101,7 +94,6 @@ struct ErrorBannerView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .accessibilityLabel("忽略所有错误")
         }
     }
 

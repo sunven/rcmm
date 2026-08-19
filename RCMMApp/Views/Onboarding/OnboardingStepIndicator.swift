@@ -26,8 +26,6 @@ struct OnboardingStepIndicator: View {
                 stepCircle(for: step)
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("步骤 \(currentStep.rawValue + 1)，共 3 步，当前：\(currentStep.title)")
     }
 
     @ViewBuilder

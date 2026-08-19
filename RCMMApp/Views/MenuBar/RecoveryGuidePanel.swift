@@ -55,7 +55,6 @@ struct RecoveryGuidePanel: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(isActivatingCurrentExtension)
-                .accessibilityLabel("切换到当前版本扩展")
             }
 
             if healthMonitor.extensionStatus == .otherInstallationEnabled {
@@ -66,7 +65,6 @@ struct RecoveryGuidePanel: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
-                .accessibilityLabel("清理旧扩展副本")
             }
 
             Button {
@@ -76,7 +74,6 @@ struct RecoveryGuidePanel: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(AppPrimaryButtonStyle())
-            .accessibilityLabel("前往系统设置修复扩展")
 
             Button {
                 NSApp.keyWindow?.close()
@@ -85,7 +82,6 @@ struct RecoveryGuidePanel: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .accessibilityLabel("稍后修复")
 
             Button {
                 NSApplication.shared.terminate(nil)
@@ -94,10 +90,7 @@ struct RecoveryGuidePanel: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .accessibilityLabel("退出 rcmm")
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("扩展需要修复")
     }
 
     private var recoveryDetails: some View {
@@ -158,15 +151,12 @@ struct RecoveryGuidePanel: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 32))
                 .foregroundStyle(.green)
-                .accessibilityHidden(true)
 
             Text("扩展已恢复")
                 .font(.headline)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Finder 扩展已恢复")
     }
 
     private func startPolling() {

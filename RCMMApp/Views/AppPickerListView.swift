@@ -51,7 +51,6 @@ struct AppPickerListView<EmptyAction: View>: View {
         if isLoading {
             Spacer()
             ProgressView(loadingTitle)
-                .accessibilityLabel(loadingTitle)
             Spacer()
         } else if apps.isEmpty {
             Spacer()
@@ -122,9 +121,6 @@ struct AppPickerListView<EmptyAction: View>: View {
                 .labelsHidden()
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(app.name)
-        .accessibilityHint(alreadyAdded ? "已添加到菜单" : "勾选以添加到右键菜单")
     }
 }
 

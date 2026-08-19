@@ -15,7 +15,6 @@ struct EnableExtensionStepView: View {
                 Image(systemName: "puzzlepiece.extension.fill")
                     .font(.system(size: 48))
                     .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
 
                 Text("启用 Finder 扩展")
                     .font(.title2.bold())
@@ -68,7 +67,6 @@ struct EnableExtensionStepView: View {
                 Label("Extension 已启用", systemImage: "checkmark.circle.fill")
                     .font(.headline)
                     .foregroundStyle(.green)
-                    .accessibilityLabel("Finder 扩展已成功启用")
             }
 
             // 操作按钮
@@ -82,7 +80,6 @@ struct EnableExtensionStepView: View {
                 }
                 .buttonStyle(AppPrimaryButtonStyle())
                 .controlSize(.large)
-                .accessibilityLabel("打开系统设置中的扩展管理页面")
 
                 Button {
                     checkExtensionStatus()
@@ -93,7 +90,6 @@ struct EnableExtensionStepView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-                .accessibilityLabel("手动检测 Finder 扩展状态")
             }
             .padding(.horizontal)
         }

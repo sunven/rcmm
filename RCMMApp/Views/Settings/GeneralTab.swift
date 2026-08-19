@@ -22,8 +22,6 @@ struct GeneralTab: View {
 
                 GeneralSettingsPanel(title: "开机自启", systemImage: "power") {
                     Toggle("开机时自动启动 rcmm", isOn: $isLoginItemEnabled)
-                        .accessibilityLabel("开机自动启动")
-                        .accessibilityValue(isLoginItemEnabled ? "已启用" : "未启用")
 
                     InlineSettingsMessage(
                         text: isLoginItemEnabled ? "已启用：rcmm 将在开机时自动启动。" : "未启用：需要时可以从应用手动启动。",
@@ -47,7 +45,6 @@ struct GeneralTab: View {
                         Label("重新打开设置向导", systemImage: "arrow.clockwise")
                     }
                     .controlSize(.small)
-                    .accessibilityLabel("重新打开设置向导")
                 }
 
                 GeneralSettingsPanel(title: "扩展维护", systemImage: "wrench.and.screwdriver") {
@@ -75,7 +72,6 @@ struct GeneralTab: View {
                             }
                             .controlSize(.small)
                             .disabled(isActivatingCurrentExtension)
-                            .accessibilityLabel("切换到当前版本扩展")
                         }
 
                         if healthMonitor.extensionStatus != .otherBuildEnabled {
@@ -85,7 +81,6 @@ struct GeneralTab: View {
                                 Label("清理旧扩展副本", systemImage: "trash")
                             }
                             .controlSize(.small)
-                            .accessibilityLabel("清理旧扩展副本")
                         }
 
                         Button {
@@ -95,7 +90,6 @@ struct GeneralTab: View {
                         }
                         .controlSize(.small)
                         .disabled(isRestartingFinder)
-                        .accessibilityLabel("重启 Finder")
 
                         Spacer(minLength: 0)
                     }
@@ -268,7 +262,6 @@ private struct InlineSettingsMessage: View {
                 .foregroundStyle(kind == .neutral ? .secondary : color)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .accessibilityElement(children: .combine)
     }
 
     private var symbolName: String {

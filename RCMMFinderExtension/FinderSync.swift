@@ -58,7 +58,7 @@ class FinderSync: FIFinderSync {
     override var toolbarItemImage: NSImage {
         if let image = NSImage(
             systemSymbolName: "contextualmenu.and.cursorarrow",
-            accessibilityDescription: "rcmm"
+            accessibilityDescription: nil
         ) {
             image.size = NSSize(width: 18, height: 18)
             image.isTemplate = true
@@ -113,10 +113,7 @@ class FinderSync: FIFinderSync {
             menuItem.target = self
         }
 
-        menuItem.image = makeImage(
-            from: descriptor.icon,
-            accessibilityDescription: descriptor.title
-        )
+        menuItem.image = makeImage(from: descriptor.icon)
 
         if !descriptor.children.isEmpty {
             let submenu = NSMenu(title: descriptor.title)
@@ -143,33 +140,21 @@ class FinderSync: FIFinderSync {
         }
     }
 
-    private func makeImage(
-        from icon: FinderMenuIconSource,
-        accessibilityDescription: String
-    ) -> NSImage? {
+    private func makeImage(from icon: FinderMenuIconSource) -> NSImage? {
         switch icon {
         case .symbol(let symbolName):
-            return makeMenuSymbolImage(
-                named: symbolName,
-                accessibilityDescription: accessibilityDescription
-            )
+            return makeMenuSymbolImage(named: symbolName)
         case .applicationIcon(let data, let fallbackSymbolName):
-            return makeApplicationIconImage(from: data) ?? makeMenuSymbolImage(
-                named: fallbackSymbolName,
-                accessibilityDescription: accessibilityDescription
-            )
+            return makeApplicationIconImage(from: data) ?? makeMenuSymbolImage(named: fallbackSymbolName)
         case .none:
             return nil
         }
     }
 
-    private func makeMenuSymbolImage(
-        named symbolName: String,
-        accessibilityDescription: String
-    ) -> NSImage? {
+    private func makeMenuSymbolImage(named symbolName: String) -> NSImage? {
         guard let image = NSImage(
             systemSymbolName: symbolName,
-            accessibilityDescription: accessibilityDescription
+            accessibilityDescription: nil
         ) else {
             logger.error("无法创建系统图标: \(symbolName)")
             return nil

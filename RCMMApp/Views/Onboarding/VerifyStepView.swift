@@ -10,7 +10,6 @@ struct VerifyStepView: View {
                 Image(systemName: "hand.tap")
                     .font(.system(size: 44))
                     .foregroundStyle(Color.accentColor)
-                    .accessibilityHidden(true)
 
                 Text("现在去 Finder 试试右键！")
                     .font(.title2.bold())
@@ -30,11 +29,8 @@ struct VerifyStepView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Label("在 Finder 中右键一个目录", systemImage: "1.circle.fill")
-                        .accessibilityLabel("步骤一：在 Finder 中右键一个目录")
                     Label("点击菜单中的应用", systemImage: "2.circle.fill")
-                        .accessibilityLabel("步骤二：点击菜单中的应用")
                     Label("确认应用打开到对应目录", systemImage: "3.circle.fill")
-                        .accessibilityLabel("步骤三：确认应用打开到对应目录")
                 }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -50,8 +46,6 @@ struct VerifyStepView: View {
                 Toggle("开机自动启动", isOn: $launchAtLogin)
                     .labelsHidden()
                     .toggleStyle(.switch)
-                    .accessibilityLabel("开机自动启动")
-                    .accessibilityHint("开启后应用将在登录时自动启动")
             }
             .padding(.horizontal)
 

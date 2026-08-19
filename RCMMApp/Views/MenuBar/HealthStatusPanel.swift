@@ -38,9 +38,6 @@ struct HealthStatusPanel: View {
                 .layoutPriority(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("扩展状态：\(status.statusDescription)")
-        .accessibilityValue(status.statusDescription)
     }
 }
 

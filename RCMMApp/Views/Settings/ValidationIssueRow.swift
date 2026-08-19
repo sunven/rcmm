@@ -36,6 +36,5 @@ struct SaveConfirmationLabel: View {
                 .font(.caption2.weight(.medium))
         }
         .foregroundStyle(.green)
-        .accessibilityLabel(message)
     }
 }

@@ -38,7 +38,6 @@ struct MenuRowActionsMenu: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help("更多操作")
-            .accessibilityLabel("更多操作")
         }
     }
 }

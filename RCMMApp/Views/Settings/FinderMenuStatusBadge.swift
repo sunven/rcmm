@@ -20,7 +20,6 @@ struct FinderMenuStatusBadge: View {
             Capsule()
                 .fill(FinderMenuStatusStyle.color(for: summary.statusKind).opacity(0.12))
         )
-        .accessibilityLabel("状态：\(summary.statusText)")
     }
 }
 

@@ -38,7 +38,6 @@ struct NormalPopoverView: View {
             .buttonStyle(MenuItemButtonStyle())
             .environment(\.isHovered, settingsHovered)
             .onHover { settingsHovered = $0 }
-            .accessibilityLabel("打开设置")
             .keyboardShortcut(",", modifiers: .command)
 
             Button {
@@ -50,7 +49,6 @@ struct NormalPopoverView: View {
             .buttonStyle(MenuItemButtonStyle())
             .environment(\.isHovered, quitHovered)
             .onHover { quitHovered = $0 }
-            .accessibilityLabel("退出 rcmm")
             .keyboardShortcut("q", modifiers: .command)
         }
         .padding(10)

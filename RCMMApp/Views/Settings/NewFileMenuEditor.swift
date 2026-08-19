@@ -275,7 +275,6 @@ private struct NewFileTemplateCard: View {
             .foregroundStyle(status.color)
             .frame(width: 16, height: 18)
             .help(status.label)
-            .accessibilityLabel("模板状态：\(status.label)")
     }
 
     @ViewBuilder
@@ -483,7 +482,6 @@ private struct TemplateFileBadge: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.accentColor.opacity(0.10))
         )
-        .accessibilityHidden(true)
     }
 
     private var badgeText: String {

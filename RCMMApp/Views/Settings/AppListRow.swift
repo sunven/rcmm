@@ -9,8 +9,6 @@ struct AppListRow: View {
     var onMoveDown: (() -> Void)?
     var onDelete: (() -> Void)?
     var onToggle: ((Bool) -> Void)?
-    var position: Int?
-    var total: Int?
 
     private var isShellCommand: Bool {
         menuItem.executionMode == .currentDirectory
@@ -64,21 +62,6 @@ struct AppListRow: View {
         .frame(minHeight: 40)
         .controlSize(.small)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(menuItem.appName)，\(summary.typeLabel)，\(summary.statusText)")
-        .ifLet(position) { view, pos in
-            view.accessibilityValue("第 \(pos) 项，共 \(total ?? 1) 项")
-        }
-        .accessibilityHint(accessibilityHint)
-        .ifLet(onMoveUp) { view, action in
-            view.accessibilityAction(named: "上移", action)
-        }
-        .ifLet(onMoveDown) { view, action in
-            view.accessibilityAction(named: "下移", action)
-        }
-        .ifLet(onDelete) { view, action in
-            view.accessibilityAction(named: "删除", action)
-        }
     }
 
     @ViewBuilder
@@ -98,12 +81,6 @@ struct AppListRow: View {
         summary.statusKind == .unavailable || summary.statusKind == .failed
     }
 
-    private var accessibilityHint: String {
-        if isShellCommand {
-            return "右键菜单自定义命令项"
-        }
-        return summary.statusKind == .unavailable ? "应用未找到，请检查是否已安装" : "右键菜单应用项"
-    }
 }
 
 struct FinderMenuRowIcon<Content: View>: View {
@@ -152,9 +129,7 @@ struct FinderMenuRowIcon<Content: View>: View {
             statusDetail: nil,
             allowsDelete: true
         ),
-        onToggle: { _ in },
-        position: 1,
-        total: 3
+        onToggle: { _ in }
     )
     .padding()
 }
@@ -182,9 +157,7 @@ struct FinderMenuRowIcon<Content: View>: View {
             statusDetail: nil,
             allowsDelete: true
         ),
-        onToggle: { _ in },
-        position: 2,
-        total: 3
+        onToggle: { _ in }
     )
     .padding()
 }
@@ -212,20 +185,7 @@ struct FinderMenuRowIcon<Content: View>: View {
             statusDetail: nil,
             allowsDelete: true
         ),
-        onToggle: { _ in },
-        position: 3,
-        total: 3
+        onToggle: { _ in }
     )
     .padding()
-}
-
-extension View {
-    @ViewBuilder
-    func ifLet<T, V: View>(_ value: T?, transform: (Self, T) -> V) -> some View {
-        if let value = value {
-            transform(self, value)
-        } else {
-            self
-        }
-    }
 }

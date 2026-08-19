@@ -8,8 +8,6 @@ struct CompositeListRow: View {
     var onMoveDown: (() -> Void)?
     var onDelete: (() -> Void)?
     var onToggle: ((Bool) -> Void)?
-    var position: Int?
-    var total: Int?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -58,19 +56,5 @@ struct CompositeListRow: View {
         .frame(minHeight: 40)
         .controlSize(.small)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(config.name)，组合命令，\(summary.statusText)")
-        .ifLet(position) { view, pos in
-            view.accessibilityValue("第 \(pos) 项，共 \(total ?? 1) 项")
-        }
-        .ifLet(onMoveUp) { view, action in
-            view.accessibilityAction(named: "上移", action)
-        }
-        .ifLet(onMoveDown) { view, action in
-            view.accessibilityAction(named: "下移", action)
-        }
-        .ifLet(onDelete) { view, action in
-            view.accessibilityAction(named: "删除", action)
-        }
     }
 }

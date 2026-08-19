@@ -14,8 +14,6 @@ struct MenuBarStatusIcon: View {
 
     var body: some View {
         statusImage
-            .accessibilityLabel("rcmm")
-            .accessibilityValue(status.statusDescription)
     }
 
     @ViewBuilder

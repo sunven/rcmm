@@ -238,7 +238,6 @@ struct MenuConfigTab: View {
             Capsule()
                 .fill(Color.primary.opacity(0.055))
         )
-        .accessibilityLabel("\(label)：\(value)")
     }
 
     private var menuList: some View {
@@ -314,7 +313,6 @@ struct MenuConfigTab: View {
                 }
                 .pickerStyle(.segmented)
                 .controlSize(.small)
-                .accessibilityLabel("右键菜单显示方式")
 
                 Spacer()
             }
@@ -345,7 +343,6 @@ struct MenuConfigTab: View {
                 .menuStyle(.button)
                 .buttonStyle(AppPrimaryButtonStyle())
                 .controlSize(.small)
-                .accessibilityLabel("添加右键菜单项")
 
                 Spacer()
             }
@@ -379,9 +376,7 @@ struct MenuConfigTab: View {
                     onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
                     onToggle: { isEnabled in
                         appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
-                    },
-                    position: index + 1,
-                    total: configStore.menuEntries.count
+                    }
                 )
             }
             .onTapGesture {
@@ -397,9 +392,7 @@ struct MenuConfigTab: View {
                     onDelete: { requestDeletion(of: entry, title: summary.title) },
                     onToggle: { isEnabled in
                         appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
-                    },
-                    position: index + 1,
-                    total: configStore.menuEntries.count
+                    }
                 )
             }
             .onTapGesture {
@@ -415,9 +408,7 @@ struct MenuConfigTab: View {
                     onDelete: { requestDeletion(of: entry, title: summary.title) },
                     onToggle: { isEnabled in
                         appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
-                    },
-                    position: index + 1,
-                    total: configStore.menuEntries.count
+                    }
                 )
             }
             .onTapGesture {
@@ -432,9 +423,7 @@ struct MenuConfigTab: View {
                     onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
                     onToggle: { isEnabled in
                         appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
-                    },
-                    position: index + 1,
-                    total: configStore.menuEntries.count
+                    }
                 )
             }
             .onTapGesture {
@@ -634,7 +623,6 @@ private struct AlignedMenuRow<Label: View>: View {
                 .contentShape(Rectangle())
                 .gesture(dragGesture)
                 .help("拖动调整 Finder 菜单顺序")
-                .accessibilityLabel("拖动调整 Finder 菜单顺序")
 
             label
         }
