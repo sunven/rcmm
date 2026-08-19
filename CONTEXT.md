@@ -15,6 +15,30 @@
 - **Built-in Entry** — 内置功能菜单项（复制路径、在终端打开等）
 - **New File Template** — 新建文件模板菜单项
 
+### Composite Command（组合命令）
+
+由多个按顺序执行的应用或 Shell 步骤组成的一个 Finder 菜单项。它在 Finder 中表现为单个可点击的叶子项，不是承载其他组合命令的子菜单容器。
+
+### Composite Command Template（组合命令模板）
+
+预先定义的一组组合命令步骤，用于创建新的组合命令。模板创建出的组合命令是独立配置，可被用户修改且不再跟随模板变化。
+
+### Composite Command Settings（组合命令设置）
+
+管理组合命令模板和用户组合命令的设置区域，负责创建、详细编辑和单项启停；Finder 菜单设置仍提供所有菜单项的统一排序、启停和状态总览。
+
+### Composite Command Step（组合命令步骤）
+
+组合命令中按顺序执行的单个动作。步骤分为应用步骤和 Shell 步骤，步骤本身不是独立的 Finder 菜单项。
+
+### Application Step（应用步骤）
+
+调用用户选择的应用来处理当前 Finder 目标的组合命令步骤。
+
+### Shell Step（Shell 步骤）
+
+执行 Shell 命令模板的组合命令步骤，可使用当前 Finder 目标等受支持的占位符。
+
 ### Finder Menu Descriptor（Finder 菜单描述）
 
 Menu Entry 在 Finder 右键菜单里的投影，扩展侧构造菜单与反解点击的唯一入口。树形结构，

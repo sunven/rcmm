@@ -192,6 +192,11 @@ final class MenuConfigStore {
 
     @discardableResult
     func addCompositeCommand(_ composite: CompositeMenuItemConfig) -> UUID {
+        var composite = composite
+        composite.name = uniqueCompositeName(
+            preferredName: composite.name,
+            excluding: composite.id
+        )
         menuEntries.append(.composite(composite))
         return composite.id
     }
@@ -300,7 +305,20 @@ final class MenuConfigStore {
 
     func updateCompositeName(for compositeId: UUID, name: String) {
         updateComposite(for: compositeId) { config in
-            config.name = name
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            config.name = trimmedName.isEmpty
+                ? ""
+                : uniqueCompositeName(preferredName: trimmedName, excluding: compositeId)
+        }
+    }
+
+    func updateCompositeIcon(for compositeId: UUID, iconName: String?) {
+        updateComposite(for: compositeId) { config in
+            if let iconName {
+                config.iconName = iconName.nilIfBlank
+            } else {
+                config.iconName = nil
+            }
         }
     }
 
@@ -337,6 +355,31 @@ final class MenuConfigStore {
         }
     }
 
+    func addAppStep(to compositeId: UUID, appInfo: AppInfo) {
+        updateComposite(for: compositeId) { config in
+            config.steps.append(
+                CompositeCommandStep(
+                    kind: .app,
+                    name: appInfo.name,
+                    commandTemplate: preferredCommandTemplate(for: appInfo),
+                    appPath: appInfo.path,
+                    bundleId: appInfo.bundleId
+                )
+            )
+        }
+    }
+
+    func replaceAppStep(compositeId: UUID, stepId: UUID, appInfo: AppInfo) {
+        updateComposite(for: compositeId) { config in
+            guard let stepIndex = config.steps.firstIndex(where: { $0.id == stepId }),
+                  config.steps[stepIndex].kind == .app else { return }
+            config.steps[stepIndex].name = appInfo.name
+            config.steps[stepIndex].commandTemplate = preferredCommandTemplate(for: appInfo)
+            config.steps[stepIndex].appPath = appInfo.path
+            config.steps[stepIndex].bundleId = appInfo.bundleId
+        }
+    }
+
     func removeCompositeStep(compositeId: UUID, stepId: UUID) {
         updateComposite(for: compositeId) { config in
             config.steps.removeAll { $0.id == stepId }
@@ -347,6 +390,11 @@ final class MenuConfigStore {
         updateComposite(for: compositeId) { config in
             config.steps.move(fromOffsets: source, toOffset: destination)
         }
+    }
+
+    func removeEntry(withID entryID: String) {
+        guard let index = menuEntries.firstIndex(where: { $0.id == entryID }) else { return }
+        removeEntry(at: IndexSet(integer: index))
     }
 
     private func updateComposite(
@@ -360,6 +408,12 @@ final class MenuConfigStore {
         guard case .composite(var config) = menuEntries[index] else { return }
         mutate(&config)
         menuEntries[index] = .composite(config)
+    }
+
+    private func preferredCommandTemplate(for appInfo: AppInfo) -> String {
+        appInfo.bundleId == "com.microsoft.VSCode"
+            ? CompositeCommandTemplates.vsCodeCLI
+            : CompositeCommandTemplates.legacyOpenApp
     }
 
     // MARK: - New File Menu
@@ -457,6 +511,23 @@ final class MenuConfigStore {
         return uniqueName(
             preferredName: preferredName,
             fallbackName: "新建",
+            existingNames: existingNames
+        )
+    }
+
+    private func uniqueCompositeName(preferredName: String, excluding compositeID: UUID) -> String {
+        let existingNames = Set(
+            menuEntries.compactMap { entry -> String? in
+                guard case .composite(let config) = entry, config.id != compositeID else {
+                    return nil
+                }
+                let trimmed = config.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        )
+        return uniqueName(
+            preferredName: preferredName,
+            fallbackName: "新组合命令",
             existingNames: existingNames
         )
     }

@@ -2,12 +2,12 @@ import RCMMShared
 import SwiftUI
 
 struct MenuConfigTab: View {
-    @Environment(ApplicationDiscoveryCoordinator.self) private var applicationDiscovery
     @Environment(AppCoordinator.self) private var appCoordinator
     @Environment(MenuConfigStore.self) private var configStore
 
     @Binding var selectedEntryID: String?
     var onOpenNewFileSettings: () -> Void = {}
+    var onOpenCompositeSettings: (String) -> Void = { _ in }
 
     @State private var showingAppSelection = false
     @State private var reorderSession: MenuReorderSession?
@@ -33,6 +33,10 @@ struct MenuConfigTab: View {
                 summary: selectedSummary,
                 entry: selectedEntry,
                 onOpenNewFileSettings: onOpenNewFileSettings,
+                onOpenCompositeSettings: {
+                    guard let selectedEntryID else { return }
+                    onOpenCompositeSettings(selectedEntryID)
+                },
                 onUpdateCustomCommand: { config, name, command, executionMode in
                     appCoordinator.edit {
                         $0.updateCustomCommand(
@@ -42,31 +46,6 @@ struct MenuConfigTab: View {
                             executionMode: executionMode
                         )
                     }
-                },
-                onRenameComposite: { config, name in
-                    appCoordinator.edit { $0.updateCompositeName(for: config.id, name: name) }
-                },
-                onAddCompositeShellStep: { config in
-                    appCoordinator.edit { $0.addShellStep(to: config.id) }
-                },
-                onUpdateCompositeStep: { config, step, name, commandTemplate, appPath, bundleId, isEnabled in
-                    appCoordinator.edit {
-                        $0.updateCompositeStep(
-                            compositeId: config.id,
-                            stepId: step.id,
-                            name: name,
-                            commandTemplate: commandTemplate,
-                            appPath: appPath,
-                            bundleId: bundleId,
-                            isEnabled: isEnabled
-                        )
-                    }
-                },
-                onDeleteCompositeStep: { config, stepID in
-                    appCoordinator.edit { $0.removeCompositeStep(compositeId: config.id, stepId: stepID) }
-                },
-                onMoveCompositeStep: { config, source, destination in
-                    appCoordinator.edit { $0.moveCompositeStep(compositeId: config.id, from: source, to: destination) }
                 }
             )
         }
@@ -322,19 +301,8 @@ struct MenuConfigTab: View {
                     Button("添加应用") {
                         showingAppSelection = true
                     }
-                    Button("VS Code + Terminal") {
-                        Task { @MainActor in
-                            if let id = await applicationDiscovery.addEditorTerminalPreset() {
-                                selectEntry(id.uuidString)
-                            }
-                        }
-                    }
                     Button("Git Pull 命令") {
                         let id = appCoordinator.edit { $0.addGitPullCommand() }
-                        selectEntry(id.uuidString)
-                    }
-                    Button("新组合命令") {
-                        let id = appCoordinator.edit { $0.addEmptyCompositeCommand() }
                         selectEntry(id.uuidString)
                     }
                 } label: {
@@ -347,16 +315,6 @@ struct MenuConfigTab: View {
                 Spacer()
             }
 
-            if let message = applicationDiscovery.presetMessage {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .foregroundStyle(.yellow)
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
         .padding(Layout.footerPadding)
         .background(.bar)
@@ -413,6 +371,7 @@ struct MenuConfigTab: View {
             }
             .onTapGesture {
                 selectedEntryID = entry.id
+                onOpenCompositeSettings(entry.id)
             }
         case .newFile(let config):
             AlignedMenuRow(dragGesture: dragGesture(for: entry)) {

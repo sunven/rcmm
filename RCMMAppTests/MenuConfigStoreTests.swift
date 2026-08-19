@@ -155,4 +155,94 @@ struct MenuConfigStoreTests {
             return config.id == firstID && config.name == firstName
         })
     }
+
+    @Test("组合命令模板副本遇到重名时追加序号")
+    func addCompositeCommandMakesNameUnique() throws {
+        let harness = try PipelineHarness()
+        defer { harness.cleanup() }
+        let store = harness.makeConfigStore()
+        let firstID = store.addCompositeCommand(
+            CompositeMenuItemConfig(name: "编辑器 + Terminal", steps: [])
+        )
+        let secondID = store.addCompositeCommand(
+            CompositeMenuItemConfig(name: "编辑器 + Terminal", steps: [])
+        )
+
+        let names = store.menuEntries.compactMap { entry -> String? in
+            guard case .composite(let config) = entry,
+                  config.id == firstID || config.id == secondID else { return nil }
+            return config.name
+        }
+        #expect(names == ["编辑器 + Terminal", "编辑器 + Terminal 2"])
+    }
+
+    @Test("应用步骤保存应用路径、Bundle ID 和首选命令模板")
+    func addAppStepStoresApplicationMetadata() throws {
+        let harness = try PipelineHarness()
+        defer { harness.cleanup() }
+        let store = harness.makeConfigStore()
+        let compositeID = store.addEmptyCompositeCommand()
+        let app = AppInfo(
+            name: "Visual Studio Code",
+            bundleId: "com.microsoft.VSCode",
+            path: "/Applications/Visual Studio Code.app",
+            category: .editor
+        )
+
+        store.addAppStep(to: compositeID, appInfo: app)
+
+        let step = store.menuEntries.compactMap { entry -> CompositeCommandStep? in
+            guard case .composite(let config) = entry, config.id == compositeID else { return nil }
+            return config.steps.first
+        }.first
+        #expect(step?.kind == .app)
+        #expect(step?.appPath == app.path)
+        #expect(step?.bundleId == app.bundleId)
+        #expect(step?.commandTemplate == CompositeCommandTemplates.vsCodeCLI)
+    }
+
+    @Test("替换应用步骤会更新应用元数据")
+    func replaceAppStepUpdatesApplicationMetadata() throws {
+        let harness = try PipelineHarness()
+        defer { harness.cleanup() }
+        let store = harness.makeConfigStore()
+        let compositeID = store.addEmptyCompositeCommand()
+        store.addAppStep(
+            to: compositeID,
+            appInfo: AppInfo(name: "旧应用", path: "/Applications/Old.app")
+        )
+        let stepIDs = store.menuEntries.compactMap { entry -> UUID? in
+            guard case .composite(let config) = entry, config.id == compositeID else { return nil }
+            return config.steps.first?.id
+        }
+        let stepID = try #require(stepIDs.first)
+        let replacement = AppInfo(
+            name: "新应用",
+            bundleId: "com.example.new",
+            path: "/Applications/New.app"
+        )
+
+        store.replaceAppStep(compositeId: compositeID, stepId: stepID, appInfo: replacement)
+
+        let step = store.menuEntries.compactMap { entry -> CompositeCommandStep? in
+            guard case .composite(let config) = entry, config.id == compositeID else { return nil }
+            return config.steps.first
+        }.first
+        #expect(step?.name == replacement.name)
+        #expect(step?.appPath == replacement.path)
+        #expect(step?.bundleId == replacement.bundleId)
+        #expect(step?.commandTemplate == CompositeCommandTemplates.legacyOpenApp)
+    }
+
+    @Test("按 ID 删除组合命令")
+    func removeEntryByIDRemovesComposite() throws {
+        let harness = try PipelineHarness()
+        defer { harness.cleanup() }
+        let store = harness.makeConfigStore()
+        let compositeID = store.addEmptyCompositeCommand()
+
+        store.removeEntry(withID: compositeID.uuidString)
+
+        #expect(!store.menuEntries.contains { $0.id == compositeID.uuidString })
+    }
 }

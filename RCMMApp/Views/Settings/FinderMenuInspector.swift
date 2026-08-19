@@ -6,12 +6,8 @@ struct FinderMenuInspector: View {
     let summary: FinderMenuEntrySummary?
     let entry: MenuEntry?
     var onOpenNewFileSettings: () -> Void
+    var onOpenCompositeSettings: () -> Void = {}
     var onUpdateCustomCommand: (MenuItemConfig, String, String?, CustomCommandExecutionMode) -> Void
-    var onRenameComposite: (CompositeMenuItemConfig, String) -> Void
-    var onAddCompositeShellStep: (CompositeMenuItemConfig) -> Void
-    var onUpdateCompositeStep: (CompositeMenuItemConfig, CompositeCommandStep, String, String, String?, String?, Bool) -> Void
-    var onDeleteCompositeStep: (CompositeMenuItemConfig, UUID) -> Void
-    var onMoveCompositeStep: (CompositeMenuItemConfig, IndexSet, Int) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -166,35 +162,19 @@ struct FinderMenuInspector: View {
                 )
                 .id(config.id)
             }
-        case .composite(let config):
-            InspectorPanel(title: "组合命令编辑") {
-                CompositeCommandEditor(
-                    config: config,
-                    onRename: { name in
-                        onRenameComposite(config, name)
-                    },
-                    onAddShellStep: {
-                        onAddCompositeShellStep(config)
-                    },
-                    onUpdateStep: { step, name, commandTemplate, appPath, bundleId, isEnabled in
-                        onUpdateCompositeStep(
-                            config,
-                            step,
-                            name,
-                            commandTemplate,
-                            appPath,
-                            bundleId,
-                            isEnabled
-                        )
-                    },
-                    onDeleteStep: { stepID in
-                        onDeleteCompositeStep(config, stepID)
-                    },
-                    onMoveStep: { source, destination in
-                        onMoveCompositeStep(config, source, destination)
-                    }
-                )
-                .id(config.id)
+        case .composite:
+            InspectorPanel(title: "组合命令") {
+                Text("组合命令在独立设置页中创建和编辑。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    onOpenCompositeSettings()
+                } label: {
+                    Label("打开组合命令设置", systemImage: "arrow.right")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
         case .builtIn, .newFile, .none:
             EmptyView()

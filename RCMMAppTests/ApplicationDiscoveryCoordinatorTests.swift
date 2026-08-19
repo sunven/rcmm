@@ -48,6 +48,68 @@ struct ApplicationDiscoveryCoordinatorTests {
         #expect(coordinator.presetMessage == nil)
     }
 
+    @Test("编辑器 + Terminal + Shell 模板追加可编辑 Shell 步骤")
+    func createEditorTerminalShellPreset() async {
+        let editor = AppInfo(
+            name: "Visual Studio Code",
+            bundleId: "com.microsoft.VSCode",
+            path: "/Applications/Visual Studio Code.app",
+            category: .editor
+        )
+        let terminal = AppInfo(
+            name: "Terminal",
+            bundleId: "com.apple.Terminal",
+            path: "/System/Applications/Utilities/Terminal.app",
+            category: .terminal
+        )
+        var addedComposite: CompositeMenuItemConfig?
+        let coordinator = ApplicationDiscoveryCoordinator(
+            scanApplications: { [editor, terminal] },
+            addComposite: { composite in
+                addedComposite = composite
+                return composite.id
+            }
+        )
+
+        let id = await coordinator.addEditorTerminalShellPreset()
+
+        #expect(id == addedComposite?.id)
+        #expect(addedComposite?.steps.count == 3)
+        #expect(addedComposite?.steps.last?.kind == .shell)
+        #expect(addedComposite?.steps.last?.commandTemplate == "echo \"当前目标：{path}\"")
+    }
+
+    @Test("应用 + Terminal 模板使用所选应用创建独立组合")
+    func createAppTerminalPreset() async {
+        let app = AppInfo(
+            name: "Preview",
+            bundleId: "com.apple.Preview",
+            path: "/System/Applications/Preview.app",
+            category: .other
+        )
+        let terminal = AppInfo(
+            name: "Terminal",
+            bundleId: "com.apple.Terminal",
+            path: "/System/Applications/Utilities/Terminal.app",
+            category: .terminal
+        )
+        var addedComposite: CompositeMenuItemConfig?
+        let coordinator = ApplicationDiscoveryCoordinator(
+            scanApplications: { [terminal] },
+            addComposite: { composite in
+                addedComposite = composite
+                return composite.id
+            }
+        )
+        await coordinator.refresh()
+
+        let id = coordinator.addAppTerminalPreset(appInfo: app)
+
+        #expect(id == addedComposite?.id)
+        #expect(addedComposite?.name == "Preview + Terminal")
+        #expect(addedComposite?.steps.map(\.bundleId) == ["com.apple.Preview", "com.apple.Terminal"])
+    }
+
     @Test("缺少编辑器或终端时保留可操作的提示")
     func missingPresetAppsShowsMessage() async {
         let coordinator = ApplicationDiscoveryCoordinator(
