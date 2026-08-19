@@ -46,18 +46,12 @@ struct NewFileListRow: View {
                 .help(config.isEnabled ? "停用此新建菜单" : "启用此新建菜单")
             }
 
-            if let onDelete {
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 18, height: 18)
-                }
-                .buttonStyle(.plain)
-                .help("删除此新建菜单")
-            }
-
-            MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
+            MenuRowActionsMenu(
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown,
+                onDelete: onDelete,
+                deleteLabel: "删除新建菜单"
+            )
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)

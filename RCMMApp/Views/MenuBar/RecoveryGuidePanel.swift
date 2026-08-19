@@ -41,54 +41,10 @@ struct RecoveryGuidePanel: View {
 
             Divider()
 
-            Text(primaryRecoveryText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if let detail = healthMonitor.extensionStatusDetail {
-                Text(detail)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .textSelection(.enabled)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            ScrollView {
+                recoveryDetails
             }
-
-            if let activationError {
-                Text(activationError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Text(recoveryCommandHint)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if healthMonitor.extensionStatus != .otherBuildEnabled {
-                Text(PluginKitService.extensionEnableCommand)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .textSelection(.enabled)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Text("必要时请关闭旧的 rcmm 调试/测试版本，并重新启动 Finder。")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxHeight: 240)
 
             if healthMonitor.extensionStatus == .otherBuildEnabled {
                 Button {
@@ -142,6 +98,59 @@ struct RecoveryGuidePanel: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("扩展需要修复")
+    }
+
+    private var recoveryDetails: some View {
+        VStack(spacing: 8) {
+            Text(primaryRecoveryText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let detail = healthMonitor.extensionStatusDetail {
+                Text(detail)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .textSelection(.enabled)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let activationError {
+                Text(activationError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Text(recoveryCommandHint)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if healthMonitor.extensionStatus != .otherBuildEnabled {
+                Text(PluginKitService.extensionEnableCommand)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .textSelection(.enabled)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Text("必要时请关闭旧的 rcmm 调试/测试版本，并重新启动 Finder。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var recoverySuccessContent: some View {

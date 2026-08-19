@@ -15,6 +15,7 @@ struct MenuConfigTab: View {
     @State private var dragLocation: CGPoint?
     @State private var dragOverlaySize: CGSize = .zero
     @State private var dragGrabOffset: CGSize = .zero
+    @State private var entryPendingDeletion: EntryDeletionRequest?
 
     private enum Layout {
         static let rowInsets = EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 10)
@@ -76,6 +77,28 @@ struct MenuConfigTab: View {
                     selectEntry(id.uuidString)
                 }
             }
+        }
+        .confirmationDialog(
+            deletionDialogTitle,
+            isPresented: Binding(
+                get: { entryPendingDeletion != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        entryPendingDeletion = nil
+                    }
+                }
+            )
+        ) {
+            Button("删除菜单项", role: .destructive) {
+                guard let request = entryPendingDeletion else { return }
+                removeItem(withID: request.id)
+                entryPendingDeletion = nil
+            }
+            Button("取消", role: .cancel) {
+                entryPendingDeletion = nil
+            }
+        } message: {
+            Text("删除后，该菜单项及其配置将不再出现在 Finder 右键菜单中。")
         }
         .onAppear {
             reconcileSelection()
@@ -371,7 +394,7 @@ struct MenuConfigTab: View {
                     summary: summary,
                     onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
                     onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
-                    onDelete: { removeItem(at: index) },
+                    onDelete: { requestDeletion(of: entry, title: summary.title) },
                     onToggle: { isEnabled in
                         appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
                     },
@@ -389,7 +412,7 @@ struct MenuConfigTab: View {
                     summary: summary,
                     onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
                     onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
-                    onDelete: { removeItem(at: index) },
+                    onDelete: { requestDeletion(of: entry, title: summary.title) },
                     onToggle: { isEnabled in
                         appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
                     },
@@ -527,7 +550,19 @@ struct MenuConfigTab: View {
         }
     }
 
-    private func removeItem(at index: Int) {
+    private var deletionDialogTitle: String {
+        guard let request = entryPendingDeletion else {
+            return "删除菜单项？"
+        }
+        return "删除“\(request.title)”？"
+    }
+
+    private func requestDeletion(of entry: MenuEntry, title: String) {
+        entryPendingDeletion = EntryDeletionRequest(id: entry.id, title: title)
+    }
+
+    private func removeItem(withID id: String) {
+        guard let index = configStore.menuEntries.firstIndex(where: { $0.id == id }) else { return }
         guard configStore.menuEntries.indices.contains(index) else { return }
         let removedID = configStore.menuEntries[index].id
         appCoordinator.edit { $0.removeEntry(at: IndexSet(integer: index)) }
@@ -554,6 +589,11 @@ struct MenuConfigTab: View {
 private enum MenuRowAlignment {
     static let leadingSlotWidth: CGFloat = 18
     static let rowHeight: CGFloat = 40
+}
+
+private struct EntryDeletionRequest {
+    let id: String
+    let title: String
 }
 
 private enum MenuListCoordinateSpace {

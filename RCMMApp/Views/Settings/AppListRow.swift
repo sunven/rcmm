@@ -52,18 +52,12 @@ struct AppListRow: View {
                 .help(menuItem.isEnabled ? "停用此菜单项" : "启用此菜单项")
             }
 
-            if let onDelete = onDelete {
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 18, height: 18)
-                }
-                .buttonStyle(.plain)
-                .help("删除此菜单项")
-            }
-
-            MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
+            MenuRowActionsMenu(
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown,
+                onDelete: onDelete,
+                deleteLabel: "删除菜单项"
+            )
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)

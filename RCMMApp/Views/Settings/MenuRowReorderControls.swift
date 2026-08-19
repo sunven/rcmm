@@ -1,38 +1,44 @@
 import SwiftUI
 
-struct MenuRowReorderControls: View {
+struct MenuRowActionsMenu: View {
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
+    var onDelete: (() -> Void)?
+    var deleteLabel = "删除"
 
+    @ViewBuilder
     var body: some View {
-        HStack(spacing: 2) {
-            Button {
-                onMoveUp?()
-            } label: {
-                Image(systemName: "chevron.up")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 16, height: 18)
-            }
-            .buttonStyle(.plain)
-            .disabled(onMoveUp == nil)
-            .opacity(onMoveUp == nil ? 0.28 : 1)
-            .help("上移")
-            .accessibilityLabel("上移")
+        if onMoveUp != nil || onMoveDown != nil || onDelete != nil {
+            Menu {
+                if let onMoveUp {
+                    Button(action: onMoveUp) {
+                        Label("上移", systemImage: "arrow.up")
+                    }
+                }
 
-            Button {
-                onMoveDown?()
+                if let onMoveDown {
+                    Button(action: onMoveDown) {
+                        Label("下移", systemImage: "arrow.down")
+                    }
+                }
+
+                if let onDelete {
+                    Divider()
+                    Button(role: .destructive, action: onDelete) {
+                        Label(deleteLabel, systemImage: "trash")
+                    }
+                }
             } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-                    .frame(width: 16, height: 18)
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
             }
-            .buttonStyle(.plain)
-            .disabled(onMoveDown == nil)
-            .opacity(onMoveDown == nil ? 0.28 : 1)
-            .help("下移")
-            .accessibilityLabel("下移")
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("更多操作")
+            .accessibilityLabel("更多操作")
         }
-        .foregroundStyle(.secondary)
-        .frame(width: 36)
     }
 }

@@ -53,7 +53,7 @@ struct ErrorBannerView: View {
     private func errorRow(record: ErrorRecord) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.yellow)
+                .foregroundStyle(.red)
                 .font(.caption)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {

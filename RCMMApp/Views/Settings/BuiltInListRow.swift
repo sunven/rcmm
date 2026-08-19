@@ -47,7 +47,7 @@ struct BuiltInListRow: View {
                 .help(item.isEnabled ? "停用此菜单项" : "启用此菜单项")
             }
 
-            MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
+            MenuRowActionsMenu(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)

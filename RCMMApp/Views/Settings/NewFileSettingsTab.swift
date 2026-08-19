@@ -131,14 +131,14 @@ struct NewFileSettingsTab: View {
     }
 
     private func headerStatusBadge(_ status: MenuEntryStatus) -> some View {
-        Label(status.text, systemImage: statusSymbol(for: status.kind))
+        Label(status.text, systemImage: FinderMenuStatusStyle.symbol(for: status.kind))
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(statusColor(for: status.kind))
+            .foregroundStyle(FinderMenuStatusStyle.color(for: status.kind))
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
                 Capsule()
-                    .fill(statusColor(for: status.kind).opacity(0.11))
+                    .fill(FinderMenuStatusStyle.color(for: status.kind).opacity(0.11))
             )
             .accessibilityLabel("状态：\(status.text)")
     }
@@ -167,36 +167,6 @@ struct NewFileSettingsTab: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(Color.accentColor.opacity(0.07))
         )
-    }
-
-    private func statusSymbol(for kind: FinderMenuEntryStatusKind) -> String {
-        switch kind {
-        case .disabled:
-            return "pause.circle.fill"
-        case .unavailable, .failed:
-            return "exclamationmark.triangle.fill"
-        case .partiallyAvailable, .warning:
-            return "exclamationmark.circle.fill"
-        case .syncing:
-            return "arrow.triangle.2.circlepath"
-        case .ready:
-            return "checkmark.circle.fill"
-        case .system:
-            return "gearshape.fill"
-        }
-    }
-
-    private func statusColor(for kind: FinderMenuEntryStatusKind) -> Color {
-        switch kind {
-        case .disabled, .partiallyAvailable, .warning:
-            return NewFileSettingsColor.warning
-        case .unavailable, .failed:
-            return NewFileSettingsColor.error
-        case .syncing, .system:
-            return NewFileSettingsColor.info
-        case .ready:
-            return NewFileSettingsColor.success
-        }
     }
 
     private var emptyState: some View {

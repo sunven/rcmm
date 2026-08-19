@@ -25,25 +25,7 @@ struct OnboardingFlowView: View {
 
             Divider()
 
-            // 步骤内容
-            Group {
-                if isCompleting {
-                    completionConfirmationView
-                } else {
-                    switch currentStep {
-                    case .enableExtension:
-                        EnableExtensionStepView(
-                            isExtensionEnabled: $isExtensionEnabled,
-                            autoAdvanceWhenEnabled: autoAdvanceWhenExtensionEnabled,
-                            onNext: { advanceFromExtensionStep() }
-                        )
-                    case .selectApps:
-                        SelectAppsStepView(selectedAppIds: $selectedAppIds)
-                    case .verify:
-                        VerifyStepView(launchAtLogin: $launchAtLogin)
-                    }
-                }
-            }
+            stepContent
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, 24)
             .padding(.top, 16)
@@ -105,6 +87,39 @@ struct OnboardingFlowView: View {
                 isExtensionEnabled = true
                 currentStep = .selectApps
             }
+        }
+    }
+
+    @ViewBuilder
+    private var stepContent: some View {
+        if isCompleting {
+            scrollableStep {
+                completionConfirmationView
+            }
+        } else {
+            switch currentStep {
+            case .enableExtension:
+                scrollableStep {
+                    EnableExtensionStepView(
+                        isExtensionEnabled: $isExtensionEnabled,
+                        autoAdvanceWhenEnabled: autoAdvanceWhenExtensionEnabled,
+                        onNext: { advanceFromExtensionStep() }
+                    )
+                }
+            case .selectApps:
+                SelectAppsStepView(selectedAppIds: $selectedAppIds)
+            case .verify:
+                scrollableStep {
+                    VerifyStepView(launchAtLogin: $launchAtLogin)
+                }
+            }
+        }
+    }
+
+    private func scrollableStep<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView {
+            content()
+                .frame(maxWidth: .infinity)
         }
     }
 

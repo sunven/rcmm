@@ -46,18 +46,12 @@ struct CompositeListRow: View {
                 .help(config.isEnabled ? "停用此组合命令" : "启用此组合命令")
             }
 
-            if let onDelete {
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 18, height: 18)
-                }
-                .buttonStyle(.plain)
-                .help("删除此组合命令")
-            }
-
-            MenuRowReorderControls(onMoveUp: onMoveUp, onMoveDown: onMoveDown)
+            MenuRowActionsMenu(
+                onMoveUp: onMoveUp,
+                onMoveDown: onMoveDown,
+                onDelete: onDelete,
+                deleteLabel: "删除组合命令"
+            )
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)

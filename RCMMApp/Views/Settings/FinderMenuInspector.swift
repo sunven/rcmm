@@ -88,9 +88,9 @@ struct FinderMenuInspector: View {
     private func statusPanel(_ summary: FinderMenuEntrySummary) -> some View {
         InspectorPanel(title: "状态") {
             HStack(alignment: .top, spacing: 8) {
-                Image(systemName: statusSymbol(for: summary))
+                Image(systemName: FinderMenuStatusStyle.symbol(for: summary.statusKind))
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(statusColor(for: summary))
+                    .foregroundStyle(FinderMenuStatusStyle.color(for: summary.statusKind))
                     .frame(width: 18)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -285,37 +285,6 @@ struct FinderMenuInspector: View {
         }
     }
 
-    private func statusSymbol(for summary: FinderMenuEntrySummary) -> String {
-        switch summary.statusKind {
-        case .ready:
-            return "checkmark.circle.fill"
-        case .syncing:
-            return "arrow.triangle.2.circlepath"
-        case .failed, .unavailable:
-            return "exclamationmark.triangle.fill"
-        case .partiallyAvailable, .warning:
-            return "exclamationmark.circle.fill"
-        case .disabled:
-            return "pause.circle.fill"
-        case .system:
-            return "gearshape.fill"
-        }
-    }
-
-    private func statusColor(for summary: FinderMenuEntrySummary) -> Color {
-        switch summary.statusKind {
-        case .failed, .unavailable:
-            return .red
-        case .partiallyAvailable, .warning:
-            return .orange
-        case .syncing:
-            return .blue
-        case .ready:
-            return .green
-        case .disabled, .system:
-            return .secondary
-        }
-    }
 }
 
 private struct InspectorPanel<Content: View>: View {
