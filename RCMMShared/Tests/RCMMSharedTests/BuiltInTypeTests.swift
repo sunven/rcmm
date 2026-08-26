@@ -10,9 +10,16 @@ struct BuiltInTypeTests {
         #expect(BuiltInType.copyPath.rawValue == "copyPath")
     }
 
+    @Test("cleanNodeModules rawValue 为 cleanNodeModules")
+    func cleanNodeModulesRawValue() {
+        #expect(BuiltInType.cleanNodeModules.rawValue == "cleanNodeModules")
+        #expect(BuiltInType.cleanNodeModules.requiresPublishedScript)
+        #expect(!BuiltInType.copyPath.requiresPublishedScript)
+    }
+
     @Test("Round-trip 编解码保持值一致")
     func roundTrip() throws {
-        let original = BuiltInType.copyPath
+        let original = BuiltInType.cleanNodeModules
         let data = try JSONEncoder().encode(original)
         let decoded = try JSONDecoder().decode(BuiltInType.self, from: data)
         #expect(decoded == original)

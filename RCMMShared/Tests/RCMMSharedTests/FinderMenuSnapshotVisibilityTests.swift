@@ -17,6 +17,28 @@ struct FinderMenuSnapshotVisibilityTests {
         #expect(snapshot.descriptors.first?.action == .builtIn(.copyPath))
     }
 
+    @Test("脚本型 Built-in Entry 只有发布状态匹配时才显示")
+    func scriptBackedBuiltInRequiresCurrentPublishState() throws {
+        let entry = MenuEntry.builtIn(
+            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
+        )
+        let scriptBackedEntry = try #require(MenuEntryEvaluator.evaluate(entry).scriptBacked.first)
+
+        let missing = makeSnapshot(entries: [entry], publishStates: [:])
+        #expect(missing.descriptors.isEmpty)
+
+        let current = makeSnapshot(
+            entries: [entry],
+            publishStates: [scriptBackedEntry.id: currentState(for: scriptBackedEntry)]
+        )
+        #expect(current.descriptors.first?.action == .scriptBacked(
+            FinderMenuItemIdentity(
+                scriptID: scriptBackedEntry.id,
+                tag: FinderMenuItemTag.encode(generation: 1, index: 0)
+            )
+        ))
+    }
+
     @Test("停用的 Menu Entry 不显示")
     func disabledEntryIsHidden() {
         let config = MenuItemConfig(

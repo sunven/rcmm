@@ -218,7 +218,13 @@ enum FinderMenuDescriptorBuilder: Sendable {
         for visibleEntry in visibleEntries {
             switch visibleEntry.entry {
             case .builtIn(let item):
-                descriptors.append(builtInDescriptor(for: item))
+                descriptors.append(
+                    builtInDescriptor(
+                        for: item,
+                        scriptBackedEntry: visibleEntry.scriptBackedEntries.first,
+                        allocator: &allocator
+                    )
+                )
             case .custom(let config):
                 guard let scriptBackedEntry = visibleEntry.scriptBackedEntries.first else {
                     continue
@@ -256,8 +262,21 @@ enum FinderMenuDescriptorBuilder: Sendable {
         return descriptors
     }
 
-    private static func builtInDescriptor(for item: BuiltInMenuItem) -> FinderMenuItemDescriptor {
+    private static func builtInDescriptor(
+        for item: BuiltInMenuItem,
+        scriptBackedEntry: ScriptBackedMenuEntry?,
+        allocator: inout TagAllocator
+    ) -> FinderMenuItemDescriptor {
         let entry = MenuEntry.builtIn(item)
+        if let scriptBackedEntry {
+            return FinderMenuItemDescriptor(
+                title: entry.displayName,
+                icon: entry.systemSymbolName.map(FinderMenuIconSource.symbol) ?? .none,
+                action: .scriptBacked(
+                    allocator.identity(for: scriptBackedEntry, title: entry.displayName)
+                )
+            )
+        }
         return FinderMenuItemDescriptor(
             title: entry.displayName,
             icon: entry.systemSymbolName.map(FinderMenuIconSource.symbol) ?? .none,

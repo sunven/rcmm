@@ -6,12 +6,12 @@ import Testing
 struct MenuEntryEvaluatorTests {
     // MARK: - Built-in Entry
 
-    @Test("启用的 Built-in Entry 可执行，但不产出脚本")
+    @Test("启用的 copyPath 可执行，但不产出脚本")
     func enabledBuiltInIsExecutableWithoutScripts() {
         let evaluation = MenuEntryEvaluator.evaluate(.builtIn(MenuEntryCorpus.builtInEnabled))
 
-        // isExecutable 不能从 scriptBacked.isEmpty 派生 —— 内置项没有脚本却是 Finder 里真实
-        // 可见的菜单项，派生会让它读成不可用。
+        // isExecutable 不能从 scriptBacked.isEmpty 派生 —— copyPath 没有脚本却是 Finder 里
+        // 真实可见的菜单项，派生会让它读成不可用。
         #expect(evaluation.isExecutable)
         #expect(evaluation.scriptBacked.isEmpty)
         #expect(evaluation.issues.isEmpty)

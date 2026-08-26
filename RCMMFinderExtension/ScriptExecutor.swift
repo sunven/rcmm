@@ -27,6 +27,91 @@ final class ScriptExecutor {
         menuItemName: String,
         completion: (@Sendable (Error?) -> Void)? = nil
     ) {
+        executeTask(
+            scriptId: scriptId,
+            handlerName: "openApp",
+            targetPath: targetPath,
+            menuItemName: menuItemName
+        ) { [weak self] _, error in
+            if let error {
+                self?.logger.error("脚本执行失败: \(scriptId): \(error.localizedDescription)")
+            } else {
+                self?.logger.info("脚本执行成功: \(scriptId) → \(targetPath)")
+            }
+            completion?(error)
+        }
+    }
+
+    /// 扫描清理目标；结果通过无交互 AppleScript handler 返回。
+    func listNodeModules(
+        scriptId: String,
+        targetPath: String,
+        menuItemName: String,
+        completion: @escaping (Result<[String], Error>) -> Void
+    ) {
+        executeTask(
+            scriptId: scriptId,
+            handlerName: "listNodeModules",
+            targetPath: targetPath,
+            menuItemName: menuItemName
+        ) { [weak self] descriptor, error in
+            if let error {
+                self?.logger.error("脚本扫描失败: \(scriptId): \(error.localizedDescription)")
+                completion(.failure(error))
+                return
+            }
+
+            guard let encodedPaths = descriptor?.stringValue,
+                  let data = Data(base64Encoded: encodedPaths),
+                  let paths = Self.decodeNullSeparatedPaths(data) else {
+                let error = NSError(
+                    domain: "ScriptExecutor",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "脚本扫描结果无效"]
+                )
+                self?.logger.error("脚本扫描结果无效: \(scriptId)")
+                self?.recordError(
+                    message: error.localizedDescription,
+                    context: menuItemName,
+                    scriptId: scriptId,
+                    kind: .scriptExecution
+                )
+                completion(.failure(error))
+                return
+            }
+
+            completion(.success(paths))
+        }
+    }
+
+    func cleanNodeModule(
+        scriptId: String,
+        targetPath: String,
+        menuItemName: String,
+        completion: @escaping (Error?) -> Void
+    ) {
+        executeTask(
+            scriptId: scriptId,
+            handlerName: "cleanNodeModule",
+            targetPath: targetPath,
+            menuItemName: menuItemName
+        ) { [weak self] _, error in
+            if let error {
+                self?.logger.error("清理脚本执行失败: \(scriptId): \(error.localizedDescription)")
+            } else {
+                self?.logger.info("清理脚本执行成功: \(scriptId) → \(targetPath)")
+            }
+            completion(error)
+        }
+    }
+
+    private func executeTask(
+        scriptId: String,
+        handlerName: String,
+        targetPath: String,
+        menuItemName: String,
+        completion: @escaping (NSAppleEventDescriptor?, Error?) -> Void
+    ) {
         guard let scriptsDir = scriptsDirectory else {
             let error = NSError(
                 domain: "ScriptExecutor",
@@ -40,7 +125,7 @@ final class ScriptExecutor {
                 scriptId: scriptId,
                 kind: .scriptLoad
             )
-            completion?(error)
+            completion(nil, error)
             return
         }
 
@@ -54,23 +139,20 @@ final class ScriptExecutor {
 
             // 构建 Apple Event，传递目标路径作为参数
             let event = Self.buildAppleEvent(
-                handlerName: "openApp",
+                handlerName: handlerName,
                 parameter: targetPath
             )
 
-            task.execute(withAppleEvent: event) { [weak self] _, error in
-                if let error = error {
-                    self?.logger.error("脚本执行失败: \(scriptId): \(error.localizedDescription)")
+            task.execute(withAppleEvent: event) { [weak self] descriptor, error in
+                if let error {
                     self?.recordError(
                         message: "脚本执行失败: \(error.localizedDescription)",
                         context: menuItemName,
                         scriptId: scriptId,
                         kind: .scriptExecution
                     )
-                } else {
-                    self?.logger.info("脚本执行成功: \(scriptId) → \(targetPath)")
                 }
-                completion?(error)
+                completion(descriptor, error)
             }
         } catch {
             logger.error("脚本加载失败: \(scriptId): \(error.localizedDescription)")
@@ -80,8 +162,23 @@ final class ScriptExecutor {
                 scriptId: scriptId,
                 kind: .scriptLoad
             )
-            completion?(error)
+            completion(nil, error)
         }
+    }
+
+    private static func decodeNullSeparatedPaths(_ data: Data) -> [String]? {
+        guard !data.isEmpty else { return [] }
+
+        let components = data.split(separator: 0, omittingEmptySubsequences: true)
+        var paths: [String] = []
+        paths.reserveCapacity(components.count)
+        for component in components {
+            guard let path = String(data: Data(component), encoding: .utf8) else {
+                return nil
+            }
+            paths.append(path)
+        }
+        return paths
     }
 
     /// 构建 Apple Event 调用脚本中的 handler

@@ -114,6 +114,7 @@ struct AppCoordinatorAutoRepairTests {
         defer { harness.cleanup() }
         harness.configService.saveEntries([
             .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
+            .builtIn(BuiltInMenuItem(type: .cleanNodeModules, isEnabled: false)),
             .newFile(NewFileMenuConfig(templates: [])),
         ])
         harness.errorQueue.upsert(loadError(scriptID: UUID().uuidString))

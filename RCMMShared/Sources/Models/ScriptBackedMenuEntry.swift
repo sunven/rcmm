@@ -1,12 +1,14 @@
 import Foundation
 
 public enum ScriptBackedEntryKind: String, Codable, Hashable, Sendable {
+    case builtIn
     case custom
     case composite
     case newFileTemplate
 }
 
 public enum ScriptBackedMenuSource: Codable, Hashable, Sendable {
+    case builtIn(type: BuiltInType)
     case custom(id: UUID)
     case composite(id: UUID, executableStepIDs: Set<UUID>)
     case newFileTemplate(menuID: UUID, templateID: UUID)
@@ -60,6 +62,9 @@ public struct ScriptBackedMenuEntry: Codable, Identifiable, Hashable, Sendable {
     ) {
         let source: ScriptBackedMenuSource
         switch kind {
+        case .builtIn:
+            let rawType = id.replacingOccurrences(of: "builtIn.", with: "")
+            source = .builtIn(type: BuiltInType(rawValue: rawType) ?? .cleanNodeModules)
         case .custom:
             source = UUID(uuidString: id).map(ScriptBackedMenuSource.custom) ?? .custom(id: UUID())
         case .composite:

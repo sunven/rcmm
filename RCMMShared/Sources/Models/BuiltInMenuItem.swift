@@ -12,12 +12,14 @@ public struct BuiltInMenuItem: Codable, Hashable, Sendable {
     public var displayName: String {
         switch type {
         case .copyPath: return "拷贝路径"
+        case .cleanNodeModules: return "清理 node_modules"
         }
     }
 
     public var iconName: String {
         switch type {
         case .copyPath: return "doc.on.clipboard"
+        case .cleanNodeModules: return "trash"
         }
     }
 }

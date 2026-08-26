@@ -71,11 +71,14 @@ final class MenuConfigStore {
             menuEntries = [
                 .custom(terminalConfig),
                 .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
+                .builtIn(BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)),
                 .newFile(NewFileMenuConfig()),
             ]
             configService.saveEntries(menuEntries)
         } else {
-            menuEntries = ensurePrimaryNewFileMenuIfNeeded(loadedEntries)
+            menuEntries = ensureBuiltInEntriesIfNeeded(
+                ensurePrimaryNewFileMenuIfNeeded(loadedEntries)
+            )
         }
     }
 
@@ -106,6 +109,18 @@ final class MenuConfigStore {
 
         configService.saveEntries(result.entries)
         return result.entries
+    }
+
+    private func ensureBuiltInEntriesIfNeeded(_ entries: [MenuEntry]) -> [MenuEntry] {
+        let cleanNodeModules = MenuEntry.builtIn(
+            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
+        )
+        guard !entries.contains(where: { $0.id == cleanNodeModules.id }) else {
+            return entries
+        }
+        let updated = entries + [cleanNodeModules]
+        configService.saveEntries(updated)
+        return updated
     }
 
     private func migrateCompositeCommandTemplatesIfNeeded(_ entries: [MenuEntry]) -> [MenuEntry] {

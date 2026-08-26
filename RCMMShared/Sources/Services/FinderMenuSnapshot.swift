@@ -130,10 +130,13 @@ public struct FinderMenuSnapshot: Sendable {
             }
 
             switch entry {
-            case .builtIn:
+            case .builtIn(let item):
+                guard !item.type.requiresPublishedScript || !currentScriptBackedEntries.isEmpty else {
+                    return nil
+                }
                 return FinderMenuVisibleEntry(
                     entry: entry,
-                    scriptBackedEntries: []
+                    scriptBackedEntries: currentScriptBackedEntries
                 )
             case .custom, .composite:
                 guard let scriptBackedEntry = currentScriptBackedEntries.first else {

@@ -5,6 +5,138 @@ import Testing
 
 @Suite("Script Compilation Pipeline tests", .serialized)
 struct ScriptCompilationPipelineTests {
+    @Test("node_modules 清理脚本可被 osacompile 编译")
+    func cleanNodeModulesScriptCompiles() throws {
+        let entry = MenuEntry.builtIn(
+            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
+        )
+        let scriptBackedEntry = try #require(MenuEntryEvaluator.evaluate(entry).scriptBacked.first)
+        let source = try ScriptSourceGenerator().generate(
+            for: entry,
+            scriptBackedEntry: scriptBackedEntry
+        )
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clean-node-modules-\(UUID().uuidString)")
+            .appendingPathExtension("scpt")
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        try AppleScriptCompiler().compile(source: source, outputURL: outputURL)
+
+        #expect(FileManager.default.fileExists(atPath: outputURL.path))
+    }
+
+    @Test("node_modules 清理脚本扫描完整路径且不删除目录")
+    func cleanNodeModulesScriptListsPathsWithoutDeleting() throws {
+        let entry = MenuEntry.builtIn(
+            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
+        )
+        let scriptBackedEntry = try #require(MenuEntryEvaluator.evaluate(entry).scriptBacked.first)
+        let source = try ScriptSourceGenerator().generate(
+            for: entry,
+            scriptBackedEntry: scriptBackedEntry
+        )
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clean-node-modules-preview-\(UUID().uuidString)")
+        let firstURL = rootURL.appendingPathComponent("app/node_modules")
+        let secondURL = rootURL.appendingPathComponent("包含换行\n的目录/node_modules")
+        let sourceURL = rootURL.appendingPathComponent("preview.applescript")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        try FileManager.default.createDirectory(at: firstURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondURL, withIntermediateDirectories: true)
+        let runnableSource = source + """
+
+        on run argv
+        return listNodeModules(item 1 of argv)
+        end run
+        """
+        try runnableSource.write(to: sourceURL, atomically: true, encoding: .utf8)
+
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = [sourceURL.path, rootURL.path]
+        process.standardOutput = output
+        try process.run()
+        process.waitUntilExit()
+
+        let encodedPaths = String(
+            decoding: output.fileHandleForReading.readDataToEndOfFile(),
+            as: UTF8.self
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let pathData = try #require(Data(base64Encoded: encodedPaths))
+        let paths = pathData.split(separator: 0).map {
+            String(decoding: $0, as: UTF8.self)
+        }
+
+        #expect(process.terminationStatus == 0)
+        #expect(Set(paths) == Set([firstURL.path, secondURL.path]))
+        #expect(FileManager.default.fileExists(atPath: firstURL.path))
+        #expect(FileManager.default.fileExists(atPath: secondURL.path))
+    }
+
+    @Test("node_modules 清理脚本只删除指定目录")
+    func cleanNodeModulesScriptDeletesOnlySpecifiedDirectory() throws {
+        let entry = MenuEntry.builtIn(
+            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
+        )
+        let scriptBackedEntry = try #require(MenuEntryEvaluator.evaluate(entry).scriptBacked.first)
+        let source = try ScriptSourceGenerator().generate(
+            for: entry,
+            scriptBackedEntry: scriptBackedEntry
+        )
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("clean-node-modules-delete-\(UUID().uuidString)")
+        let targetURL = rootURL.appendingPathComponent("待清理/node_modules")
+        let untouchedURL = rootURL.appendingPathComponent("保留/node_modules")
+        let sourceURL = rootURL.appendingPathComponent("clean.applescript")
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        try FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: untouchedURL, withIntermediateDirectories: true)
+        let runnableSource = source + """
+
+        on run argv
+        cleanNodeModule(item 1 of argv)
+        end run
+        """
+        try runnableSource.write(to: sourceURL, atomically: true, encoding: .utf8)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = [sourceURL.path, targetURL.path]
+        try process.run()
+        process.waitUntilExit()
+
+        #expect(process.terminationStatus == 0)
+        #expect(!FileManager.default.fileExists(atPath: targetURL.path))
+        #expect(FileManager.default.fileExists(atPath: untouchedURL.path))
+    }
+
+    @Test("node_modules 清理项发布无交互且带安全查找参数的脚本")
+    func publishesCleanNodeModulesScript() async throws {
+        let harness = try PipelineHarness()
+        defer { harness.cleanup() }
+        let entry = MenuEntry.builtIn(
+            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
+        )
+        harness.configService.saveEntries([entry])
+
+        let outcome = await harness.pipeline.publishCurrentConfiguration()
+
+        let source = try #require(harness.compiler.compiledSources.first)
+        #expect(outcome.results.map(\.entryID) == ["builtIn.cleanNodeModules"])
+        #expect(!source.contains("display dialog"))
+        #expect(source.contains("on listNodeModules(thePath)"))
+        #expect(source.contains("on cleanNodeModule(thePath)"))
+        #expect(!source.contains("on cleanNodeModules(thePath)"))
+        #expect(!source.contains("on openApp(thePath)"))
+        #expect(source.contains("-name 'node_modules'"))
+        #expect(source.contains("-prune"))
+        #expect(source.contains("-print0 | /usr/bin/base64"))
+        #expect(source.contains("rm -rf --"))
+    }
+
     @Test("publishes saved Menu Entry configuration through one pipeline interface")
     func publishesSavedConfiguration() async throws {
         let harness = try PipelineHarness()

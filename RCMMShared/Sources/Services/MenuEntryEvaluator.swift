@@ -23,7 +23,8 @@ public enum MenuEntryValidationEnvironment: Sendable {
 public struct MenuEntryEvaluation: Hashable, Sendable {
     /// 本条目产出的 Script-Backed Entry。
     ///
-    /// custom / composite 为 0 或 1 个；New File Menu 每个可执行模板一个；Built-in Entry 恒为空。
+    /// custom / composite 为 0 或 1 个；New File Menu 每个可执行模板一个；脚本型 Built-in
+    /// 为 0 或 1 个，copyPath 恒为空。
     ///
     /// 注意它随 environment 变化：`.filesystemAware` 下模板文件丢失的条目不会出现在这里。
     /// 需要「实际会被发布的集合」时必须用 `.configurationOnly`。
@@ -32,8 +33,8 @@ public struct MenuEntryEvaluation: Hashable, Sendable {
 
     /// 条目是否可用。
     ///
-    /// 不从 `scriptBacked.isEmpty` 派生：Built-in Entry 没有脚本却是 Finder 里真实可见的
-    /// 菜单项，派生会让它读成不可用。
+    /// 不从 `scriptBacked.isEmpty` 派生：copyPath 没有脚本却是 Finder 里真实可见的菜单项，
+    /// 派生会让它读成不可用。
     public let isExecutable: Bool
 
     /// 条目内部是否存在至少一个通过校验的子项。
@@ -90,8 +91,26 @@ public enum MenuEntryEvaluator: Sendable {
     ) -> MenuEntryEvaluation {
         switch entry {
         case .builtIn(let item):
+            let scriptBacked: [ScriptBackedMenuEntry]
+            if item.type == .cleanNodeModules && item.isEnabled {
+                scriptBacked = [
+                    ScriptBackedMenuEntry(
+                        id: entry.id,
+                        kind: .builtIn,
+                        displayName: item.displayName,
+                        fingerprint: ScriptFingerprint.make(fields: [
+                            "built-in-clean-node-modules-v5",
+                            item.type.rawValue,
+                        ]),
+                        source: .builtIn(type: item.type),
+                        targetPolicy: .containingDirectory
+                    ),
+                ]
+            } else {
+                scriptBacked = []
+            }
             return MenuEntryEvaluation(
-                scriptBacked: [],
+                scriptBacked: scriptBacked,
                 issues: [],
                 isExecutable: item.isEnabled
             )

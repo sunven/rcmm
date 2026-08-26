@@ -31,8 +31,8 @@ public enum MenuEntryStatusResolver: Sendable {
             return MenuEntryStatus(kind: .disabled, text: "已停用", detail: nil)
         }
 
-        // Built-in Entry 没有脚本，也就没有发布状态可言 —— 阶梯从这里往下都不适用。
-        if entry.isBuiltIn {
+        // copyPath 没有脚本，也就没有发布状态可言；脚本型 Built-in 继续走发布状态阶梯。
+        if case .builtIn(let item) = entry, !item.type.requiresPublishedScript {
             return MenuEntryStatus(
                 kind: .system,
                 text: "系统",

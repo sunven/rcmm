@@ -7,6 +7,37 @@ import Testing
 @Suite("MenuConfigStore 领域规则", .serialized)
 @MainActor
 struct MenuConfigStoreTests {
+    @Test("旧配置会补入一次 node_modules 清理菜单")
+    func addsCleanNodeModulesBuiltInToExistingConfiguration() throws {
+        let harness = try PipelineHarness()
+        defer { harness.cleanup() }
+        let copyPath = MenuEntry.builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true))
+        harness.configService.saveEntries([copyPath])
+
+        let store = harness.makeConfigStore()
+        let reloadedStore = harness.makeConfigStore()
+        let cleanEntries = store.menuEntries.filter {
+            $0.id == "builtIn.cleanNodeModules"
+        }
+        let reloadedCleanEntries = reloadedStore.menuEntries.filter {
+            $0.id == "builtIn.cleanNodeModules"
+        }
+
+        #expect(cleanEntries.count == 1)
+        #expect(reloadedCleanEntries.count == 1)
+        #expect(cleanEntries.first?.isEnabled == true)
+        #expect(harness.configService.loadEntries() == store.menuEntries)
+
+        harness.configService.saveEntries([
+            copyPath,
+            .builtIn(BuiltInMenuItem(type: .cleanNodeModules, isEnabled: false)),
+        ])
+        let disabledStore = harness.makeConfigStore()
+        #expect(disabledStore.menuEntries.first {
+            $0.id == "builtIn.cleanNodeModules"
+        }?.isEnabled == false)
+    }
+
     @Test("具名变更只修改内存，不直接落盘")
     func namedMutationsDoNotPersistDirectly() throws {
         let harness = try PipelineHarness()

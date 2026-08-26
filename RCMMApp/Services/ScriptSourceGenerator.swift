@@ -27,8 +27,12 @@ struct ScriptSourceGenerator {
         scriptBackedEntry: ScriptBackedMenuEntry
     ) throws -> String {
         switch entry {
-        case .builtIn:
-            throw ScriptSourceGenerationError.unsupportedEntry
+        case .builtIn(let item):
+            guard item.type == .cleanNodeModules,
+                  scriptBackedEntry.source == .builtIn(type: .cleanNodeModules) else {
+                throw ScriptSourceGenerationError.unsupportedEntry
+            }
+            return generateCleanNodeModules()
         case .custom(let item):
             return generate(for: item)
         case .composite(let config):
@@ -79,6 +83,19 @@ struct ScriptSourceGenerator {
                 command: command
             ),
         ])
+    }
+
+    private func generateCleanNodeModules() -> String {
+        """
+        on listNodeModules(thePath)
+        set rootPath to quoted form of thePath
+        return do shell script "find " & rootPath & " -type d -name 'node_modules' -prune -print0 | /usr/bin/base64 | /usr/bin/tr -d '\\n'"
+        end listNodeModules
+
+        on cleanNodeModule(thePath)
+        do shell script "rm -rf -- " & quoted form of thePath
+        end cleanNodeModule
+        """
     }
 
     private func generate(

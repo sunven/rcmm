@@ -11,6 +11,13 @@ struct BuiltInMenuItemTests {
         #expect(item.displayName == "拷贝路径")
     }
 
+    @Test("cleanNodeModules 使用清理名称和图标")
+    func cleanNodeModulesPresentation() {
+        let item = BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
+        #expect(item.displayName == "清理 node_modules")
+        #expect(item.iconName == "trash")
+    }
+
     @Test("Round-trip 编解码保持值一致")
     func roundTrip() throws {
         let item = BuiltInMenuItem(type: .copyPath, isEnabled: true)

@@ -125,6 +125,35 @@ struct MenuEntryStatusResolverTests {
         #expect(status.kind == .system)
     }
 
+    @Test("脚本型 Built-in Entry 反映发布状态")
+    func scriptBackedBuiltInUsesPublishStatus() throws {
+        let entry = MenuEntry.builtIn(
+            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
+        )
+        let evaluation = MenuEntryEvaluator.evaluate(entry)
+        let scriptBackedEntry = try #require(evaluation.scriptBacked.first)
+
+        let syncing = MenuEntryStatusResolver.status(
+            for: entry,
+            evaluation: evaluation,
+            publishStates: [:]
+        )
+        let ready = MenuEntryStatusResolver.status(
+            for: entry,
+            evaluation: evaluation,
+            publishStates: [
+                scriptBackedEntry.id: ScriptPublishState(
+                    entryID: scriptBackedEntry.id,
+                    status: .current,
+                    fingerprint: scriptBackedEntry.fingerprint
+                ),
+            ]
+        )
+
+        #expect(syncing.kind == .syncing)
+        #expect(ready.kind == .ready)
+    }
+
     // MARK: - composite
 
     @Test("组合命令有阻塞错误但仍有可执行步骤时为部分可用")

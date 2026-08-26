@@ -4,6 +4,12 @@ import RCMMShared
 import os.log
 
 class FinderSync: FIFinderSync {
+    private struct CleanNodeModulesRequest {
+        let directories: [String]
+        let scriptID: String
+        let menuItemName: String
+    }
+
     private let logger = Logger(
         subsystem: RuntimeConfiguration.finderExtensionBundleID,
         category: "menu"
@@ -21,6 +27,8 @@ class FinderSync: FIFinderSync {
     private var snapshotGeneration = 0
     private var configObservation: DarwinObservation?
     private var currentMenuKind: FIMenuKind?
+    private var cleanNodeModulesPanel: NSPanel?
+    private var cleanNodeModulesRequest: CleanNodeModulesRequest?
 
     override init() {
         super.init()
@@ -113,7 +121,10 @@ class FinderSync: FIFinderSync {
             menuItem.target = self
         }
 
-        menuItem.image = makeImage(from: descriptor.icon)
+        menuItem.image = makeImage(
+            from: descriptor.icon,
+            action: descriptor.action
+        )
 
         if !descriptor.children.isEmpty {
             let submenu = NSMenu(title: descriptor.title)
@@ -132,6 +143,8 @@ class FinderSync: FIFinderSync {
             switch builtInType {
             case .copyPath:
                 return #selector(copyPath(_:))
+            case .cleanNodeModules:
+                return nil
             }
         case .scriptBacked:
             return #selector(openScriptBackedEntry(_:))
@@ -140,10 +153,20 @@ class FinderSync: FIFinderSync {
         }
     }
 
-    private func makeImage(from icon: FinderMenuIconSource) -> NSImage? {
+    private func makeImage(
+        from icon: FinderMenuIconSource,
+        action: FinderMenuItemAction
+    ) -> NSImage? {
         switch icon {
         case .symbol(let symbolName):
-            return makeMenuSymbolImage(named: symbolName)
+            let color: NSColor?
+            if case .scriptBacked(let identity) = action,
+               identity.scriptID == "builtIn.cleanNodeModules" {
+                color = .systemRed
+            } else {
+                color = nil
+            }
+            return makeMenuSymbolImage(named: symbolName, color: color)
         case .applicationIcon(let data, let fallbackSymbolName):
             return makeApplicationIconImage(from: data) ?? makeMenuSymbolImage(named: fallbackSymbolName)
         case .none:
@@ -151,7 +174,10 @@ class FinderSync: FIFinderSync {
         }
     }
 
-    private func makeMenuSymbolImage(named symbolName: String) -> NSImage? {
+    private func makeMenuSymbolImage(
+        named symbolName: String,
+        color: NSColor? = nil
+    ) -> NSImage? {
         guard let image = NSImage(
             systemSymbolName: symbolName,
             accessibilityDescription: nil
@@ -160,9 +186,19 @@ class FinderSync: FIFinderSync {
             return nil
         }
 
-        image.size = NSSize(width: 16, height: 16)
-        image.isTemplate = true
-        return image
+        let renderedImage: NSImage
+        if let color,
+           let configuredImage = image.withSymbolConfiguration(
+               NSImage.SymbolConfiguration(paletteColors: [color])
+           ) {
+            renderedImage = configuredImage
+            renderedImage.isTemplate = false
+        } else {
+            renderedImage = image
+            renderedImage.isTemplate = true
+        }
+        renderedImage.size = NSSize(width: 16, height: 16)
+        return renderedImage
     }
 
     private func makeApplicationIconImage(from data: Data) -> NSImage? {
@@ -194,6 +230,34 @@ class FinderSync: FIFinderSync {
             targetPolicy: entry.targetPolicy
         )
 
+        if case .builtIn(type: .cleanNodeModules) = entry.source {
+            scriptExecutor.listNodeModules(
+                scriptId: entry.id,
+                targetPath: executionPath,
+                menuItemName: entry.displayName
+            ) { [weak self] result in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    guard case .success(let directories) = result else {
+                        self.logger.error("无法获取待清理的 node_modules 目录")
+                        return
+                    }
+                    let sortedDirectories = directories.sorted()
+                    guard !sortedDirectories.isEmpty else {
+                        self.showNoNodeModulesAlert()
+                        return
+                    }
+
+                    self.showCleanNodeModulesConfirmation(
+                        directories: sortedDirectories,
+                        scriptID: entry.id,
+                        menuItemName: entry.displayName
+                    )
+                }
+            }
+            return
+        }
+
         logger.info("执行: \(entry.displayName, privacy: .public) → \(executionPath, privacy: .private)")
 
         scriptExecutor.execute(
@@ -201,6 +265,259 @@ class FinderSync: FIFinderSync {
             targetPath: executionPath,
             menuItemName: entry.displayName
         )
+    }
+
+    private func showNoNodeModulesAlert() {
+        let alert = NSAlert()
+        alert.messageText = "没有找到 node_modules"
+        alert.informativeText = "当前目录及其子目录中没有可清理的 node_modules。"
+        alert.addButton(withTitle: "好")
+        alert.runModal()
+    }
+
+    private func showCleanNodeModulesConfirmation(
+        directories: [String],
+        scriptID: String,
+        menuItemName: String
+    ) {
+        guard cleanNodeModulesPanel == nil else {
+            cleanNodeModulesPanel?.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let scrollView = NSTextView.scrollableTextView()
+        scrollView.frame = NSRect(x: 20, y: 62, width: 520, height: 220)
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = false
+        scrollView.borderType = .bezelBorder
+
+        guard let textView = scrollView.documentView as? NSTextView else {
+            return
+        }
+        textView.string = directories.joined(separator: "\n")
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isHorizontallyResizable = true
+        textView.font = NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "清理 node_modules"
+        panel.level = .modalPanel
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 430))
+        panel.contentView = contentView
+
+        let iconView = NSImageView(frame: NSRect(x: 248, y: 350, width: 64, height: 64))
+        iconView.image = NSImage(named: NSImage.applicationIconName)
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        contentView.addSubview(iconView)
+
+        let messageLabel = NSTextField(labelWithString: "将清理 \(directories.count) 个 node_modules 目录")
+        messageLabel.frame = NSRect(x: 20, y: 320, width: 520, height: 22)
+        messageLabel.alignment = .center
+        messageLabel.font = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        contentView.addSubview(messageLabel)
+
+        let infoLabel = NSTextField(labelWithString: "以下目录将被永久删除，此操作不可撤销：")
+        infoLabel.frame = NSRect(x: 20, y: 294, width: 520, height: 18)
+        infoLabel.alignment = .center
+        infoLabel.textColor = .secondaryLabelColor
+        contentView.addSubview(infoLabel)
+        contentView.addSubview(scrollView)
+
+        let cancelButton = NSButton(
+            title: "取消",
+            target: self,
+            action: #selector(dismissCleanNodeModulesPanel(_:))
+        )
+        cancelButton.frame = NSRect(x: 150, y: 18, width: 120, height: 30)
+        contentView.addSubview(cancelButton)
+
+        let cleanButton = NSButton(
+            title: "清理",
+            target: self,
+            action: #selector(beginCleanNodeModules(_:))
+        )
+        cleanButton.frame = NSRect(x: 290, y: 18, width: 120, height: 30)
+        cleanButton.bezelStyle = .rounded
+        cleanButton.bezelColor = .systemRed
+        cleanButton.contentTintColor = .white
+        cleanButton.hasDestructiveAction = true
+        contentView.addSubview(cleanButton)
+
+        cleanNodeModulesRequest = CleanNodeModulesRequest(
+            directories: directories,
+            scriptID: scriptID,
+            menuItemName: menuItemName
+        )
+        cleanNodeModulesPanel = panel
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func beginCleanNodeModules(_ sender: NSButton) {
+        guard let panel = cleanNodeModulesPanel,
+              let request = cleanNodeModulesRequest else {
+            return
+        }
+        let directories = request.directories
+        let scriptID = request.scriptID
+        let menuItemName = request.menuItemName
+
+        let previousTop = panel.frame.maxY
+        panel.setContentSize(NSSize(width: 560, height: 250))
+        var progressFrame = panel.frame
+        progressFrame.origin.y = previousTop - progressFrame.height
+        panel.setFrame(progressFrame, display: true, animate: true)
+
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 250))
+        panel.contentView = contentView
+
+        let iconView = NSImageView(frame: NSRect(x: 252, y: 178, width: 56, height: 56))
+        iconView.image = NSImage(named: NSImage.applicationIconName)
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        contentView.addSubview(iconView)
+
+        let messageLabel = NSTextField(labelWithString: "正在清理 node_modules")
+        messageLabel.frame = NSRect(x: 24, y: 148, width: 512, height: 22)
+        messageLabel.alignment = .center
+        messageLabel.font = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        contentView.addSubview(messageLabel)
+
+        let infoLabel = NSTextField(labelWithString: "请稍候，删除过程中请不要退出 rcmm。")
+        infoLabel.frame = NSRect(x: 24, y: 124, width: 512, height: 18)
+        infoLabel.alignment = .center
+        infoLabel.textColor = .secondaryLabelColor
+        contentView.addSubview(infoLabel)
+
+        let progressIndicator = NSProgressIndicator(frame: NSRect(x: 24, y: 96, width: 512, height: 16))
+        progressIndicator.isIndeterminate = false
+        progressIndicator.minValue = 0
+        progressIndicator.maxValue = Double(directories.count)
+        progressIndicator.doubleValue = 0
+        progressIndicator.controlSize = .regular
+        contentView.addSubview(progressIndicator)
+
+        let statusLabel = NSTextField(labelWithString: "准备清理 0 / \(directories.count)")
+        statusLabel.frame = NSRect(x: 24, y: 66, width: 512, height: 18)
+        statusLabel.lineBreakMode = .byTruncatingMiddle
+        contentView.addSubview(statusLabel)
+
+        let pathLabel = NSTextField(labelWithString: "")
+        pathLabel.frame = NSRect(x: 24, y: 44, width: 512, height: 18)
+        pathLabel.textColor = .secondaryLabelColor
+        pathLabel.lineBreakMode = .byTruncatingMiddle
+        contentView.addSubview(pathLabel)
+
+        let closeButton = NSButton(
+            title: "关闭",
+            target: self,
+            action: #selector(dismissCleanNodeModulesPanel(_:))
+        )
+        closeButton.frame = NSRect(x: 208, y: 10, width: 144, height: 28)
+        closeButton.isEnabled = false
+        contentView.addSubview(closeButton)
+
+        cleanNodeModulesRequest = nil
+
+        cleanNextNodeModule(
+            at: 0,
+            directories: directories,
+            scriptID: scriptID,
+            menuItemName: menuItemName,
+            panel: panel,
+            messageLabel: messageLabel,
+            infoLabel: infoLabel,
+            closeButton: closeButton,
+            progressIndicator: progressIndicator,
+            statusLabel: statusLabel,
+            pathLabel: pathLabel
+        )
+    }
+
+    @objc private func dismissCleanNodeModulesPanel(_ sender: NSButton) {
+        cleanNodeModulesPanel?.orderOut(nil)
+        cleanNodeModulesPanel = nil
+        cleanNodeModulesRequest = nil
+    }
+
+    private func cleanNextNodeModule(
+        at index: Int,
+        directories: [String],
+        scriptID: String,
+        menuItemName: String,
+        panel: NSPanel,
+        messageLabel: NSTextField,
+        infoLabel: NSTextField,
+        closeButton: NSButton,
+        progressIndicator: NSProgressIndicator,
+        statusLabel: NSTextField,
+        pathLabel: NSTextField,
+        failures: [String] = []
+    ) {
+        guard index < directories.count else {
+            progressIndicator.doubleValue = Double(directories.count)
+            statusLabel.stringValue = "已完成 \(directories.count) / \(directories.count)"
+            if failures.isEmpty {
+                messageLabel.stringValue = "清理完成"
+                infoLabel.stringValue = "已删除全部 \(directories.count) 个 node_modules 目录。"
+            } else {
+                messageLabel.stringValue = "清理完成，但有 \(failures.count) 个目录失败"
+                infoLabel.stringValue = "成功 \(directories.count - failures.count) 个，失败 \(failures.count) 个。失败详情已记录到 rcmm。"
+            }
+            pathLabel.stringValue = ""
+            closeButton.isEnabled = true
+            panel.layoutIfNeeded()
+            return
+        }
+
+        let directory = directories[index]
+        statusLabel.stringValue = "正在清理 \(index + 1) / \(directories.count)"
+        pathLabel.stringValue = directory
+        logger.info("清理第 \(index + 1) / \(directories.count) 个目录: \(directory, privacy: .private)")
+
+        scriptExecutor.cleanNodeModule(
+            scriptId: scriptID,
+            targetPath: directory,
+            menuItemName: menuItemName
+        ) { [weak self] error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                var updatedFailures = failures
+                if error != nil {
+                    updatedFailures.append(directory)
+                }
+                progressIndicator.doubleValue = Double(index + 1)
+                self.cleanNextNodeModule(
+                    at: index + 1,
+                    directories: directories,
+                    scriptID: scriptID,
+                    menuItemName: menuItemName,
+                    panel: panel,
+                    messageLabel: messageLabel,
+                    infoLabel: infoLabel,
+                    closeButton: closeButton,
+                    progressIndicator: progressIndicator,
+                    statusLabel: statusLabel,
+                    pathLabel: pathLabel,
+                    failures: updatedFailures
+                )
+            }
+        }
     }
 
     @objc func openWithApp(_ sender: NSMenuItem) {
@@ -373,7 +690,7 @@ class FinderSync: FIFinderSync {
     private func resolveTargetPath(for entry: ScriptBackedMenuEntry) -> String? {
         let controller = FIFinderSyncController.default()
 
-        if entry.kind == .newFileTemplate,
+        if (entry.kind == .newFileTemplate || entry.kind == .builtIn),
            currentMenuKind == .contextualMenuForContainer,
            let targetedURL = controller.targetedURL() {
             return targetedURL.path
