@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SelectAppsStepView: View {
     @Binding var selectedAppIds: Set<UUID>
+    @Binding var didPreselectApps: Bool
     @Environment(ApplicationDiscoveryCoordinator.self) private var applicationDiscovery
     @Environment(MenuConfigStore.self) private var configStore
 
@@ -23,6 +24,11 @@ struct SelectAppsStepView: View {
                 emptyTitle: "未发现可用应用",
                 emptySubtitle: "仅显示 /Applications 和 ~/Applications 中的应用"
             )
+
+            Text("已添加的应用会保留，可在设置中删除。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
 
             if !applicationDiscovery.isScanning && !applicationDiscovery.apps.isEmpty {
                 HStack {
@@ -45,6 +51,13 @@ struct SelectAppsStepView: View {
 
     private func loadAndPreselectApps() async {
         await applicationDiscovery.refresh()
+        guard !Task.isCancelled else { return }
+        let availableIDs = Set(applicationDiscovery.apps.filter {
+            !AppPickerItemMatcher.isAlreadyAdded($0, in: configStore.menuEntries)
+        }.map(\.id))
+        selectedAppIds.formIntersection(availableIDs)
+        guard !didPreselectApps else { return }
+        didPreselectApps = true
 
         for app in applicationDiscovery.apps {
             if let bundleId = app.bundleId,
@@ -59,7 +72,7 @@ struct SelectAppsStepView: View {
 #Preview("加载中") {
     let appModel = AppModel(forPreview: true)
 
-    SelectAppsStepView(selectedAppIds: .constant([]))
+    SelectAppsStepView(selectedAppIds: .constant([]), didPreselectApps: .constant(false))
         .environment(appModel.applicationDiscoveryCoordinator)
         .environment(appModel.appCoordinator.configStore)
         .frame(width: 480, height: 500)
@@ -77,7 +90,7 @@ struct SelectAppsStepView: View {
         addComposite: { $0.id }
     )
     let sampleId = sampleApps.first!.id
-    return SelectAppsStepView(selectedAppIds: .constant([sampleId]))
+    return SelectAppsStepView(selectedAppIds: .constant([sampleId]), didPreselectApps: .constant(false))
         .environment(coordinator)
         .environment(appModel.appCoordinator.configStore)
         .frame(width: 480, height: 500)

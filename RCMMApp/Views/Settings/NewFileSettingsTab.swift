@@ -18,21 +18,6 @@ struct NewFileSettingsTab: View {
 
                         NewFileMenuEditor(
                             config: config,
-                            onUpdateTemplate: { template in
-                                appCoordinator.edit {
-                                    $0.updateNewFileTemplate(
-                                        menuID: config.id,
-                                        templateID: template.id,
-                                        displayName: template.displayName,
-                                        baseName: template.baseName,
-                                        fileExtension: template.fileExtension,
-                                        creationMode: template.creationMode,
-                                        templatePath: template.templatePath,
-                                        initialContent: template.initialContent,
-                                        isEnabled: template.isEnabled
-                                    )
-                                }
-                            },
                             onDeleteTemplate: { templateID in
                                 appCoordinator.edit {
                                     $0.removeNewFileTemplate(

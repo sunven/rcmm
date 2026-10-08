@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 final class AppModel {
     let appCoordinator: AppCoordinator
+    let settingsDraftStore: SettingsDraftStore
     let applicationDiscoveryCoordinator: ApplicationDiscoveryCoordinator
     let extensionHealthMonitor: ExtensionHealthMonitor
     let extensionCleanupCoordinator: ExtensionCleanupCoordinator
@@ -17,6 +18,7 @@ final class AppModel {
 
         let appCoordinator = AppCoordinator(forPreview: forPreview)
         self.appCoordinator = appCoordinator
+        self.settingsDraftStore = SettingsDraftStore(coordinator: appCoordinator)
         let applicationDiscoveryCoordinator = ApplicationDiscoveryCoordinator(
             addComposite: { composite in
                 appCoordinator.edit { $0.addCompositeCommand(composite) }

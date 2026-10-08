@@ -2,6 +2,7 @@ import RCMMShared
 import SwiftUI
 
 struct MenuConfigTab: View {
+    @Environment(SettingsDraftStore.self) private var drafts
     @Environment(AppCoordinator.self) private var appCoordinator
     @Environment(MenuConfigStore.self) private var configStore
 
@@ -36,16 +37,6 @@ struct MenuConfigTab: View {
                 onOpenCompositeSettings: {
                     guard let selectedEntryID else { return }
                     onOpenCompositeSettings(selectedEntryID)
-                },
-                onUpdateCustomCommand: { config, name, command, executionMode in
-                    appCoordinator.edit {
-                        $0.updateCustomCommand(
-                            for: config.id,
-                            name: name,
-                            command: command,
-                            executionMode: executionMode
-                        )
-                    }
                 }
             )
         }
@@ -77,7 +68,7 @@ struct MenuConfigTab: View {
                 entryPendingDeletion = nil
             }
         } message: {
-            Text("删除后，该菜单项及其配置将不再出现在 Finder 右键菜单中。")
+            Text("删除后，该菜单项及其配置将不再出现在 Finder 右键菜单中，未保存的修改也会删除。")
         }
         .onAppear {
             reconcileSelection()
@@ -345,6 +336,7 @@ struct MenuConfigTab: View {
                 AppListRow(
                     menuItem: config,
                     summary: summary,
+                    hasUnsavedChanges: drafts.hasChanges(.command(config.id)),
                     onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
                     onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
                     onDelete: { requestDeletion(of: entry, title: summary.title) },
@@ -361,6 +353,7 @@ struct MenuConfigTab: View {
                 CompositeListRow(
                     config: config,
                     summary: summary,
+                    hasUnsavedChanges: drafts.hasChanges(.composite(config.id)),
                     onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
                     onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
                     onDelete: { requestDeletion(of: entry, title: summary.title) },

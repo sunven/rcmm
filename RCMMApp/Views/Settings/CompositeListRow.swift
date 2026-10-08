@@ -4,6 +4,7 @@ import SwiftUI
 struct CompositeListRow: View {
     let config: CompositeMenuItemConfig
     let summary: FinderMenuEntrySummary
+    var hasUnsavedChanges = false
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
     var onDelete: (() -> Void)?
@@ -23,7 +24,7 @@ struct CompositeListRow: View {
                     .foregroundStyle(config.isEnabled ? .primary : .secondary)
                     .lineLimit(1)
 
-                Text(summary.subtitle ?? "\(config.steps.count) 个步骤")
+                Text(hasUnsavedChanges ? "未保存修改" : (summary.subtitle ?? "\(config.steps.count) 个步骤"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

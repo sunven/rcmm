@@ -2,46 +2,13 @@ import RCMMShared
 import SwiftUI
 
 struct CommandEditor: View {
-    @State private var editedName: String
-
-    /// 编辑中的命令文本（内部 state，避免每次按键触发持久化）
-    @State private var editedCommand: String
-
-    /// 最后保存的命令值，用于去重（避免重复调用 onSave）
-    @State private var lastSavedCommand: String
-    @State private var lastSavedName: String
-    @State private var executionMode: CustomCommandExecutionMode
-    @State private var lastSavedExecutionMode: CustomCommandExecutionMode
-    @State private var saveFeedbackID = 0
-    @State private var showsSaveFeedback = false
-
-    /// 当前生效的默认命令（内置映射或 open -a），作为 placeholder 显示
+    @Binding var config: MenuItemConfig
     let defaultCommand: String
+    @Environment(SettingsDraftStore.self) private var drafts
 
-    /// 应用路径，用于预览中替换 {app}
-    let appPath: String
-
-    /// 保存回调
-    let onSave: (String, String?, CustomCommandExecutionMode) -> Void
-
-    init(
-        name: String,
-        editedCommand: String,
-        executionMode: CustomCommandExecutionMode,
-        defaultCommand: String,
-        appPath: String,
-        onSave: @escaping (String, String?, CustomCommandExecutionMode) -> Void
-    ) {
-        self._editedName = State(initialValue: name)
-        self._editedCommand = State(initialValue: editedCommand)
-        self._lastSavedCommand = State(initialValue: editedCommand)
-        self._lastSavedName = State(initialValue: name)
-        self._executionMode = State(initialValue: executionMode)
-        self._lastSavedExecutionMode = State(initialValue: executionMode)
-        self.defaultCommand = defaultCommand
-        self.appPath = appPath
-        self.onSave = onSave
-    }
+    private var editedCommand: String { config.customCommand ?? "" }
+    private var executionMode: CustomCommandExecutionMode { config.executionMode }
+    private var appPath: String { config.appPath }
 
     /// 当前生效的命令：自定义命令优先，空则回退到默认命令
     private var effectiveCommand: String {
@@ -61,41 +28,22 @@ struct CommandEditor: View {
             .replacingOccurrences(of: "{path}", with: "/Users/example/project")
     }
 
-    /// 是否正在使用默认命令（editedCommand 为空时回退）
-    private var isUsingDefault: Bool {
-        executionMode == .selectedPath && editedCommand.isEmpty
-    }
-
     /// 自定义命令非空但缺少 {path} 占位符
     private var isMissingPathPlaceholder: Bool {
         executionMode == .selectedPath && !editedCommand.isEmpty && !editedCommand.contains("{path}")
     }
 
     private var validationIssues: [MenuEntryIssue] {
-        let item = MenuItemConfig(
-            appName: editedName,
-            appPath: appPath,
-            customCommand: editedCommand.isEmpty ? nil : editedCommand,
-            executionMode: executionMode
-        )
-        return MenuEntryEvaluator
-            .evaluate(.custom(item), environment: .filesystemAware)
-            .issues
-    }
-
-    private var hasChanges: Bool {
-        editedName != lastSavedName
-            || editedCommand != lastSavedCommand
-            || executionMode != lastSavedExecutionMode
+        drafts.issues(for: .command(config.id))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("菜单名称", text: $editedName)
+            TextField("菜单名称", text: $config.appName)
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
 
-            Picker("执行模式", selection: $executionMode) {
+            Picker("执行模式", selection: $config.executionMode) {
                 ForEach(CustomCommandExecutionMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
                 }
@@ -103,7 +51,7 @@ struct CommandEditor: View {
             .pickerStyle(.segmented)
             .controlSize(.small)
 
-            TextField(defaultCommand, text: $editedCommand)
+            TextField(defaultCommand, text: Binding(get: { editedCommand }, set: { config.customCommand = $0.isEmpty ? nil : $0 }))
                 .font(.system(.callout, design: .monospaced))
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
@@ -114,7 +62,7 @@ struct CommandEditor: View {
                 .foregroundStyle(.tertiary)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(isUsingDefault ? "当前生效命令：" : "预览：")
+                Text(drafts.hasChanges(.command(config.id)) ? "草稿预览：" : "已保存命令预览：")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
@@ -150,38 +98,16 @@ struct CommandEditor: View {
                 }
             }
 
-            HStack(spacing: 8) {
-                if executionMode == .selectedPath && !editedCommand.isEmpty {
-                    Button("重置为默认") {
-                        editedCommand = ""
-                        commitChanges()
-                    }
+            if executionMode == .selectedPath && !editedCommand.isEmpty {
+                Button("重置为默认") { config.customCommand = nil }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                }
-
-                Spacer()
-
-                if showsSaveFeedback {
-                    SaveConfirmationLabel()
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
-                }
-
-                Button("保存") {
-                    commitChanges()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(!hasChanges)
             }
+
+            EditorSaveBar(key: .command(config.id))
         }
         .padding(.top, 2)
         .padding(.bottom, 4)
-        .onDisappear {
-            if hasChanges {
-                commitChanges()
-            }
-        }
     }
 
     private var helpText: String {
@@ -190,33 +116,6 @@ struct CommandEditor: View {
             return "{app} = 应用路径，{path} = 目标路径"
         case .currentDirectory:
             return "在 Finder 当前目录执行普通 shell 命令；文件目标会使用父目录"
-        }
-    }
-
-    private func commitChanges() {
-        let trimmedName = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let savedName = trimmedName.isEmpty ? editedName : trimmedName
-        let command = editedCommand.isEmpty ? nil : editedCommand
-        onSave(savedName, command, executionMode)
-        lastSavedName = savedName
-        editedName = savedName
-        lastSavedCommand = editedCommand
-        lastSavedExecutionMode = executionMode
-        showSaveFeedback()
-    }
-
-    private func showSaveFeedback() {
-        saveFeedbackID += 1
-        let currentID = saveFeedbackID
-        withAnimation(.easeOut(duration: 0.12)) {
-            showsSaveFeedback = true
-        }
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.6))
-            guard currentID == saveFeedbackID else { return }
-            withAnimation(.easeIn(duration: 0.12)) {
-                showsSaveFeedback = false
-            }
         }
     }
 
@@ -229,56 +128,13 @@ struct CommandEditor: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("默认命令回退") {
+#Preview("命令草稿") {
+    let model = AppModel(forPreview: true)
     CommandEditor(
-        name: "Terminal",
-        editedCommand: "",
-        executionMode: .selectedPath,
-        defaultCommand: "open -a \"{app}\" \"{path}\"",
-        appPath: "/Applications/Terminal.app",
-        onSave: { _, _, _ in }
+        config: .constant(MenuItemConfig(appName: "Terminal", appPath: "/System/Applications/Utilities/Terminal.app")),
+        defaultCommand: "open -a {app} {path}"
     )
-    .frame(width: 400)
-    .padding()
-}
-
-#Preview("自定义命令 + 预览") {
-    CommandEditor(
-        name: "kitty",
-        editedCommand: "{app} --single-instance --directory {path}",
-        executionMode: .selectedPath,
-        defaultCommand: "open -a \"{app}\" \"{path}\"",
-        appPath: "/Applications/kitty.app/Contents/MacOS/kitty",
-        onSave: { _, _, _ in }
-    )
-    .frame(width: 400)
-    .padding()
-}
-
-#Preview("缺少 {path} 警告") {
-    CommandEditor(
-        name: "版本",
-        editedCommand: "{app} --version",
-        executionMode: .selectedPath,
-        defaultCommand: "open -a \"{app}\" \"{path}\"",
-        appPath: "/Applications/kitty.app/Contents/MacOS/kitty",
-        onSave: { _, _, _ in }
-    )
-    .frame(width: 400)
-    .padding()
-}
-
-#Preview("当前目录命令") {
-    CommandEditor(
-        name: "Git Pull",
-        editedCommand: "git pull",
-        executionMode: .currentDirectory,
-        defaultCommand: "git pull",
-        appPath: "",
-        onSave: { _, _, _ in }
-    )
-    .frame(width: 400)
+    .environment(model.settingsDraftStore)
+    .frame(width: 320)
     .padding()
 }

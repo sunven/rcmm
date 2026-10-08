@@ -144,6 +144,15 @@ final class AppCoordinator {
         publishCurrentConfigurationInBackground()
     }
 
+    func waitForCurrentPublication() async {
+        await publishTask?.value
+    }
+
+    func synchronizeScripts() async {
+        publishCurrentConfigurationInBackground()
+        await waitForCurrentPublication()
+    }
+
     private func publishCurrentConfigurationInBackground() {
         let targets = autoRepairTargets
         let feedbackGeneration = repairFeedbackGeneration

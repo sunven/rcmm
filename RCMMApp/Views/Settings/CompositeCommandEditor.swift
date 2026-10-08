@@ -2,8 +2,8 @@ import RCMMShared
 import SwiftUI
 
 struct CompositeCommandEditor: View {
-    let config: CompositeMenuItemConfig
-    let onRename: (String) -> Void
+    @Environment(SettingsDraftStore.self) private var drafts
+    @Binding var config: CompositeMenuItemConfig
     let onAddShellStep: () -> Void
     let onAddAppStep: () -> Void
     let onReplaceAppStep: (CompositeCommandStep) -> Void
@@ -11,55 +11,16 @@ struct CompositeCommandEditor: View {
     let onDeleteStep: (UUID) -> Void
     let onMoveStep: (IndexSet, Int) -> Void
 
-    @State private var editedName: String
-    @FocusState private var focusedField: FocusedField?
-
-    private enum FocusedField: Hashable {
-        case name
-    }
-
-    init(
-        config: CompositeMenuItemConfig,
-        onRename: @escaping (String) -> Void,
-        onAddShellStep: @escaping () -> Void,
-        onAddAppStep: @escaping () -> Void,
-        onReplaceAppStep: @escaping (CompositeCommandStep) -> Void,
-        onUpdateStep: @escaping (CompositeCommandStep, String, String, String?, String?, Bool) -> Void,
-        onDeleteStep: @escaping (UUID) -> Void,
-        onMoveStep: @escaping (IndexSet, Int) -> Void
-    ) {
-        self.config = config
-        self.onRename = onRename
-        self.onAddShellStep = onAddShellStep
-        self.onAddAppStep = onAddAppStep
-        self.onReplaceAppStep = onReplaceAppStep
-        self.onUpdateStep = onUpdateStep
-        self.onDeleteStep = onDeleteStep
-        self.onMoveStep = onMoveStep
-        _editedName = State(initialValue: config.name)
-    }
-
     private var issues: [MenuEntryIssue] {
-        MenuEntryEvaluator
-            .evaluate(.composite(config), environment: .filesystemAware)
-            .issues
+        drafts.issues(for: .composite(config.id))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                TextField("组合命令名称", text: $editedName)
+                TextField("组合命令名称", text: $config.name)
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.small)
-                    .focused($focusedField, equals: .name)
-                    .onSubmit {
-                        commitName()
-                    }
-                    .onChange(of: config.name) { _, newValue in
-                        if editedName != newValue {
-                            editedName = newValue
-                        }
-                    }
 
                 Menu {
                     Button("应用步骤", action: onAddAppStep)
@@ -105,13 +66,15 @@ struct CompositeCommandEditor: View {
                 VStack(spacing: 6) {
                     ForEach(Array(config.steps.enumerated()), id: \.element.id) { index, step in
                         CompositeStepEditorRow(
-                            step: step,
+                            step: Binding(
+                                get: { config.steps.first { $0.id == step.id } ?? step },
+                                set: { value in
+                                    onUpdateStep(step, value.name, value.commandTemplate, value.appPath, value.bundleId, value.isEnabled)
+                                }
+                            ),
                             issues: issues.filter { $0.childID == step.id },
                             canMoveUp: index > 0,
                             canMoveDown: index < config.steps.count - 1,
-                            onUpdate: { name, commandTemplate, appPath, bundleId, isEnabled in
-                                onUpdateStep(step, name, commandTemplate, appPath, bundleId, isEnabled)
-                            },
                             onReplaceApp: step.kind == .app ? { onReplaceAppStep(step) } : nil,
                             onDelete: {
                                 onDeleteStep(step.id)
@@ -128,74 +91,18 @@ struct CompositeCommandEditor: View {
             }
         }
         .padding(.vertical, 6)
-        .onChange(of: focusedField) { oldValue, newValue in
-            if oldValue != nil, oldValue != newValue {
-                commitName()
-            }
-        }
-        .onDisappear {
-            commitName()
-        }
-    }
-
-    private func commitName() {
-        let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed != config.name else { return }
-        onRename(trimmed)
     }
 }
 
 private struct CompositeStepEditorRow: View {
-    let step: CompositeCommandStep
+    @Binding var step: CompositeCommandStep
     let issues: [MenuEntryIssue]
     let canMoveUp: Bool
     let canMoveDown: Bool
-    let onUpdate: (String, String, String?, String?, Bool) -> Void
     let onReplaceApp: (() -> Void)?
     let onDelete: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
-
-    @State private var name: String
-    @State private var commandTemplate: String
-    @State private var appPath: String
-    @State private var bundleId: String
-    @State private var isEnabled: Bool
-    @FocusState private var focusedField: FocusedField?
-
-    private enum FocusedField: Hashable {
-        case name
-        case command
-        case appPath
-        case bundleId
-    }
-
-    init(
-        step: CompositeCommandStep,
-        issues: [MenuEntryIssue],
-        canMoveUp: Bool,
-        canMoveDown: Bool,
-        onUpdate: @escaping (String, String, String?, String?, Bool) -> Void,
-        onReplaceApp: (() -> Void)?,
-        onDelete: @escaping () -> Void,
-        onMoveUp: @escaping () -> Void,
-        onMoveDown: @escaping () -> Void
-    ) {
-        self.step = step
-        self.issues = issues
-        self.canMoveUp = canMoveUp
-        self.canMoveDown = canMoveDown
-        self.onUpdate = onUpdate
-        self.onReplaceApp = onReplaceApp
-        self.onDelete = onDelete
-        self.onMoveUp = onMoveUp
-        self.onMoveDown = onMoveDown
-        _name = State(initialValue: step.name)
-        _commandTemplate = State(initialValue: step.commandTemplate)
-        _appPath = State(initialValue: step.appPath ?? "")
-        _bundleId = State(initialValue: step.bundleId ?? "")
-        _isEnabled = State(initialValue: step.isEnabled)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -205,13 +112,11 @@ private struct CompositeStepEditorRow: View {
                     .foregroundStyle(step.kind == .app ? .blue : .purple)
                     .frame(width: 40, alignment: .leading)
 
-                TextField("步骤名称", text: $name)
+                TextField("步骤名称", text: $step.name)
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.small)
-                    .focused($focusedField, equals: .name)
-                    .onSubmit(commitDraft)
 
-                Toggle("", isOn: $isEnabled)
+                Toggle("", isOn: $step.isEnabled)
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .labelsHidden()
@@ -245,23 +150,17 @@ private struct CompositeStepEditorRow: View {
                 .help("删除步骤")
             }
 
-            TextField("命令模板", text: $commandTemplate)
+            TextField("命令模板", text: $step.commandTemplate)
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
-                .focused($focusedField, equals: .command)
-                .onSubmit(commitDraft)
 
             if step.kind == .app {
-                TextField("应用路径", text: $appPath)
+                TextField("应用路径", text: Binding(get: { step.appPath ?? "" }, set: { step.appPath = $0.isEmpty ? nil : $0 }))
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.small)
-                    .focused($focusedField, equals: .appPath)
-                    .onSubmit(commitDraft)
-                TextField("Bundle ID", text: $bundleId)
+                TextField("Bundle ID", text: Binding(get: { step.bundleId ?? "" }, set: { step.bundleId = $0.isEmpty ? nil : $0 }))
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.small)
-                    .focused($focusedField, equals: .bundleId)
-                    .onSubmit(commitDraft)
             }
 
             if !issues.isEmpty {
@@ -275,43 +174,6 @@ private struct CompositeStepEditorRow: View {
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(Color.primary.opacity(0.04))
-        )
-        .onChange(of: step) { _, newValue in
-            name = newValue.name
-            commandTemplate = newValue.commandTemplate
-            appPath = newValue.appPath ?? ""
-            bundleId = newValue.bundleId ?? ""
-            isEnabled = newValue.isEnabled
-        }
-        .onChange(of: isEnabled) { _, _ in
-            commitDraft()
-        }
-        .onChange(of: focusedField) { oldValue, newValue in
-            if oldValue != nil, oldValue != newValue {
-                commitDraft()
-            }
-        }
-        .onDisappear {
-            commitDraft()
-        }
-    }
-
-    private var hasChanges: Bool {
-        name != step.name
-            || commandTemplate != step.commandTemplate
-            || appPath.nilIfBlank != step.appPath
-            || bundleId.nilIfBlank != step.bundleId
-            || isEnabled != step.isEnabled
-    }
-
-    private func commitDraft() {
-        guard hasChanges else { return }
-        onUpdate(
-            name,
-            commandTemplate,
-            appPath.nilIfBlank,
-            bundleId.nilIfBlank,
-            isEnabled
         )
     }
 }

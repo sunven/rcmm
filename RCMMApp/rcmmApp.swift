@@ -18,6 +18,7 @@ struct rcmmApp: App {
         .menuBarExtraStyle(.window)
         Settings {
             SettingsView()
+                .environment(appModel.settingsDraftStore)
                 .environment(appModel.appCoordinator)
                 .environment(appModel.appCoordinator.configStore)
                 .environment(appModel.updateCoordinator)

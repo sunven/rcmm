@@ -4,6 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct CompositeCommandsTab: View {
+    @Environment(SettingsDraftStore.self) private var drafts
     @Environment(ApplicationDiscoveryCoordinator.self) private var applicationDiscovery
     @Environment(AppCoordinator.self) private var appCoordinator
     @Environment(MenuConfigStore.self) private var configStore
@@ -85,16 +86,15 @@ struct CompositeCommandsTab: View {
                 guard let selection = pendingAppSelection else { return }
                 switch selection {
                 case .addStep(let compositeID):
-                    appCoordinator.edit { store in
-                        store.addAppStep(to: compositeID, appInfo: appInfo)
-                    }
+                    editComposite(compositeID) { $0.steps.append(MenuConfigStore.makeAppStep(from: appInfo)) }
                 case .replaceStep(let compositeID, let stepID):
-                    appCoordinator.edit { store in
-                        store.replaceAppStep(
-                            compositeId: compositeID,
-                            stepId: stepID,
-                            appInfo: appInfo
-                        )
+                    editComposite(compositeID) { config in
+                        guard let index = config.steps.firstIndex(where: { $0.id == stepID }) else { return }
+                        let replacement = MenuConfigStore.makeAppStep(from: appInfo)
+                        config.steps[index].name = replacement.name
+                        config.steps[index].commandTemplate = replacement.commandTemplate
+                        config.steps[index].appPath = replacement.appPath
+                        config.steps[index].bundleId = replacement.bundleId
                     }
                 case .appTerminalTemplate:
                     if let id = applicationDiscovery.addAppTerminalPreset(appInfo: appInfo) {
@@ -125,7 +125,7 @@ struct CompositeCommandsTab: View {
                 pendingDeletion = nil
             }
         } message: {
-            Text("删除后，该组合命令也会从 Finder 右键菜单中移除。")
+            Text("删除后，该组合命令也会从 Finder 右键菜单中移除，未保存的修改也会删除。")
         }
     }
 
@@ -223,10 +223,11 @@ struct CompositeCommandsTab: View {
 
     private func commandCard(_ config: CompositeMenuItemConfig) -> some View {
         let summary = summary(for: config)
+        let draft = drafts.composite(for: config)
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                Image(systemName: config.iconName ?? "rectangle.stack.badge.play")
+                Image(systemName: draft.iconName ?? "rectangle.stack.badge.play")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 34, height: 34)
@@ -236,10 +237,10 @@ struct CompositeCommandsTab: View {
                     )
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(config.name.nilIfBlank ?? "未命名组合命令")
+                    Text(draft.name.nilIfBlank ?? "未命名组合命令")
                         .font(.headline.weight(.semibold))
                         .lineLimit(1)
-                    Text("\(config.steps.count) 个步骤")
+                    Text("\(draft.steps.count) 个步骤")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -249,9 +250,7 @@ struct CompositeCommandsTab: View {
                 Menu {
                     ForEach(CompositeCommandIcon.allCases) { icon in
                         Button {
-                            appCoordinator.edit {
-                                $0.updateCompositeIcon(for: config.id, iconName: icon.rawValue)
-                            }
+                            editComposite(config.id) { $0.iconName = icon.rawValue }
                         } label: {
                             Label(icon.title, systemImage: icon.rawValue)
                         }
@@ -263,6 +262,9 @@ struct CompositeCommandsTab: View {
                 .buttonStyle(.plain)
                 .help("更换图标")
 
+                if drafts.hasChanges(.composite(config.id)) {
+                    Text("未保存").font(.caption2).foregroundStyle(.secondary)
+                }
                 FinderMenuStatusBadge(summary: summary)
 
                 Toggle("", isOn: Binding(
@@ -277,7 +279,7 @@ struct CompositeCommandsTab: View {
                 .help(config.isEnabled ? "停用此组合命令" : "启用此组合命令")
 
                 Button {
-                    if config.steps.isEmpty {
+                    if config.steps.isEmpty && !drafts.hasChanges(.composite(config.id)) {
                         appCoordinator.edit { $0.removeEntry(withID: config.id.uuidString) }
                     } else {
                         pendingDeletion = config
@@ -291,12 +293,9 @@ struct CompositeCommandsTab: View {
             }
 
             CompositeCommandEditor(
-                config: config,
-                onRename: { name in
-                    appCoordinator.edit { $0.updateCompositeName(for: config.id, name: name) }
-                },
+                config: Binding(get: { drafts.composite(for: config) }, set: { drafts.updateComposite($0) }),
                 onAddShellStep: {
-                    appCoordinator.edit { $0.addShellStep(to: config.id) }
+                    editComposite(config.id) { $0.steps.append(MenuConfigStore.makeShellStep()) }
                 },
                 onAddAppStep: {
                     pendingAppSelection = .addStep(compositeID: config.id)
@@ -308,28 +307,33 @@ struct CompositeCommandsTab: View {
                     )
                 },
                 onUpdateStep: { step, name, commandTemplate, appPath, bundleId, isEnabled in
-                    appCoordinator.edit {
-                        $0.updateCompositeStep(
-                            compositeId: config.id,
-                            stepId: step.id,
-                            name: name,
-                            commandTemplate: commandTemplate,
-                            appPath: appPath,
-                            bundleId: bundleId,
-                            isEnabled: isEnabled
-                        )
+                    editComposite(config.id) { draft in
+                        guard let index = draft.steps.firstIndex(where: { $0.id == step.id }) else { return }
+                        draft.steps[index].name = name
+                        draft.steps[index].commandTemplate = commandTemplate
+                        draft.steps[index].appPath = appPath
+                        draft.steps[index].bundleId = bundleId
+                        draft.steps[index].isEnabled = isEnabled
                     }
                 },
                 onDeleteStep: { stepID in
-                    appCoordinator.edit { $0.removeCompositeStep(compositeId: config.id, stepId: stepID) }
+                    editComposite(config.id) { $0.steps.removeAll { $0.id == stepID } }
                 },
                 onMoveStep: { source, destination in
-                    appCoordinator.edit { $0.moveCompositeStep(compositeId: config.id, from: source, to: destination) }
+                    editComposite(config.id) { $0.steps.move(fromOffsets: source, toOffset: destination) }
                 }
             )
+            EditorSaveBar(key: .composite(config.id))
         }
         .padding(12)
         .background(compositeCardBackground)
+    }
+
+    private func editComposite(_ id: UUID, _ body: (inout CompositeMenuItemConfig) -> Void) {
+        guard let saved = composites.first(where: { $0.id == id }) else { return }
+        var draft = drafts.composite(for: saved)
+        body(&draft)
+        drafts.updateComposite(draft)
     }
 
     private var emptyState: some View {

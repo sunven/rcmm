@@ -5,6 +5,7 @@ import SwiftUI
 struct AppListRow: View {
     let menuItem: MenuItemConfig
     let summary: FinderMenuEntrySummary
+    var hasUnsavedChanges = false
     var onMoveUp: (() -> Void)?
     var onMoveDown: (() -> Void)?
     var onDelete: (() -> Void)?
@@ -26,7 +27,9 @@ struct AppListRow: View {
                     .foregroundStyle(menuItem.isEnabled ? .primary : .secondary)
                     .lineLimit(1)
 
-                if let subtitle = summary.subtitle, !subtitle.isEmpty {
+                if hasUnsavedChanges {
+                    Text("未保存修改").font(.caption2).foregroundStyle(.secondary)
+                } else if let subtitle = summary.subtitle, !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.caption2)
                         .foregroundStyle(.secondary)

@@ -1,60 +1,138 @@
+import AppKit
+import RCMMShared
 import SwiftUI
 
 struct VerifyStepView: View {
     @Binding var launchAtLogin: Bool
+    let verification: OnboardingVerification
+    @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(MenuConfigStore.self) private var configStore
+    @State private var showsRecovery = false
+    @State private var directoryError: String?
 
     var body: some View {
-        VStack(spacing: 20) {
-            // 顶部图标和标题
-            VStack(spacing: 10) {
-                Image(systemName: "hand.tap")
-                    .font(.system(size: 44))
-                    .foregroundStyle(Color.accentColor)
+        VStack(alignment: .leading, spacing: 16) {
+            Text("验证 Finder 右键菜单")
+                .font(.title2.bold())
+                .frame(maxWidth: .infinity)
 
-                Text("现在去 Finder 试试右键！")
-                    .font(.title2.bold())
+            if verification.phase == .syncing {
+                ProgressView("正在同步所选应用…")
+            } else if verification.isReady(in: configStore) {
+                Label("配置已同步，请在 Finder 中验证", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            } else {
+                Label("配置尚未同步成功", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            }
 
-                Text("验证右键菜单是否正常工作")
-                    .font(.body)
+            ForEach(verification.items(in: configStore)) { item in
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(item.name, systemImage: verification.phase == .syncing ? "arrow.triangle.2.circlepath" : (item.issue == nil ? "checkmark.circle" : "exclamationmark.triangle"))
+                    if verification.phase != .syncing, let issue = item.issue {
+                        Text(issue)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+
+            if verification.targets.isEmpty {
+                Text("请返回上一步添加应用。")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
             }
 
             Divider()
 
-            // 操作指引
-            VStack(alignment: .leading, spacing: 8) {
-                Text("操作指引：")
-                    .font(.subheadline.bold())
+            VStack(alignment: .leading, spacing: 6) {
+                Label("打开测试目录，在空白处右键", systemImage: "1.circle.fill")
+                Label("点击上方列出的任意一个应用", systemImage: "2.circle.fill")
+                Label("确认应用打开到测试目录", systemImage: "3.circle.fill")
+                Text("如使用子菜单模式，请先展开 rcmm 菜单。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("在 Finder 中右键一个目录", systemImage: "1.circle.fill")
-                    Label("点击菜单中的应用", systemImage: "2.circle.fill")
-                    Label("确认应用打开到对应目录", systemImage: "3.circle.fill")
+            Button("打开测试目录", action: openTestDirectory)
+                .buttonStyle(AppPrimaryButtonStyle())
+                .disabled(!verification.isReady(in: configStore))
+
+            if let directoryError {
+                Text(directoryError)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            Toggle("已在 Finder 中成功打开应用", isOn: Binding(
+                get: { verification.isConfirmed(in: configStore) },
+                set: { verification.confirm($0, in: configStore) }
+            ))
+            .toggleStyle(.checkbox)
+            .disabled(!verification.isReady(in: configStore))
+
+            if verification.phase != .syncing && !verification.isReady(in: configStore) {
+                retryButton
+            }
+
+            DisclosureGroup("菜单未出现", isExpanded: $showsRecovery) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("先关闭 Finder 右键菜单，重新打开；如仍未出现，请确认系统设置中已启用当前版本的 Finder 扩展。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        retryButton
+                        Button("前往系统设置") {
+                            PluginKitService.showExtensionManagement()
+                        }
+                    }
                 }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .padding(.top, 6)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal)
 
-            // 开机自启 Toggle
-            HStack(spacing: 12) {
-                Text("开机自动启动")
-                    .font(.subheadline)
-                Spacer()
-                Toggle("开机自动启动", isOn: $launchAtLogin)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
+            Divider()
+
+            Toggle("开机自动启动", isOn: $launchAtLogin)
+                .toggleStyle(.switch)
+        }
+    }
+
+    private var retryButton: some View {
+        Button("重新同步") {
+            verification.retry(coordinator: appCoordinator)
+        }
+        .disabled(verification.phase == .syncing || verification.targets.isEmpty)
+    }
+
+    private func openTestDirectory() {
+        directoryError = nil
+        do {
+            let caches = try FileManager.default.url(
+                for: .cachesDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            let directory = caches
+                .appendingPathComponent(RuntimeConfiguration.appGroupID, isDirectory: true)
+                .appendingPathComponent("Finder Test", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            if !NSWorkspace.shared.open(directory) {
+                directoryError = "无法打开测试目录，请重试。"
             }
-            .padding(.horizontal)
-
-            Spacer(minLength: 0)
+        } catch {
+            directoryError = "无法创建测试目录：\(error.localizedDescription)"
         }
     }
 }
 
 #Preview {
-    VerifyStepView(launchAtLogin: .constant(true))
-        .frame(width: 480, height: 380)
+    let appModel = AppModel(forPreview: true)
+    VerifyStepView(launchAtLogin: .constant(true), verification: OnboardingVerification())
+        .environment(appModel.appCoordinator)
+        .environment(appModel.appCoordinator.configStore)
+        .padding()
+        .frame(width: 440)
 }

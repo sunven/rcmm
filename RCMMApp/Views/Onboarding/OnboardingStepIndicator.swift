@@ -9,7 +9,7 @@ enum OnboardingStep: Int, CaseIterable {
         switch self {
         case .enableExtension: return "启用扩展"
         case .selectApps: return "选择应用"
-        case .verify: return "验证完成"
+        case .verify: return "验证菜单"
         }
     }
 }

@@ -6,6 +6,8 @@ struct OnboardingFlowView: View {
     @Environment(ApplicationDiscoveryCoordinator.self) private var applicationDiscovery
     @Environment(AppFlowCoordinator.self) private var appFlowCoordinator
     @Environment(AppCoordinator.self) private var appCoordinator
+    @State private var verification = OnboardingVerification()
+    @State private var didPreselectApps = false
     @State private var currentStep: OnboardingStep = .enableExtension
     @State private var isExtensionEnabled = false
     @State private var selectedAppIds: Set<UUID> = []
@@ -63,12 +65,13 @@ struct OnboardingFlowView: View {
                             advanceToNextStep()
                         }
                         .buttonStyle(AppPrimaryButtonStyle())
-                        .disabled(selectedAppIds.isEmpty)
+                        .disabled(!canContinueFromSelection)
                     } else if currentStep == .verify {
                         Button("完成") {
                             completeOnboarding()
                         }
                         .buttonStyle(AppPrimaryButtonStyle())
+                        .disabled(!verification.isConfirmed(in: appCoordinator.configStore))
                     }
                 }
             }
@@ -76,6 +79,15 @@ struct OnboardingFlowView: View {
             .padding(.vertical, 16)
         }
         .frame(width: 480, height: 500)
+        .onDisappear {
+            verification.leave()
+        }
+        .onChange(of: verification.currentEntries(in: appCoordinator.configStore)) { _, _ in
+            verification.confirm(false, in: appCoordinator.configStore)
+        }
+        .onChange(of: verification.isReady(in: appCoordinator.configStore)) { _, ready in
+            if !ready { verification.confirm(false, in: appCoordinator.configStore) }
+        }
         .onAppear {
             // 初始化时检测扩展状态，若已启用则跳到步骤 2
             if PluginKitService.isExtensionEnabled {
@@ -102,10 +114,10 @@ struct OnboardingFlowView: View {
                     )
                 }
             case .selectApps:
-                SelectAppsStepView(selectedAppIds: $selectedAppIds)
+                SelectAppsStepView(selectedAppIds: $selectedAppIds, didPreselectApps: $didPreselectApps)
             case .verify:
                 scrollableStep {
-                    VerifyStepView(launchAtLogin: $launchAtLogin)
+                    VerifyStepView(launchAtLogin: $launchAtLogin, verification: verification)
                 }
             }
         }
@@ -152,6 +164,14 @@ struct OnboardingFlowView: View {
 
     // MARK: - 导航
 
+    private var canContinueFromSelection: Bool {
+        !applicationDiscovery.isScanning && (
+            applicationDiscovery.apps.contains { selectedAppIds.contains($0.id) }
+                || !verification.targets.isEmpty
+                || OnboardingVerification.existingApplication(in: appCoordinator.configStore.menuEntries) != nil
+        )
+    }
+
     private var canGoBack: Bool {
         currentStep.rawValue > OnboardingStep.enableExtension.rawValue
     }
@@ -168,6 +188,12 @@ struct OnboardingFlowView: View {
     }
 
     private func advanceToNextStep() {
+        if currentStep == .selectApps {
+            guard canContinueFromSelection else { return }
+            let apps = applicationDiscovery.apps.filter { selectedAppIds.contains($0.id) }
+            verification.prepare(apps: apps, coordinator: appCoordinator)
+            selectedAppIds.removeAll()
+        }
         guard let nextStep = OnboardingStep(rawValue: currentStep.rawValue + 1) else { return }
         if currentStep == .enableExtension {
             autoAdvanceWhenExtensionEnabled = true
@@ -176,6 +202,7 @@ struct OnboardingFlowView: View {
     }
 
     private func returnToPreviousStep() {
+        verification.leave()
         guard let previousStep = OnboardingStep(rawValue: currentStep.rawValue - 1) else { return }
         if previousStep == .enableExtension {
             autoAdvanceWhenExtensionEnabled = false
@@ -183,22 +210,16 @@ struct OnboardingFlowView: View {
         advanceToStep(previousStep)
     }
 
-    private func applySelectedApps() {
-        let appsToAdd = applicationDiscovery.apps.filter { selectedAppIds.contains($0.id) }
-        appCoordinator.edit { $0.addMenuItems(from: appsToAdd) }
-    }
-
     // MARK: - 引导完成
 
     private func skipOnboarding() {
         guard !isCompleting else { return }
+        verification.leave()
         appFlowCoordinator.completeOnboarding()
     }
 
     private func completeOnboarding() {
-        guard !isCompleting else { return }
-
-        applySelectedApps()
+        guard !isCompleting, verification.isConfirmed(in: appCoordinator.configStore) else { return }
 
         // 根据 Toggle 状态注册或取消开机自启
         if launchAtLogin {

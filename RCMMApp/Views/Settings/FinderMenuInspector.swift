@@ -3,11 +3,11 @@ import RCMMShared
 import SwiftUI
 
 struct FinderMenuInspector: View {
+    @Environment(SettingsDraftStore.self) private var drafts
     let summary: FinderMenuEntrySummary?
     let entry: MenuEntry?
     var onOpenNewFileSettings: () -> Void
     var onOpenCompositeSettings: () -> Void = {}
-    var onUpdateCustomCommand: (MenuItemConfig, String, String?, CustomCommandExecutionMode) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -151,14 +151,11 @@ struct FinderMenuInspector: View {
         case .custom(let config):
             InspectorPanel(title: config.executionMode == .currentDirectory ? "命令编辑" : "应用命令") {
                 CommandEditor(
-                    name: config.appName,
-                    editedCommand: config.customCommand ?? "",
-                    executionMode: config.executionMode,
-                    defaultCommand: resolveDefaultCommand(for: config),
-                    appPath: config.appPath,
-                    onSave: { name, command, executionMode in
-                        onUpdateCustomCommand(config, name, command, executionMode)
-                    }
+                    config: Binding(
+                        get: { drafts.command(for: config) },
+                        set: { drafts.updateCommand($0) }
+                    ),
+                    defaultCommand: resolveDefaultCommand(for: config)
                 )
                 .id(config.id)
             }

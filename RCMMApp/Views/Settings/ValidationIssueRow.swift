@@ -24,17 +24,3 @@ struct ValidationIssueRow: View {
         }
     }
 }
-
-struct SaveConfirmationLabel: View {
-    var message: String = "已保存，等待同步"
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.caption2.weight(.semibold))
-            Text(message)
-                .font(.caption2.weight(.medium))
-        }
-        .foregroundStyle(.green)
-    }
-}

@@ -318,6 +318,14 @@ final class MenuConfigStore {
 
     // MARK: - Composite Commands
 
+    func updateCompositeContents(_ draft: CompositeMenuItemConfig) {
+        updateCompositeName(for: draft.id, name: draft.name)
+        updateCompositeIcon(for: draft.id, iconName: draft.iconName)
+        updateComposite(for: draft.id) { config in
+            config.steps = draft.steps
+        }
+    }
+
     func updateCompositeName(for compositeId: UUID, name: String) {
         updateComposite(for: compositeId) { config in
             let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -360,27 +368,25 @@ final class MenuConfigStore {
 
     func addShellStep(to compositeId: UUID) {
         updateComposite(for: compositeId) { config in
-            config.steps.append(
-                CompositeCommandStep(
-                    kind: .shell,
-                    name: "Shell",
-                    commandTemplate: "open -a Terminal {path}"
-                )
-            )
+            config.steps.append(Self.makeShellStep())
         }
+    }
+
+    static func makeShellStep() -> CompositeCommandStep {
+        CompositeCommandStep(kind: .shell, name: "Shell", commandTemplate: "open -a Terminal {path}")
+    }
+
+    static func makeAppStep(from appInfo: AppInfo) -> CompositeCommandStep {
+        CompositeCommandStep(
+            kind: .app, name: appInfo.name,
+            commandTemplate: preferredCommandTemplate(for: appInfo),
+            appPath: appInfo.path, bundleId: appInfo.bundleId
+        )
     }
 
     func addAppStep(to compositeId: UUID, appInfo: AppInfo) {
         updateComposite(for: compositeId) { config in
-            config.steps.append(
-                CompositeCommandStep(
-                    kind: .app,
-                    name: appInfo.name,
-                    commandTemplate: preferredCommandTemplate(for: appInfo),
-                    appPath: appInfo.path,
-                    bundleId: appInfo.bundleId
-                )
-            )
+            config.steps.append(Self.makeAppStep(from: appInfo))
         }
     }
 
@@ -389,7 +395,7 @@ final class MenuConfigStore {
             guard let stepIndex = config.steps.firstIndex(where: { $0.id == stepId }),
                   config.steps[stepIndex].kind == .app else { return }
             config.steps[stepIndex].name = appInfo.name
-            config.steps[stepIndex].commandTemplate = preferredCommandTemplate(for: appInfo)
+            config.steps[stepIndex].commandTemplate = Self.preferredCommandTemplate(for: appInfo)
             config.steps[stepIndex].appPath = appInfo.path
             config.steps[stepIndex].bundleId = appInfo.bundleId
         }
@@ -425,7 +431,7 @@ final class MenuConfigStore {
         menuEntries[index] = .composite(config)
     }
 
-    private func preferredCommandTemplate(for appInfo: AppInfo) -> String {
+    private static func preferredCommandTemplate(for appInfo: AppInfo) -> String {
         appInfo.bundleId == "com.microsoft.VSCode"
             ? CompositeCommandTemplates.vsCodeCLI
             : CompositeCommandTemplates.legacyOpenApp

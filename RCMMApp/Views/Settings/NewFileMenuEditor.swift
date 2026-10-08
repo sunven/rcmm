@@ -3,8 +3,8 @@ import RCMMShared
 import SwiftUI
 
 struct NewFileMenuEditor: View {
+    @Environment(SettingsDraftStore.self) private var drafts
     let config: NewFileMenuConfig
-    let onUpdateTemplate: (NewFileTemplateConfig) -> Void
     let onDeleteTemplate: (UUID) -> Void
     let onMoveTemplate: (IndexSet, Int) -> Void
 
@@ -18,12 +18,13 @@ struct NewFileMenuEditor: View {
                 ForEach(Array(config.templates.enumerated()), id: \.element.id) { index, template in
                     NewFileTemplateCard(
                         savedTemplate: template,
+                        menuID: config.id,
+                        template: Binding(
+                            get: { drafts.template(for: template, menuID: config.id) },
+                            set: { drafts.updateTemplate($0, menuID: config.id) }
+                        ),
                         canMoveUp: index > 0,
                         canMoveDown: index < config.templates.count - 1,
-                        validateDraft: { draft in
-                            issues(for: draft)
-                        },
-                        onUpdate: onUpdateTemplate,
                         onRequestDelete: {
                             templatePendingDeletion = template
                         },
@@ -57,7 +58,7 @@ struct NewFileMenuEditor: View {
                 templatePendingDeletion = nil
             }
         } message: {
-            Text("删除后，该模板将不再出现在 Finder 的新建文件菜单中。")
+            Text("删除后，该模板将不再出现在 Finder 的新建文件菜单中，未保存的修改也会删除。")
         }
     }
 
@@ -86,38 +87,24 @@ struct NewFileMenuEditor: View {
         return "删除“\(template.displayName.nilIfBlank ?? "未命名模板")”模板？"
     }
 
-    private func issues(for draft: NewFileTemplateConfig) -> [MenuEntryIssue] {
-        var menu = config
-        guard let index = menu.templates.firstIndex(where: { $0.id == draft.id }) else {
-            return []
-        }
-
-        menu.templates[index] = draft
-        menu.templates[index].isEnabled = true
-        return MenuEntryEvaluator
-            .evaluate(.newFile(menu), environment: .filesystemAware)
-            .issues
-            .filter { $0.childID == draft.id }
-    }
 }
 
 private struct NewFileTemplateCard: View {
+    @Environment(SettingsDraftStore.self) private var drafts
     let savedTemplate: NewFileTemplateConfig
+    let menuID: UUID
+    @Binding var template: NewFileTemplateConfig
     let canMoveUp: Bool
     let canMoveDown: Bool
-    let validateDraft: (NewFileTemplateConfig) -> [MenuEntryIssue]
-    let onUpdate: (NewFileTemplateConfig) -> Void
     let onRequestDelete: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
 
-    @State private var displayName: String
-    @State private var baseName: String
-    @State private var fileExtension: String
-    @State private var creationMode: NewFileCreationMode
-    @State private var templatePath: String
-    @State private var initialContent: String
-    @State private var isEnabled: Bool
+    private var displayName: String { template.displayName }
+    private var fileExtension: String { template.fileExtension }
+    private var creationMode: NewFileCreationMode { template.creationMode }
+    private var templatePath: String { template.templatePath ?? "" }
+    private var isEnabled: Bool { template.isEnabled }
     @State private var isRenaming = false
     @FocusState private var focusedField: FocusedField?
 
@@ -129,43 +116,15 @@ private struct NewFileTemplateCard: View {
         case templatePath
     }
 
-    init(
-        savedTemplate: NewFileTemplateConfig,
-        canMoveUp: Bool,
-        canMoveDown: Bool,
-        validateDraft: @escaping (NewFileTemplateConfig) -> [MenuEntryIssue],
-        onUpdate: @escaping (NewFileTemplateConfig) -> Void,
-        onRequestDelete: @escaping () -> Void,
-        onMoveUp: @escaping () -> Void,
-        onMoveDown: @escaping () -> Void
-    ) {
-        self.savedTemplate = savedTemplate
-        self.canMoveUp = canMoveUp
-        self.canMoveDown = canMoveDown
-        self.validateDraft = validateDraft
-        self.onUpdate = onUpdate
-        self.onRequestDelete = onRequestDelete
-        self.onMoveUp = onMoveUp
-        self.onMoveDown = onMoveDown
-        _displayName = State(initialValue: savedTemplate.displayName)
-        _baseName = State(initialValue: savedTemplate.baseName)
-        _fileExtension = State(initialValue: savedTemplate.fileExtension)
-        _creationMode = State(initialValue: savedTemplate.creationMode)
-        _templatePath = State(initialValue: savedTemplate.templatePath ?? "")
-        _initialContent = State(initialValue: savedTemplate.initialContent ?? "")
-        _isEnabled = State(initialValue: savedTemplate.isEnabled)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             cardHeader
 
             HStack(spacing: 8) {
-                TextField("基础文件名", text: $baseName)
+                TextField("基础文件名", text: $template.baseName)
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.regular)
                     .focused($focusedField, equals: .baseName)
-                    .onSubmit(saveIfValid)
 
                 TextField(".txt", text: extensionBinding)
                     .textFieldStyle(.roundedBorder)
@@ -173,7 +132,6 @@ private struct NewFileTemplateCard: View {
                     .font(.system(.body, design: .monospaced))
                     .frame(width: 100)
                     .focused($focusedField, equals: .fileExtension)
-                    .onSubmit(saveIfValid)
             }
 
             creationModeEditor
@@ -181,6 +139,7 @@ private struct NewFileTemplateCard: View {
             if !currentIssues.isEmpty {
                 issueList
             }
+            EditorSaveBar(key: .template(menuID: menuID, templateID: template.id))
         }
         .padding(11)
         .background(templateCardBackground)
@@ -188,23 +147,6 @@ private struct NewFileTemplateCard: View {
             if oldValue == .displayName, newValue != .displayName {
                 isRenaming = false
             }
-            if oldValue != nil, oldValue != newValue {
-                saveIfValid()
-            }
-        }
-        .onChange(of: creationMode) { _, _ in
-            saveIfValid()
-        }
-        .onChange(of: isEnabled) { oldValue, newValue in
-            if newValue,
-               currentIssues.contains(where: { $0.severity == .error }) {
-                isEnabled = oldValue
-                return
-            }
-            saveIfValid()
-        }
-        .onDisappear {
-            saveIfValid()
         }
     }
 
@@ -213,7 +155,7 @@ private struct NewFileTemplateCard: View {
             TemplateFileBadge(fileExtension: fileExtension)
 
             if isRenaming {
-                TextField("模板名称", text: $displayName)
+                TextField("模板名称", text: $template.displayName)
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.small)
                     .frame(maxWidth: 150)
@@ -244,7 +186,7 @@ private struct NewFileTemplateCard: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Picker("创建方式", selection: $creationMode) {
+            Picker("创建方式", selection: $template.creationMode) {
                 ForEach(NewFileCreationMode.allCases) { mode in
                     Text(creationModeTitle(for: mode)).tag(mode)
                 }
@@ -253,9 +195,12 @@ private struct NewFileTemplateCard: View {
             .controlSize(.small)
             .frame(width: 122)
 
+            if drafts.hasChanges(.template(menuID: menuID, templateID: template.id)) {
+                Text("未保存").font(.caption2).foregroundStyle(.secondary)
+            }
             templateStatus
 
-            Toggle("", isOn: $isEnabled)
+            Toggle("", isOn: $template.isEnabled)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
@@ -284,7 +229,7 @@ private struct NewFileTemplateCard: View {
             EmptyView()
 
         case .textContent:
-            TextEditor(text: $initialContent)
+            TextEditor(text: Binding(get: { template.initialContent ?? "" }, set: { template.initialContent = $0 }))
                 .font(.system(.caption, design: .monospaced))
                 .scrollContentBackground(.hidden)
                 .padding(5)
@@ -296,12 +241,11 @@ private struct NewFileTemplateCard: View {
 
         case .copyTemplate:
             HStack(spacing: 7) {
-                TextField("选择模板文件", text: $templatePath)
+                TextField("选择模板文件", text: Binding(get: { templatePath }, set: { template.templatePath = $0 }))
                     .font(.system(.caption, design: .monospaced))
                     .textFieldStyle(.roundedBorder)
                     .controlSize(.regular)
                     .focused($focusedField, equals: .templatePath)
-                    .onSubmit(saveIfValid)
 
                 Button {
                     chooseTemplateFile()
@@ -335,7 +279,7 @@ private struct NewFileTemplateCard: View {
     }
 
     private var currentIssues: [MenuEntryIssue] {
-        validateDraft(editedTemplate)
+        drafts.issues(for: .template(menuID: menuID, templateID: template.id))
     }
 
     private var templateStatusPresentation: TemplateStatusPresentation {
@@ -376,26 +320,13 @@ private struct NewFileTemplateCard: View {
             != savedTemplate.templateFingerprint
     }
 
-    private var editedTemplate: NewFileTemplateConfig {
-        var copy = savedTemplate
-        copy.displayName = displayName
-        copy.baseName = baseName
-        copy.fileExtension = fileExtension
-        copy.creationMode = creationMode
-        copy.templatePath = creationMode == .copyTemplate ? templatePath.nilIfBlank : nil
-        copy.templateFingerprint = NewFileTemplateFingerprint.fileFingerprint(at: copy.templatePath)
-        copy.initialContent = creationMode == .textContent ? initialContent.nilIfBlank : nil
-        copy.isEnabled = isEnabled
-        return copy
-    }
-
     private var extensionBinding: Binding<String> {
         Binding(
             get: {
                 fileExtension.isEmpty ? "" : ".\(fileExtension)"
             },
             set: { value in
-                fileExtension = value.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                template.fileExtension = value.trimmingCharacters(in: CharacterSet(charactersIn: "."))
             }
         )
     }
@@ -432,19 +363,6 @@ private struct NewFileTemplateCard: View {
     private func finishRenaming() {
         isRenaming = false
         focusedField = nil
-        saveIfValid()
-    }
-
-    private func saveIfValid() {
-        let draft = editedTemplate
-        guard draft != savedTemplate else {
-            return
-        }
-        guard !draft.isEnabled
-                || !validateDraft(draft).contains(where: { $0.severity == .error }) else {
-            return
-        }
-        onUpdate(draft)
     }
 
     private func chooseTemplateFile() {
@@ -455,12 +373,11 @@ private struct NewFileTemplateCard: View {
         panel.canCreateDirectories = false
 
         if panel.runModal() == .OK, let url = panel.url {
-            templatePath = url.path
+            template.templatePath = url.path
             if fileExtension.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                !url.pathExtension.isEmpty {
-                fileExtension = url.pathExtension
+                template.fileExtension = url.pathExtension
             }
-            saveIfValid()
         }
     }
 }
