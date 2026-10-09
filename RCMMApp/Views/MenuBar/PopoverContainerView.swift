@@ -4,6 +4,7 @@ import SwiftUI
 struct PopoverContainerView: View {
     @Environment(ExtensionHealthMonitor.self) private var healthMonitor
     @Environment(AppCoordinator.self) private var appCoordinator
+    @Environment(MenuConfigStore.self) private var configStore
 
     var body: some View {
         Group {
@@ -17,7 +18,9 @@ struct PopoverContainerView: View {
                 NormalPopoverView()
             }
         }
-        .frame(width: healthMonitor.popoverState.preferredPopoverWidth)
+        .frame(width: configStore.errorRecords.isEmpty
+            ? healthMonitor.popoverState.preferredPopoverWidth
+            : max(360, healthMonitor.popoverState.preferredPopoverWidth))
         .onAppear {
             healthMonitor.refresh()
             appCoordinator.loadErrors()

@@ -129,7 +129,7 @@ struct MenuConfigTab: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Finder 菜单")
                     .font(.title3.weight(.semibold))
@@ -137,8 +137,6 @@ struct MenuConfigTab: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
-            Spacer()
 
             HStack(spacing: 6) {
                 headerMetric("\(summaries.count)", label: "菜单项", systemImage: "list.bullet")
@@ -148,6 +146,7 @@ struct MenuConfigTab: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
@@ -198,9 +197,11 @@ struct MenuConfigTab: View {
             Text(value)
                 .font(.caption.weight(.semibold))
                 .monospacedDigit()
+                .foregroundStyle(.primary)
             Text(label)
                 .font(.caption)
         }
+        .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 8)
         .padding(.vertical, 4)

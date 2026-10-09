@@ -61,10 +61,13 @@ struct ErrorBannerView: View {
                 Text(record.message)
                     .font(.caption)
                     .foregroundStyle(.red)
+                    .textSelection(.enabled)
                 Text(recoveryAdvice(for: record))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

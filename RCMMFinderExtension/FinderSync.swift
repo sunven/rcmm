@@ -288,24 +288,52 @@ class FinderSync: FIFinderSync {
         let scrollView = NSTextView.scrollableTextView()
         scrollView.frame = NSRect(x: 20, y: 62, width: 520, height: 220)
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
+        scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = false
         scrollView.borderType = .bezelBorder
 
         guard let textView = scrollView.documentView as? NSTextView else {
             return
         }
-        textView.string = directories.joined(separator: "\n")
         textView.isEditable = false
         textView.isSelectable = true
-        textView.isHorizontallyResizable = true
-        textView.font = NSFont.monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
-        textView.textContainerInset = NSSize(width: 8, height: 8)
-        textView.textContainer?.widthTracksTextView = false
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.setFrameSize(scrollView.contentSize)
+        textView.textContainerInset = NSSize(width: 12, height: 12)
+        textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(
-            width: CGFloat.greatestFiniteMagnitude,
+            width: scrollView.contentSize.width - 2 * textView.textContainerInset.width,
             height: CGFloat.greatestFiniteMagnitude
         )
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.headIndent = 36
+        paragraphStyle.tabStops = [NSTextTab(textAlignment: .left, location: 36)]
+        paragraphStyle.lineSpacing = 3
+        paragraphStyle.paragraphSpacing = 12
+
+        let directoryList = NSMutableAttributedString()
+        for (index, directory) in directories.enumerated() {
+            let row = NSMutableAttributedString(
+                string: "\(index + 1).\t\(directory)\(index == directories.count - 1 ? "" : "\n")",
+                attributes: [
+                    .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .regular),
+                    .foregroundColor: NSColor.labelColor,
+                    .paragraphStyle: paragraphStyle,
+                ]
+            )
+            row.addAttributes(
+                [
+                    .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold),
+                    .foregroundColor: NSColor.secondaryLabelColor,
+                ],
+                range: NSRange(location: 0, length: "\(index + 1).".utf16.count)
+            )
+            directoryList.append(row)
+        }
+        textView.textStorage?.setAttributedString(directoryList)
 
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 430),
