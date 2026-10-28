@@ -5,136 +5,223 @@ import Testing
 
 @Suite("Script Compilation Pipeline tests", .serialized)
 struct ScriptCompilationPipelineTests {
-    @Test("node_modules 清理脚本可被 osacompile 编译")
-    func cleanNodeModulesScriptCompiles() throws {
-        let entry = MenuEntry.builtIn(
-            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
-        )
-        let scriptBackedEntry = try #require(MenuEntryEvaluator.evaluate(entry).scriptBacked.first)
-        let source = try ScriptSourceGenerator().generate(
-            for: entry,
-            scriptBackedEntry: scriptBackedEntry
-        )
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("clean-node-modules-\(UUID().uuidString)")
-            .appendingPathExtension("scpt")
-        defer { try? FileManager.default.removeItem(at: outputURL) }
+    private static let cleanupTypes: [BuiltInType] = [
+        .cleanNodeModules,
+        .cleanJavaTarget,
+        .cleanRustTarget,
+    ]
 
-        try AppleScriptCompiler().compile(source: source, outputURL: outputURL)
+    @Test("三种清理脚本均可被 osacompile 编译")
+    func cleanupScriptsCompile() throws {
+        for type in Self.cleanupTypes {
+            let source = try cleanupSource(for: type)
+            let outputURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("cleanup-\(type.rawValue)-\(UUID().uuidString)")
+                .appendingPathExtension("scpt")
+            defer { try? FileManager.default.removeItem(at: outputURL) }
 
-        #expect(FileManager.default.fileExists(atPath: outputURL.path))
+            try AppleScriptCompiler().compile(source: source, outputURL: outputURL)
+
+            #expect(FileManager.default.fileExists(atPath: outputURL.path))
+        }
     }
 
-    @Test("node_modules 清理脚本扫描完整路径且不删除目录")
+    @Test("node_modules 扫描列出全部目录且不删除")
     func cleanNodeModulesScriptListsPathsWithoutDeleting() throws {
-        let entry = MenuEntry.builtIn(
-            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
-        )
-        let scriptBackedEntry = try #require(MenuEntryEvaluator.evaluate(entry).scriptBacked.first)
-        let source = try ScriptSourceGenerator().generate(
-            for: entry,
-            scriptBackedEntry: scriptBackedEntry
-        )
-        let rootURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("clean-node-modules-preview-\(UUID().uuidString)")
+        let rootURL = try makeTemporaryDirectory(prefix: "clean-node-modules-preview")
         let firstURL = rootURL.appendingPathComponent("app/node_modules")
         let secondURL = rootURL.appendingPathComponent("包含换行\n的目录/node_modules")
-        let sourceURL = rootURL.appendingPathComponent("preview.applescript")
-        defer { try? FileManager.default.removeItem(at: rootURL) }
-
         try FileManager.default.createDirectory(at: firstURL, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: secondURL, withIntermediateDirectories: true)
-        let runnableSource = source + """
 
-        on run argv
-        return listNodeModules(item 1 of argv)
-        end run
-        """
-        try runnableSource.write(to: sourceURL, atomically: true, encoding: .utf8)
+        let paths = try runCleanupList(type: .cleanNodeModules, root: rootURL)
 
-        let process = Process()
-        let output = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = [sourceURL.path, rootURL.path]
-        process.standardOutput = output
-        try process.run()
-        process.waitUntilExit()
-
-        let encodedPaths = String(
-            decoding: output.fileHandleForReading.readDataToEndOfFile(),
-            as: UTF8.self
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
-        let pathData = try #require(Data(base64Encoded: encodedPaths))
-        let paths = pathData.split(separator: 0).map {
-            String(decoding: $0, as: UTF8.self)
-        }
-
-        #expect(process.terminationStatus == 0)
         #expect(Set(paths) == Set([firstURL.path, secondURL.path]))
         #expect(FileManager.default.fileExists(atPath: firstURL.path))
         #expect(FileManager.default.fileExists(atPath: secondURL.path))
     }
 
-    @Test("node_modules 清理脚本只删除指定目录")
-    func cleanNodeModulesScriptDeletesOnlySpecifiedDirectory() throws {
-        let entry = MenuEntry.builtIn(
-            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
+    @Test("Java 扫描只匹配同级存在构建描述文件的 target")
+    func javaTargetScanRequiresBuildManifest() throws {
+        let rootURL = try makeTemporaryDirectory(prefix: "clean-java-target")
+        let fixtures: [(module: String, manifest: String?)] = [
+            ("maven", "pom.xml"),
+            ("gradle", "build.gradle"),
+            ("gradle-kts", "build.gradle.kts"),
+            ("ant", "build.xml"),
+            ("with space", "pom.xml"),
+            ("unrelated", nil),
+        ]
+        var expectedPaths: Set<String> = []
+
+        for fixture in fixtures {
+            let moduleURL = rootURL.appendingPathComponent(fixture.module)
+            let targetURL = moduleURL.appendingPathComponent("target")
+            try FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: true)
+            if let manifest = fixture.manifest {
+                try Data().write(to: moduleURL.appendingPathComponent(manifest))
+                expectedPaths.insert(targetURL.path)
+            }
+        }
+        try FileManager.default.createDirectory(
+            at: rootURL.appendingPathComponent("maven/target/nested/target"),
+            withIntermediateDirectories: true
         )
-        let scriptBackedEntry = try #require(MenuEntryEvaluator.evaluate(entry).scriptBacked.first)
-        let source = try ScriptSourceGenerator().generate(
-            for: entry,
-            scriptBackedEntry: scriptBackedEntry
-        )
-        let rootURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("clean-node-modules-delete-\(UUID().uuidString)")
-        let targetURL = rootURL.appendingPathComponent("待清理/node_modules")
-        let untouchedURL = rootURL.appendingPathComponent("保留/node_modules")
-        let sourceURL = rootURL.appendingPathComponent("clean.applescript")
-        defer { try? FileManager.default.removeItem(at: rootURL) }
 
-        try FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: untouchedURL, withIntermediateDirectories: true)
-        let runnableSource = source + """
+        let paths = try runCleanupList(type: .cleanJavaTarget, root: rootURL)
 
-        on run argv
-        cleanNodeModule(item 1 of argv)
-        end run
-        """
-        try runnableSource.write(to: sourceURL, atomically: true, encoding: .utf8)
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        process.arguments = [sourceURL.path, targetURL.path]
-        try process.run()
-        process.waitUntilExit()
-
-        #expect(process.terminationStatus == 0)
-        #expect(!FileManager.default.fileExists(atPath: targetURL.path))
-        #expect(FileManager.default.fileExists(atPath: untouchedURL.path))
+        #expect(Set(paths) == expectedPaths)
+        #expect(paths.allSatisfy { FileManager.default.fileExists(atPath: $0) })
     }
 
-    @Test("node_modules 清理项发布无交互且带安全查找参数的脚本")
-    func publishesCleanNodeModulesScript() async throws {
+    @Test("Rust 扫描只匹配同级存在 Cargo.toml 的 target")
+    func rustTargetScanRequiresCargoManifest() throws {
+        let rootURL = try makeTemporaryDirectory(prefix: "clean-rust-target")
+        let workspaceURL = rootURL.appendingPathComponent("workspace")
+        let workspaceTarget = workspaceURL.appendingPathComponent("target")
+        try FileManager.default.createDirectory(at: workspaceTarget, withIntermediateDirectories: true)
+        try Data().write(to: workspaceURL.appendingPathComponent("Cargo.toml"))
+
+        let spacedURL = rootURL.appendingPathComponent("with space")
+        let spacedTarget = spacedURL.appendingPathComponent("target")
+        try FileManager.default.createDirectory(at: spacedTarget, withIntermediateDirectories: true)
+        try Data().write(to: spacedURL.appendingPathComponent("Cargo.toml"))
+
+        try FileManager.default.createDirectory(
+            at: workspaceTarget.appendingPathComponent("debug/target"),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: rootURL.appendingPathComponent("workspace/member/target"),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: rootURL.appendingPathComponent("unrelated/target"),
+            withIntermediateDirectories: true
+        )
+
+        let paths = try runCleanupList(type: .cleanRustTarget, root: rootURL)
+
+        #expect(Set(paths) == Set([workspaceTarget.path, spacedTarget.path]))
+    }
+
+    @Test("清理脚本把目录移到废纸篓且不影响兄弟目录")
+    func cleanupScriptMovesDirectoryToTrash() throws {
+        let rootURL = try makeTemporaryDirectory(prefix: "clean-trash")
+        let targetURL = rootURL.appendingPathComponent("待清理/node_modules")
+        let untouchedURL = rootURL.appendingPathComponent("保留/node_modules")
+        try FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: untouchedURL, withIntermediateDirectories: true)
+
+        let trashedPath = try runCleanupHandler(
+            type: .cleanNodeModules,
+            handler: "trashItem",
+            argument: targetURL.path
+        )
+        defer { try? FileManager.default.removeItem(atPath: trashedPath) }
+
+        #expect(!FileManager.default.fileExists(atPath: targetURL.path))
+        #expect(FileManager.default.fileExists(atPath: untouchedURL.path))
+        #expect(FileManager.default.fileExists(atPath: trashedPath))
+    }
+
+    @Test("清理型内置项发布统一 handler 的废纸篓脚本")
+    func publishesCleanupScripts() async throws {
         let harness = try PipelineHarness()
         defer { harness.cleanup() }
-        let entry = MenuEntry.builtIn(
-            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
-        )
-        harness.configService.saveEntries([entry])
+        let entries = Self.cleanupTypes.map {
+            MenuEntry.builtIn(BuiltInMenuItem(type: $0, isEnabled: true))
+        }
+        harness.configService.saveEntries(entries)
 
         let outcome = await harness.pipeline.publishCurrentConfiguration()
 
-        let source = try #require(harness.compiler.compiledSources.first)
-        #expect(outcome.results.map(\.entryID) == ["builtIn.cleanNodeModules"])
-        #expect(!source.contains("display dialog"))
-        #expect(source.contains("on listNodeModules(thePath)"))
-        #expect(source.contains("on cleanNodeModule(thePath)"))
-        #expect(!source.contains("on cleanNodeModules(thePath)"))
-        #expect(!source.contains("on openApp(thePath)"))
-        #expect(source.contains("-name 'node_modules'"))
-        #expect(source.contains("-prune"))
-        #expect(source.contains("-print0 | /usr/bin/base64"))
-        #expect(source.contains("rm -rf --"))
+        #expect(
+            outcome.results.map(\.entryID)
+                == Self.cleanupTypes.map { "builtIn.\($0.rawValue)" }
+        )
+        #expect(harness.compiler.compiledSources.count == Self.cleanupTypes.count)
+
+        for source in harness.compiler.compiledSources {
+            #expect(!source.contains("display dialog"))
+            #expect(!source.contains("rm -rf"))
+            #expect(source.contains("use framework \"Foundation\""))
+            #expect(source.contains("use scripting additions"))
+            #expect(source.contains("on listCleanupTargets(thePath)"))
+            #expect(source.contains("on trashItem(thePath)"))
+            #expect(source.contains("trashItemAtURL:fileURL"))
+        }
+
+        let sources = Dictionary(
+            uniqueKeysWithValues: zip(Self.cleanupTypes, harness.compiler.compiledSources)
+        )
+        #expect(sources[.cleanNodeModules]?.contains("-name 'node_modules'") == true)
+        #expect(sources[.cleanJavaTarget]?.contains("-name 'target'") == true)
+        #expect(sources[.cleanJavaTarget]?.contains("-f pom.xml") == true)
+        #expect(sources[.cleanJavaTarget]?.contains("-f build.gradle") == true)
+        #expect(sources[.cleanJavaTarget]?.contains("-f build.gradle.kts") == true)
+        #expect(sources[.cleanJavaTarget]?.contains("-f build.xml") == true)
+        #expect(sources[.cleanRustTarget]?.contains("-f Cargo.toml") == true)
+    }
+
+    private func cleanupSource(for type: BuiltInType) throws -> String {
+        let entry = MenuEntry.builtIn(BuiltInMenuItem(type: type, isEnabled: true))
+        let scriptBackedEntry = try #require(MenuEntryEvaluator.evaluate(entry).scriptBacked.first)
+        return try ScriptSourceGenerator().generate(
+            for: entry,
+            scriptBackedEntry: scriptBackedEntry
+        )
+    }
+
+    private func makeTemporaryDirectory(prefix: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    private func runCleanupList(type: BuiltInType, root: URL) throws -> [String] {
+        let encoded = try runCleanupHandler(
+            type: type,
+            handler: "listCleanupTargets",
+            argument: root.path
+        )
+        let data = try #require(Data(base64Encoded: encoded))
+        return data.split(separator: 0).map { String(decoding: $0, as: UTF8.self) }
+    }
+
+    private func runCleanupHandler(
+        type: BuiltInType,
+        handler: String,
+        argument: String
+    ) throws -> String {
+        let source = try cleanupSource(for: type)
+        let runnableSource = source + """
+
+        on run argv
+        return \(handler)(item 1 of argv)
+        end run
+        """
+        let sourceRoot = try makeTemporaryDirectory(prefix: "cleanup-script")
+        defer { try? FileManager.default.removeItem(at: sourceRoot) }
+        let sourceURL = sourceRoot.appendingPathComponent("cleanup.applescript")
+        try runnableSource.write(to: sourceURL, atomically: true, encoding: .utf8)
+
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = [sourceURL.path, argument]
+        process.standardOutput = output
+        try process.run()
+        process.waitUntilExit()
+
+        let result = String(
+            decoding: output.fileHandleForReading.readDataToEndOfFile(),
+            as: UTF8.self
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        #expect(process.terminationStatus == 0)
+        return result
     }
 
     @Test("publishes saved Menu Entry configuration through one pipeline interface")

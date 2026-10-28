@@ -72,6 +72,8 @@ final class MenuConfigStore {
                 .custom(terminalConfig),
                 .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
                 .builtIn(BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)),
+                .builtIn(BuiltInMenuItem(type: .cleanJavaTarget, isEnabled: true)),
+                .builtIn(BuiltInMenuItem(type: .cleanRustTarget, isEnabled: true)),
                 .newFile(NewFileMenuConfig()),
             ]
             configService.saveEntries(menuEntries)
@@ -112,13 +114,14 @@ final class MenuConfigStore {
     }
 
     private func ensureBuiltInEntriesIfNeeded(_ entries: [MenuEntry]) -> [MenuEntry] {
-        let cleanNodeModules = MenuEntry.builtIn(
-            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
-        )
-        guard !entries.contains(where: { $0.id == cleanNodeModules.id }) else {
-            return entries
-        }
-        let updated = entries + [cleanNodeModules]
+        let missingBuiltIns = BuiltInType.allCases
+            .filter(\.requiresPublishedScript)
+            .map { MenuEntry.builtIn(BuiltInMenuItem(type: $0, isEnabled: true)) }
+            .filter { builtIn in
+                !entries.contains { $0.id == builtIn.id }
+            }
+        guard !missingBuiltIns.isEmpty else { return entries }
+        let updated = entries + missingBuiltIns
         configService.saveEntries(updated)
         return updated
     }

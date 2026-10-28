@@ -11,11 +11,19 @@ struct BuiltInMenuItemTests {
         #expect(item.displayName == "拷贝路径")
     }
 
-    @Test("cleanNodeModules 使用清理名称和图标")
-    func cleanNodeModulesPresentation() {
-        let item = BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
-        #expect(item.displayName == "清理 node_modules")
-        #expect(item.iconName == "trash")
+    @Test("清理型内置项使用清理名称和垃圾桶图标")
+    func cleanupPresentation() {
+        let cases: [(type: BuiltInType, displayName: String)] = [
+            (.cleanNodeModules, "清理 node_modules"),
+            (.cleanJavaTarget, "清理 Java target"),
+            (.cleanRustTarget, "清理 Rust target"),
+        ]
+
+        for (type, displayName) in cases {
+            let item = BuiltInMenuItem(type: type, isEnabled: true)
+            #expect(item.displayName == displayName)
+            #expect(item.iconName == "trash")
+        }
     }
 
     @Test("Round-trip 编解码保持值一致")

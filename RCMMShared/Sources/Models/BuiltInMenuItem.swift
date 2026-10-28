@@ -10,16 +10,13 @@ public struct BuiltInMenuItem: Codable, Hashable, Sendable {
     }
 
     public var displayName: String {
-        switch type {
-        case .copyPath: return "拷贝路径"
-        case .cleanNodeModules: return "清理 node_modules"
+        if let profile = type.cleanupProfile {
+            return "清理 \(profile.noun)"
         }
+        return "拷贝路径"
     }
 
     public var iconName: String {
-        switch type {
-        case .copyPath: return "doc.on.clipboard"
-        case .cleanNodeModules: return "trash"
-        }
+        type.isCleanup ? "trash" : "doc.on.clipboard"
     }
 }

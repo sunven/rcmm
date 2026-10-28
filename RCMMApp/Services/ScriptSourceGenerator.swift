@@ -28,11 +28,11 @@ struct ScriptSourceGenerator {
     ) throws -> String {
         switch entry {
         case .builtIn(let item):
-            guard item.type == .cleanNodeModules,
-                  scriptBackedEntry.source == .builtIn(type: .cleanNodeModules) else {
+            guard item.type.isCleanup,
+                  scriptBackedEntry.source == .builtIn(type: item.type) else {
                 throw ScriptSourceGenerationError.unsupportedEntry
             }
-            return generateCleanNodeModules()
+            return try generateCleanupScript(for: item.type)
         case .custom(let item):
             return generate(for: item)
         case .composite(let config):
@@ -85,17 +85,43 @@ struct ScriptSourceGenerator {
         ])
     }
 
-    private func generateCleanNodeModules() -> String {
-        """
-        on listNodeModules(thePath)
-        set rootPath to quoted form of thePath
-        return do shell script "find " & rootPath & " -type d -name 'node_modules' -prune -print0 | /usr/bin/base64 | /usr/bin/tr -d '\\n'"
-        end listNodeModules
+    private func generateCleanupScript(for type: BuiltInType) throws -> String {
+        guard let findExpression = cleanupFindExpression(for: type) else {
+            throw ScriptSourceGenerationError.unsupportedEntry
+        }
 
-        on cleanNodeModule(thePath)
-        do shell script "rm -rf -- " & quoted form of thePath
-        end cleanNodeModule
-        """
+        return #"""
+        use framework "Foundation"
+        use scripting additions
+
+        on listCleanupTargets(thePath)
+        set rootPath to quoted form of thePath
+        return do shell script "find " & rootPath & " \#(findExpression) | /usr/bin/base64 | /usr/bin/tr -d '\n'"
+        end listCleanupTargets
+
+        on trashItem(thePath)
+        set fileURL to current application's NSURL's fileURLWithPath:thePath
+        set fileManager to current application's NSFileManager's defaultManager()
+        set {didTrash, trashedURL, trashError} to fileManager's trashItemAtURL:fileURL resultingItemURL:(reference) |error|:(reference)
+        if not didTrash then
+        error (trashError's localizedDescription() as text)
+        end if
+        return trashedURL's |path|() as text
+        end trashItem
+        """#
+    }
+
+    private func cleanupFindExpression(for type: BuiltInType) -> String? {
+        switch type {
+        case .copyPath:
+            return nil
+        case .cleanNodeModules:
+            return "-type d -name 'node_modules' -prune -print0"
+        case .cleanJavaTarget:
+            return #"-type d -name 'target' -prune -execdir /bin/test -f pom.xml -o -f build.gradle -o -f build.gradle.kts -o -f build.xml \\; -print0"#
+        case .cleanRustTarget:
+            return #"-type d -name 'target' -prune -execdir /bin/test -f Cargo.toml \\; -print0"#
+        }
     }
 
     private func generate(

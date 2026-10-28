@@ -4,10 +4,21 @@ import RCMMShared
 import os.log
 
 class FinderSync: FIFinderSync {
-    private struct CleanNodeModulesRequest {
+    private struct CleanupRequest {
+        let profile: BuiltInCleanupProfile
         let directories: [String]
         let scriptID: String
         let menuItemName: String
+    }
+
+    private struct CleanupProgressView {
+        let panel: NSPanel
+        let messageLabel: NSTextField
+        let infoLabel: NSTextField
+        let closeButton: NSButton
+        let progressIndicator: NSProgressIndicator
+        let statusLabel: NSTextField
+        let pathLabel: NSTextField
     }
 
     private let logger = Logger(
@@ -27,8 +38,8 @@ class FinderSync: FIFinderSync {
     private var snapshotGeneration = 0
     private var configObservation: DarwinObservation?
     private var currentMenuKind: FIMenuKind?
-    private var cleanNodeModulesPanel: NSPanel?
-    private var cleanNodeModulesRequest: CleanNodeModulesRequest?
+    private var cleanupPanel: NSPanel?
+    private var cleanupRequest: CleanupRequest?
 
     override init() {
         super.init()
@@ -143,7 +154,7 @@ class FinderSync: FIFinderSync {
             switch builtInType {
             case .copyPath:
                 return #selector(copyPath(_:))
-            case .cleanNodeModules:
+            case .cleanNodeModules, .cleanJavaTarget, .cleanRustTarget:
                 return nil
             }
         case .scriptBacked:
@@ -161,7 +172,7 @@ class FinderSync: FIFinderSync {
         case .symbol(let symbolName):
             let color: NSColor?
             if case .scriptBacked(let identity) = action,
-               identity.scriptID == "builtIn.cleanNodeModules" {
+               Self.isCleanupScriptID(identity.scriptID) {
                 color = .systemRed
             } else {
                 color = nil
@@ -172,6 +183,13 @@ class FinderSync: FIFinderSync {
         case .none:
             return nil
         }
+    }
+
+    private static func isCleanupScriptID(_ scriptID: String) -> Bool {
+        let prefix = "builtIn."
+        guard scriptID.hasPrefix(prefix) else { return false }
+        let rawType = String(scriptID.dropFirst(prefix.count))
+        return BuiltInType(rawValue: rawType)?.isCleanup == true
     }
 
     private func makeMenuSymbolImage(
@@ -230,8 +248,9 @@ class FinderSync: FIFinderSync {
             targetPolicy: entry.targetPolicy
         )
 
-        if case .builtIn(type: .cleanNodeModules) = entry.source {
-            scriptExecutor.listNodeModules(
+        if case .builtIn(let type) = entry.source,
+           let profile = type.cleanupProfile {
+            scriptExecutor.listCleanupTargets(
                 scriptId: entry.id,
                 targetPath: executionPath,
                 menuItemName: entry.displayName
@@ -239,17 +258,18 @@ class FinderSync: FIFinderSync {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     guard case .success(let directories) = result else {
-                        self.logger.error("无法获取待清理的 node_modules 目录")
+                        self.logger.error("无法获取待清理的 \(profile.noun) 目录")
                         return
                     }
                     let sortedDirectories = directories.sorted()
                     guard !sortedDirectories.isEmpty else {
-                        self.showNoNodeModulesAlert()
+                        self.showNoCleanupTargetsAlert(profile: profile)
                         return
                     }
 
-                    self.showCleanNodeModulesConfirmation(
+                    self.showCleanupConfirmation(
                         directories: sortedDirectories,
+                        profile: profile,
                         scriptID: entry.id,
                         menuItemName: entry.displayName
                     )
@@ -267,21 +287,26 @@ class FinderSync: FIFinderSync {
         )
     }
 
-    private func showNoNodeModulesAlert() {
+    private func showNoCleanupTargetsAlert(profile: BuiltInCleanupProfile) {
         let alert = NSAlert()
-        alert.messageText = "没有找到 node_modules"
-        alert.informativeText = "当前目录及其子目录中没有可清理的 node_modules。"
+        alert.messageText = "没有找到 \(profile.noun)"
+        if let hint = profile.emptyResultHint {
+            alert.informativeText = "当前目录及其子目录中没有找到符合条件（\(hint)）的 \(profile.noun) 目录。"
+        } else {
+            alert.informativeText = "当前目录及其子目录中没有可清理的 \(profile.noun)。"
+        }
         alert.addButton(withTitle: "好")
         alert.runModal()
     }
 
-    private func showCleanNodeModulesConfirmation(
+    private func showCleanupConfirmation(
         directories: [String],
+        profile: BuiltInCleanupProfile,
         scriptID: String,
         menuItemName: String
     ) {
-        guard cleanNodeModulesPanel == nil else {
-            cleanNodeModulesPanel?.makeKeyAndOrderFront(nil)
+        guard cleanupPanel == nil else {
+            cleanupPanel?.makeKeyAndOrderFront(nil)
             return
         }
 
@@ -341,7 +366,7 @@ class FinderSync: FIFinderSync {
             backing: .buffered,
             defer: false
         )
-        panel.title = "清理 node_modules"
+        panel.title = menuItemName
         panel.level = .modalPanel
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
@@ -354,13 +379,13 @@ class FinderSync: FIFinderSync {
         iconView.imageScaling = .scaleProportionallyUpOrDown
         contentView.addSubview(iconView)
 
-        let messageLabel = NSTextField(labelWithString: "将清理 \(directories.count) 个 node_modules 目录")
+        let messageLabel = NSTextField(labelWithString: "将把 \(directories.count) 个 \(profile.noun) 目录移到废纸篓")
         messageLabel.frame = NSRect(x: 20, y: 320, width: 520, height: 22)
         messageLabel.alignment = .center
         messageLabel.font = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         contentView.addSubview(messageLabel)
 
-        let infoLabel = NSTextField(labelWithString: "以下目录将被永久删除，此操作不可撤销：")
+        let infoLabel = NSTextField(labelWithString: "以下目录将移到废纸篓，可从废纸篓恢复。清空废纸篓后才会释放磁盘空间。")
         infoLabel.frame = NSRect(x: 20, y: 294, width: 520, height: 18)
         infoLabel.alignment = .center
         infoLabel.textColor = .secondaryLabelColor
@@ -370,15 +395,15 @@ class FinderSync: FIFinderSync {
         let cancelButton = NSButton(
             title: "取消",
             target: self,
-            action: #selector(dismissCleanNodeModulesPanel(_:))
+            action: #selector(dismissCleanupPanel(_:))
         )
         cancelButton.frame = NSRect(x: 150, y: 18, width: 120, height: 30)
         contentView.addSubview(cancelButton)
 
         let cleanButton = NSButton(
-            title: "清理",
+            title: "移到废纸篓",
             target: self,
-            action: #selector(beginCleanNodeModules(_:))
+            action: #selector(beginCleanup(_:))
         )
         cleanButton.frame = NSRect(x: 290, y: 18, width: 120, height: 30)
         cleanButton.bezelStyle = .rounded
@@ -387,24 +412,22 @@ class FinderSync: FIFinderSync {
         cleanButton.hasDestructiveAction = true
         contentView.addSubview(cleanButton)
 
-        cleanNodeModulesRequest = CleanNodeModulesRequest(
+        cleanupRequest = CleanupRequest(
+            profile: profile,
             directories: directories,
             scriptID: scriptID,
             menuItemName: menuItemName
         )
-        cleanNodeModulesPanel = panel
+        cleanupPanel = panel
         panel.center()
         panel.makeKeyAndOrderFront(nil)
     }
 
-    @objc private func beginCleanNodeModules(_ sender: NSButton) {
-        guard let panel = cleanNodeModulesPanel,
-              let request = cleanNodeModulesRequest else {
+    @objc private func beginCleanup(_ sender: NSButton) {
+        guard let panel = cleanupPanel,
+              let request = cleanupRequest else {
             return
         }
-        let directories = request.directories
-        let scriptID = request.scriptID
-        let menuItemName = request.menuItemName
 
         let previousTop = panel.frame.maxY
         panel.setContentSize(NSSize(width: 560, height: 250))
@@ -420,13 +443,13 @@ class FinderSync: FIFinderSync {
         iconView.imageScaling = .scaleProportionallyUpOrDown
         contentView.addSubview(iconView)
 
-        let messageLabel = NSTextField(labelWithString: "正在清理 node_modules")
+        let messageLabel = NSTextField(labelWithString: "正在移到废纸篓")
         messageLabel.frame = NSRect(x: 24, y: 148, width: 512, height: 22)
         messageLabel.alignment = .center
         messageLabel.font = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         contentView.addSubview(messageLabel)
 
-        let infoLabel = NSTextField(labelWithString: "请稍候，删除过程中请不要退出 rcmm。")
+        let infoLabel = NSTextField(labelWithString: "请稍候，处理过程中请不要退出 rcmm。")
         infoLabel.frame = NSRect(x: 24, y: 124, width: 512, height: 18)
         infoLabel.alignment = .center
         infoLabel.textColor = .secondaryLabelColor
@@ -435,12 +458,12 @@ class FinderSync: FIFinderSync {
         let progressIndicator = NSProgressIndicator(frame: NSRect(x: 24, y: 96, width: 512, height: 16))
         progressIndicator.isIndeterminate = false
         progressIndicator.minValue = 0
-        progressIndicator.maxValue = Double(directories.count)
+        progressIndicator.maxValue = Double(request.directories.count)
         progressIndicator.doubleValue = 0
         progressIndicator.controlSize = .regular
         contentView.addSubview(progressIndicator)
 
-        let statusLabel = NSTextField(labelWithString: "准备清理 0 / \(directories.count)")
+        let statusLabel = NSTextField(labelWithString: "准备处理 0 / \(request.directories.count)")
         statusLabel.frame = NSRect(x: 24, y: 66, width: 512, height: 18)
         statusLabel.lineBreakMode = .byTruncatingMiddle
         contentView.addSubview(statusLabel)
@@ -454,19 +477,15 @@ class FinderSync: FIFinderSync {
         let closeButton = NSButton(
             title: "关闭",
             target: self,
-            action: #selector(dismissCleanNodeModulesPanel(_:))
+            action: #selector(dismissCleanupPanel(_:))
         )
         closeButton.frame = NSRect(x: 208, y: 10, width: 144, height: 28)
         closeButton.isEnabled = false
         contentView.addSubview(closeButton)
 
-        cleanNodeModulesRequest = nil
+        cleanupRequest = nil
 
-        cleanNextNodeModule(
-            at: 0,
-            directories: directories,
-            scriptID: scriptID,
-            menuItemName: menuItemName,
+        let progressView = CleanupProgressView(
             panel: panel,
             messageLabel: messageLabel,
             infoLabel: infoLabel,
@@ -475,73 +494,66 @@ class FinderSync: FIFinderSync {
             statusLabel: statusLabel,
             pathLabel: pathLabel
         )
+        trashNextCleanupTarget(at: 0, request: request, ui: progressView)
     }
 
-    @objc private func dismissCleanNodeModulesPanel(_ sender: NSButton) {
-        cleanNodeModulesPanel?.orderOut(nil)
-        cleanNodeModulesPanel = nil
-        cleanNodeModulesRequest = nil
+    @objc private func dismissCleanupPanel(_ sender: NSButton) {
+        cleanupPanel?.orderOut(nil)
+        cleanupPanel = nil
+        cleanupRequest = nil
     }
 
-    private func cleanNextNodeModule(
+    private func trashNextCleanupTarget(
         at index: Int,
-        directories: [String],
-        scriptID: String,
-        menuItemName: String,
-        panel: NSPanel,
-        messageLabel: NSTextField,
-        infoLabel: NSTextField,
-        closeButton: NSButton,
-        progressIndicator: NSProgressIndicator,
-        statusLabel: NSTextField,
-        pathLabel: NSTextField,
-        failures: [String] = []
+        request: CleanupRequest,
+        ui: CleanupProgressView,
+        failures: [CleanupFailure] = []
     ) {
-        guard index < directories.count else {
-            progressIndicator.doubleValue = Double(directories.count)
-            statusLabel.stringValue = "已完成 \(directories.count) / \(directories.count)"
+        let total = request.directories.count
+        guard index < total else {
+            ui.progressIndicator.doubleValue = Double(total)
+            ui.statusLabel.stringValue = "已完成 \(total) / \(total)"
             if failures.isEmpty {
-                messageLabel.stringValue = "清理完成"
-                infoLabel.stringValue = "已删除全部 \(directories.count) 个 node_modules 目录。"
+                ui.messageLabel.stringValue = "已移到废纸篓"
+                ui.infoLabel.stringValue = "已将 \(total) 个 \(request.profile.noun) 目录移到废纸篓。"
             } else {
-                messageLabel.stringValue = "清理完成，但有 \(failures.count) 个目录失败"
-                infoLabel.stringValue = "成功 \(directories.count - failures.count) 个，失败 \(failures.count) 个。失败详情已记录到 rcmm。"
+                ui.messageLabel.stringValue = "已完成，但有 \(failures.count) 个目录失败"
+                ui.infoLabel.stringValue = "成功 \(total - failures.count) 个，失败 \(failures.count) 个。失败详情已记录到 rcmm。"
+                scriptExecutor.recordCleanupFailures(
+                    failures,
+                    menuItemName: request.menuItemName,
+                    scriptId: request.scriptID
+                )
             }
-            pathLabel.stringValue = ""
-            closeButton.isEnabled = true
-            panel.layoutIfNeeded()
+            ui.pathLabel.stringValue = ""
+            ui.closeButton.isEnabled = true
+            ui.panel.layoutIfNeeded()
             return
         }
 
-        let directory = directories[index]
-        statusLabel.stringValue = "正在清理 \(index + 1) / \(directories.count)"
-        pathLabel.stringValue = directory
-        logger.info("清理第 \(index + 1) / \(directories.count) 个目录: \(directory, privacy: .private)")
+        let directory = request.directories[index]
+        ui.statusLabel.stringValue = "正在处理 \(index + 1) / \(total)"
+        ui.pathLabel.stringValue = directory
+        logger.info("移到废纸篓 \(index + 1) / \(total): \(directory, privacy: .private)")
 
-        scriptExecutor.cleanNodeModule(
-            scriptId: scriptID,
+        scriptExecutor.trashItem(
+            scriptId: request.scriptID,
             targetPath: directory,
-            menuItemName: menuItemName
+            menuItemName: request.menuItemName
         ) { [weak self] error in
             DispatchQueue.main.async {
                 guard let self else { return }
                 var updatedFailures = failures
-                if error != nil {
-                    updatedFailures.append(directory)
+                if let error {
+                    updatedFailures.append(
+                        CleanupFailure(path: directory, reason: error.localizedDescription)
+                    )
                 }
-                progressIndicator.doubleValue = Double(index + 1)
-                self.cleanNextNodeModule(
+                ui.progressIndicator.doubleValue = Double(index + 1)
+                self.trashNextCleanupTarget(
                     at: index + 1,
-                    directories: directories,
-                    scriptID: scriptID,
-                    menuItemName: menuItemName,
-                    panel: panel,
-                    messageLabel: messageLabel,
-                    infoLabel: infoLabel,
-                    closeButton: closeButton,
-                    progressIndicator: progressIndicator,
-                    statusLabel: statusLabel,
-                    pathLabel: pathLabel,
+                    request: request,
+                    ui: ui,
                     failures: updatedFailures
                 )
             }

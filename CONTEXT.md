@@ -12,8 +12,30 @@
 
 分类：
 - **Script-Backed Entry** — 需要编译为 AppleScript 的菜单项（应用启动、自定义命令、组合步骤）
-- **Built-in Entry** — 内置功能菜单项（复制路径、在终端打开等）
+- **Built-in Entry** — 内置功能菜单项（复制路径、清理 node_modules 等）
 - **New File Template** — 新建文件模板菜单项
+
+### Cleanup Built-in（清理型内置项）
+
+Finder 菜单里的一个 Built-in Entry，点击后**先扫描待清理目录，再确认移到废纸篓**，而不是直接执行命令。
+目前有三个实例：`清理 node_modules`、`清理 Java target`、`清理 Rust target`。
+
+- **Cleanup Target（清理目标）** — 一次清理扫描命中的目录。扫描根是右键目标的包含目录：
+  右键文件夹得到该文件夹，右键文件得到其所在目录。命中规则按生态区分：
+  - node_modules：目录名精确匹配，任意层级。
+  - Java target：目录名 `target`，且**同级存在** `pom.xml` / `build.gradle` /
+    `build.gradle.kts` / `build.xml`。
+  - Rust target：目录名 `target`，且**同级存在** `Cargo.toml`。
+
+  命中目录不再向下扫描（嵌套 target 归属外层）。同名但缺少构建描述文件的目录不会被清理。
+- **Trash Semantics（废纸篓语义）** — 所有清理动作把目录移到废纸篓，**永不永久删除**。
+  移到废纸篓后可恢复；清空废纸篓后才释放磁盘空间。移动失败时保留原目录并记录失败路径。
+- **统一清理管线** — 三个内置项共用一套脚本契约（扫描 `listCleanupTargets`、移动 `trashItem`）、
+  一个确认/进度面板和一份逐项处理流程；差异只在扫描 filter 与展示名词。
+- **自动补入** — 与既有 Built-in Entry 一致，缺失的清理型内置项在加载配置时自动补入且默认启用；
+  用户只能启停和排序，不能删除。已存在的停用状态不会被覆盖。
+
+详见 [ADR-0008](docs/adr/0008-cleanup-detection-and-trash.md)。
 
 ### Composite Command（组合命令）
 

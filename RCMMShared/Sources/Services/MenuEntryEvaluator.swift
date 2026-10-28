@@ -92,14 +92,14 @@ public enum MenuEntryEvaluator: Sendable {
         switch entry {
         case .builtIn(let item):
             let scriptBacked: [ScriptBackedMenuEntry]
-            if item.type == .cleanNodeModules && item.isEnabled {
+            if item.type.isCleanup && item.isEnabled {
                 scriptBacked = [
                     ScriptBackedMenuEntry(
                         id: entry.id,
                         kind: .builtIn,
                         displayName: item.displayName,
                         fingerprint: ScriptFingerprint.make(fields: [
-                            "built-in-clean-node-modules-v5",
+                            cleanupFingerprint(for: item.type),
                             item.type.rawValue,
                         ]),
                         source: .builtIn(type: item.type),
@@ -207,6 +207,15 @@ public enum MenuEntryEvaluator: Sendable {
             config.executionMode.rawValue,
             String(config.isEnabled),
         ])
+    }
+
+    private static func cleanupFingerprint(for type: BuiltInType) -> String {
+        switch type {
+        case .cleanNodeModules: return "built-in-clean-node-modules-v6"
+        case .cleanJavaTarget: return "built-in-clean-java-target-v1"
+        case .cleanRustTarget: return "built-in-clean-rust-target-v1"
+        case .copyPath: return "copy-path"
+        }
     }
 }
 

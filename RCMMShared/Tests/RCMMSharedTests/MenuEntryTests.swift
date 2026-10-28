@@ -11,20 +11,22 @@ struct MenuEntryTests {
         #expect(entry.id == "builtIn.copyPath")
     }
 
-    @Test("node_modules 清理项生成稳定的脚本身份")
-    func cleanNodeModulesScriptIdentity() throws {
-        let entry = MenuEntry.builtIn(
-            BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)
-        )
-        let scriptBackedEntry = try #require(MenuEntryEvaluator.evaluate(entry).scriptBacked.first)
-        let data = try JSONEncoder().encode(scriptBackedEntry)
-        let decoded = try JSONDecoder().decode(ScriptBackedMenuEntry.self, from: data)
+    @Test("清理型内置项生成稳定的脚本身份")
+    func cleanupScriptIdentity() throws {
+        for type in [BuiltInType.cleanNodeModules, .cleanJavaTarget, .cleanRustTarget] {
+            let entry = MenuEntry.builtIn(
+                BuiltInMenuItem(type: type, isEnabled: true)
+            )
+            let scriptBackedEntry = try #require(MenuEntryEvaluator.evaluate(entry).scriptBacked.first)
+            let data = try JSONEncoder().encode(scriptBackedEntry)
+            let decoded = try JSONDecoder().decode(ScriptBackedMenuEntry.self, from: data)
 
-        #expect(scriptBackedEntry.id == "builtIn.cleanNodeModules")
-        #expect(scriptBackedEntry.kind == .builtIn)
-        #expect(scriptBackedEntry.source == .builtIn(type: .cleanNodeModules))
-        #expect(scriptBackedEntry.targetPolicy == .containingDirectory)
-        #expect(decoded == scriptBackedEntry)
+            #expect(scriptBackedEntry.id == "builtIn.\(type.rawValue)")
+            #expect(scriptBackedEntry.kind == .builtIn)
+            #expect(scriptBackedEntry.source == .builtIn(type: type))
+            #expect(scriptBackedEntry.targetPolicy == .containingDirectory)
+            #expect(decoded == scriptBackedEntry)
+        }
     }
 
     @Test("custom entry id 使用 UUID")

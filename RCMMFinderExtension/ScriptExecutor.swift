@@ -43,7 +43,7 @@ final class ScriptExecutor {
     }
 
     /// 扫描清理目标；结果通过无交互 AppleScript handler 返回。
-    func listNodeModules(
+    func listCleanupTargets(
         scriptId: String,
         targetPath: String,
         menuItemName: String,
@@ -51,7 +51,7 @@ final class ScriptExecutor {
     ) {
         executeTask(
             scriptId: scriptId,
-            handlerName: "listNodeModules",
+            handlerName: "listCleanupTargets",
             targetPath: targetPath,
             menuItemName: menuItemName
         ) { [weak self] descriptor, error in
@@ -84,7 +84,7 @@ final class ScriptExecutor {
         }
     }
 
-    func cleanNodeModule(
+    func trashItem(
         scriptId: String,
         targetPath: String,
         menuItemName: String,
@@ -92,17 +92,37 @@ final class ScriptExecutor {
     ) {
         executeTask(
             scriptId: scriptId,
-            handlerName: "cleanNodeModule",
+            handlerName: "trashItem",
             targetPath: targetPath,
-            menuItemName: menuItemName
+            menuItemName: menuItemName,
+            recordsError: false
         ) { [weak self] _, error in
             if let error {
-                self?.logger.error("清理脚本执行失败: \(scriptId): \(error.localizedDescription)")
+                self?.logger.error("移到废纸篓失败: \(scriptId): \(targetPath): \(error.localizedDescription)")
             } else {
-                self?.logger.info("清理脚本执行成功: \(scriptId) → \(targetPath)")
+                self?.logger.info("已移到废纸篓: \(scriptId) → \(targetPath)")
             }
             completion(error)
         }
+    }
+
+    /// 逐个清理失败会共用同一个脚本级错误键，此处汇总成一条记录保留全部失败路径。
+    func recordCleanupFailures(
+        _ failures: [CleanupFailure],
+        menuItemName: String,
+        scriptId: String
+    ) {
+        guard !failures.isEmpty else { return }
+
+        let details = failures
+            .map { "\($0.path): \($0.reason)" }
+            .joined(separator: "\n")
+        recordError(
+            message: "移到废纸篓失败 \(failures.count) 个目录:\n\(details)",
+            context: menuItemName,
+            scriptId: scriptId,
+            kind: .scriptExecution
+        )
     }
 
     private func executeTask(
@@ -110,6 +130,7 @@ final class ScriptExecutor {
         handlerName: String,
         targetPath: String,
         menuItemName: String,
+        recordsError: Bool = true,
         completion: @escaping (NSAppleEventDescriptor?, Error?) -> Void
     ) {
         guard let scriptsDir = scriptsDirectory else {
@@ -119,12 +140,14 @@ final class ScriptExecutor {
                 userInfo: [NSLocalizedDescriptionKey: "无法获取脚本目录"]
             )
             logger.error("脚本目录不可用")
-            recordError(
-                message: "脚本目录不可用",
-                context: menuItemName,
-                scriptId: scriptId,
-                kind: .scriptLoad
-            )
+            if recordsError {
+                recordError(
+                    message: "脚本目录不可用",
+                    context: menuItemName,
+                    scriptId: scriptId,
+                    kind: .scriptLoad
+                )
+            }
             completion(nil, error)
             return
         }
@@ -144,7 +167,7 @@ final class ScriptExecutor {
             )
 
             task.execute(withAppleEvent: event) { [weak self] descriptor, error in
-                if let error {
+                if let error, recordsError {
                     self?.recordError(
                         message: "脚本执行失败: \(error.localizedDescription)",
                         context: menuItemName,
@@ -156,12 +179,14 @@ final class ScriptExecutor {
             }
         } catch {
             logger.error("脚本加载失败: \(scriptId): \(error.localizedDescription)")
-            recordError(
-                message: "脚本文件不存在或无法加载: \(error.localizedDescription)",
-                context: menuItemName,
-                scriptId: scriptId,
-                kind: .scriptLoad
-            )
+            if recordsError {
+                recordError(
+                    message: "脚本文件不存在或无法加载: \(error.localizedDescription)",
+                    context: menuItemName,
+                    scriptId: scriptId,
+                    kind: .scriptLoad
+                )
+            }
             completion(nil, error)
         }
     }
@@ -221,4 +246,9 @@ final class ScriptExecutor {
         )
         errorQueue.upsert(record)
     }
+}
+
+struct CleanupFailure {
+    let path: String
+    let reason: String
 }

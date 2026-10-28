@@ -7,25 +7,27 @@ import Testing
 @Suite("MenuConfigStore 领域规则", .serialized)
 @MainActor
 struct MenuConfigStoreTests {
-    @Test("旧配置会补入一次 node_modules 清理菜单")
-    func addsCleanNodeModulesBuiltInToExistingConfiguration() throws {
+    @Test("旧配置会补入缺失的清理型内置项并保留既有停用状态")
+    func addsMissingCleanupBuiltInsToExistingConfiguration() throws {
         let harness = try PipelineHarness()
         defer { harness.cleanup() }
         let copyPath = MenuEntry.builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true))
+        let cleanupIDs = [
+            "builtIn.cleanNodeModules",
+            "builtIn.cleanJavaTarget",
+            "builtIn.cleanRustTarget",
+        ]
         harness.configService.saveEntries([copyPath])
 
         let store = harness.makeConfigStore()
         let reloadedStore = harness.makeConfigStore()
-        let cleanEntries = store.menuEntries.filter {
-            $0.id == "builtIn.cleanNodeModules"
-        }
-        let reloadedCleanEntries = reloadedStore.menuEntries.filter {
-            $0.id == "builtIn.cleanNodeModules"
-        }
 
-        #expect(cleanEntries.count == 1)
-        #expect(reloadedCleanEntries.count == 1)
-        #expect(cleanEntries.first?.isEnabled == true)
+        for id in cleanupIDs {
+            #expect(store.menuEntries.filter { $0.id == id }.count == 1)
+            #expect(reloadedStore.menuEntries.filter { $0.id == id }.count == 1)
+            #expect(store.menuEntries.first { $0.id == id }?.isEnabled == true)
+        }
+        #expect(store.menuEntries.filter { cleanupIDs.contains($0.id) }.map(\.id) == cleanupIDs)
         #expect(harness.configService.loadEntries() == store.menuEntries)
 
         harness.configService.saveEntries([
@@ -36,6 +38,12 @@ struct MenuConfigStoreTests {
         #expect(disabledStore.menuEntries.first {
             $0.id == "builtIn.cleanNodeModules"
         }?.isEnabled == false)
+        #expect(disabledStore.menuEntries.first {
+            $0.id == "builtIn.cleanJavaTarget"
+        }?.isEnabled == true)
+        #expect(disabledStore.menuEntries.first {
+            $0.id == "builtIn.cleanRustTarget"
+        }?.isEnabled == true)
     }
 
     @Test("具名变更只修改内存，不直接落盘")
