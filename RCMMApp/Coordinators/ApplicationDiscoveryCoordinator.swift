@@ -84,20 +84,8 @@ final class ApplicationDiscoveryCoordinator {
             name: "\(appInfo.name) + Terminal",
             iconName: "rectangle.split.2x1",
             steps: [
-                CompositeCommandStep(
-                    kind: .app,
-                    name: appInfo.name,
-                    commandTemplate: preferredCommandTemplate(for: appInfo),
-                    appPath: appInfo.path,
-                    bundleId: appInfo.bundleId
-                ),
-                CompositeCommandStep(
-                    kind: .app,
-                    name: terminal.name,
-                    commandTemplate: CompositeCommandTemplates.legacyOpenApp,
-                    appPath: terminal.path,
-                    bundleId: terminal.bundleId
-                ),
+                MenuConfigStore.makeAppStep(from: appInfo),
+                MenuConfigStore.makeAppStep(from: terminal),
             ]
         )
         let id = addComposite(composite)
@@ -127,20 +115,8 @@ final class ApplicationDiscoveryCoordinator {
             name: name,
             iconName: "rectangle.split.2x1",
             steps: [
-                CompositeCommandStep(
-                    kind: .app,
-                    name: editor.name,
-                    commandTemplate: preferredCommandTemplate(for: editor),
-                    appPath: editor.path,
-                    bundleId: editor.bundleId
-                ),
-                CompositeCommandStep(
-                    kind: .app,
-                    name: terminal.name,
-                    commandTemplate: "open -a {app} {path}",
-                    appPath: terminal.path,
-                    bundleId: terminal.bundleId
-                ),
+                MenuConfigStore.makeAppStep(from: editor),
+                MenuConfigStore.makeAppStep(from: terminal),
             ] + (includeShellStep ? [
                 CompositeCommandStep(
                     kind: .shell,
@@ -182,13 +158,5 @@ final class ApplicationDiscoveryCoordinator {
             path: terminalPath,
             category: .terminal
         )
-    }
-
-    private func preferredCommandTemplate(for appInfo: AppInfo) -> String {
-        if appInfo.bundleId == "com.microsoft.VSCode" {
-            return CompositeCommandTemplates.vsCodeCLI
-        }
-
-        return CompositeCommandTemplates.legacyOpenApp
     }
 }

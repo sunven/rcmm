@@ -10,7 +10,7 @@ enum ExtensionCleanupServiceError: Error {
 }
 
 final class ExtensionCleanupService {
-    private static let extensionRelativePath = "Contents/PlugIns/RCMMFinderExtension.appex"
+    private static let extensionRelativePath = RuntimeConfiguration.finderExtensionRelativePath
     private static let executableSuffix = "/Contents/MacOS/rcmm"
 
     private let fileManager: FileManager
@@ -19,10 +19,6 @@ final class ExtensionCleanupService {
 
     private static var extensionBundleID: String {
         RuntimeConfiguration.finderExtensionBundleID
-    }
-
-    private static var extensionEnableCommand: String {
-        "pluginkit -e use -i \(extensionBundleID)"
     }
 
     init(
@@ -203,7 +199,7 @@ final class ExtensionCleanupService {
             let extensionURL = url.appendingPathComponent(Self.extensionRelativePath, isDirectory: true)
             guard fileManager.fileExists(atPath: extensionURL.path) else { continue }
 
-            paths.insert(normalizePath(url.path))
+            paths.insert(SharedPaths.normalizedPath(url.path))
             enumerator?.skipDescendants()
         }
 
@@ -214,7 +210,7 @@ final class ExtensionCleanupService {
         _ appPath: String,
         installContext: AppInstallContext
     ) -> Bool {
-        let normalizedAppPath = normalizePath(appPath)
+        let normalizedAppPath = SharedPaths.normalizedPath(appPath)
         let validationPlan = ExtensionCleanupPlanner.buildPlan(
             currentAppPath: installContext.currentAppPath,
             pluginKitExtensionPaths: [],
@@ -230,7 +226,7 @@ final class ExtensionCleanupService {
     }
 
     private func discoverRunningProcesses(currentAppPath: String) -> [ExtensionCleanupProcess] {
-        let normalizedCurrentAppPath = normalizePath(currentAppPath)
+        let normalizedCurrentAppPath = SharedPaths.normalizedPath(currentAppPath)
         let result: SystemCommandResult
         do {
             result = try commandRunner.run(
@@ -279,7 +275,7 @@ final class ExtensionCleanupService {
         let appPath = String(executablePath.dropLast(Self.executableSuffix.count))
         return ExtensionCleanupProcess(
             pid: pid,
-            appPath: normalizePath(appPath)
+            appPath: SharedPaths.normalizedPath(appPath)
         )
     }
 
@@ -352,7 +348,7 @@ final class ExtensionCleanupService {
     private func followUpAdvice(for error: ExtensionCleanupServiceError) -> [String] {
         switch error {
         case .commandFailed(.switchExtension, _):
-            return ["请手动执行 `\(Self.extensionEnableCommand)` 后重新检测。"]
+            return ["请手动执行 `\(PluginKitService.extensionEnableCommand)` 后重新检测。"]
         case .commandFailed(.restartFinder, _):
             return ["请手动执行 `killall Finder` 后重新检测。"]
         case .terminateFailed:
@@ -409,10 +405,6 @@ final class ExtensionCleanupService {
             message: message,
             followUpAdvice: followUpAdvice
         )
-    }
-
-    private func normalizePath(_ path: String) -> String {
-        URL(fileURLWithPath: path).standardizedFileURL.path
     }
 
     private func isProcessAlive(_ pid: Int32) -> Bool {

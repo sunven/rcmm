@@ -195,9 +195,7 @@ enum PluginKitService {
     static func currentExtensionPath() -> String? {
         let appPath = AppInstallContext.current().currentAppPath
         let path = URL(fileURLWithPath: appPath, isDirectory: true)
-            .appendingPathComponent("Contents", isDirectory: true)
-            .appendingPathComponent("PlugIns", isDirectory: true)
-            .appendingPathComponent("RCMMFinderExtension.appex")
+            .appendingPathComponent(RuntimeConfiguration.finderExtensionRelativePath)
             .path
 
         guard FileManager.default.fileExists(atPath: path) else {
@@ -208,35 +206,23 @@ enum PluginKitService {
     }
 
     private static func pluginKitMatchOutput(bundleID: String) -> String? {
-        let process = Process()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-
-        process.executableURL = pluginKitExecutable
-        process.arguments = ["-m", "-ADv", "-i", bundleID]
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
+        let result: SystemCommandResult
         do {
-            try process.run()
+            result = try SystemCommandRunner().run(
+                executable: pluginKitExecutable,
+                arguments: ["-m", "-ADv", "-i", bundleID]
+            )
         } catch {
             logger.error("执行 pluginkit 查询失败: \(error.localizedDescription)")
             return nil
         }
 
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        let output = String(decoding: stdoutData, as: UTF8.self)
-        let stderrOutput = String(decoding: stderrData, as: UTF8.self)
-
-        guard process.terminationStatus == 0 else {
-            logger.error("pluginkit 查询失败，退出码: \(process.terminationStatus), stderr: \(stderrOutput)")
+        guard result.terminationStatus == 0 else {
+            logger.error("pluginkit 查询失败，退出码: \(result.terminationStatus), stderr: \(result.stderr)")
             return nil
         }
 
-        return output
+        return result.stdout
     }
 
     private static func runPluginKitElection(

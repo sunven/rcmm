@@ -107,17 +107,21 @@ public struct FinderMenuItemDescriptor: Equatable, Sendable {
     public let title: String
     public let icon: FinderMenuIconSource
     public let action: FinderMenuItemAction
+    /// 破坏性操作（清理类内置项）使用红色图标；由构造侧决定，扩展侧不再解析 scriptID。
+    public let isDestructive: Bool
     public let children: [FinderMenuItemDescriptor]
 
     public init(
         title: String,
         icon: FinderMenuIconSource,
         action: FinderMenuItemAction,
+        isDestructive: Bool = false,
         children: [FinderMenuItemDescriptor] = []
     ) {
         self.title = title
         self.icon = icon
         self.action = action
+        self.isDestructive = isDestructive
         self.children = children
     }
 }
@@ -274,13 +278,15 @@ enum FinderMenuDescriptorBuilder: Sendable {
                 icon: entry.systemSymbolName.map(FinderMenuIconSource.symbol) ?? .none,
                 action: .scriptBacked(
                     allocator.identity(for: scriptBackedEntry, title: entry.displayName)
-                )
+                ),
+                isDestructive: item.type.isCleanup
             )
         }
         return FinderMenuItemDescriptor(
             title: entry.displayName,
             icon: entry.systemSymbolName.map(FinderMenuIconSource.symbol) ?? .none,
-            action: .builtIn(item.type)
+            action: .builtIn(item.type),
+            isDestructive: item.type.isCleanup
         )
     }
 

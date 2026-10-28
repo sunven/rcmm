@@ -34,6 +34,8 @@ class FinderSync: FIFinderSync {
     private let menuSnapshotLock = NSLock()
     private var menuSnapshot = FinderMenuSnapshot.empty
     private var menuCacheMetadata: FinderMenuCacheMetadata?
+    /// 只在 menu(for:) 主线程读写；key 由图标内容决定，配置变化后旧值不会被命中。
+    private var menuImageCache: [MenuImageCacheKey: NSImage] = [:]
     /// 快照序号，编进菜单项 tag。从 1 起，每次重新读盘递增。
     private var snapshotGeneration = 0
     private var configObservation: DarwinObservation?
@@ -134,7 +136,7 @@ class FinderSync: FIFinderSync {
 
         menuItem.image = makeImage(
             from: descriptor.icon,
-            action: descriptor.action
+            isDestructive: descriptor.isDestructive
         )
 
         if !descriptor.children.isEmpty {
@@ -166,30 +168,36 @@ class FinderSync: FIFinderSync {
 
     private func makeImage(
         from icon: FinderMenuIconSource,
-        action: FinderMenuItemAction
+        isDestructive: Bool
     ) -> NSImage? {
         switch icon {
         case .symbol(let symbolName):
-            let color: NSColor?
-            if case .scriptBacked(let identity) = action,
-               Self.isCleanupScriptID(identity.scriptID) {
-                color = .systemRed
-            } else {
-                color = nil
+            let key = MenuImageCacheKey.symbol(name: symbolName, destructive: isDestructive)
+            if let cached = menuImageCache[key] {
+                return cached
             }
-            return makeMenuSymbolImage(named: symbolName, color: color)
+            guard let image = makeMenuSymbolImage(
+                named: symbolName,
+                color: isDestructive ? .systemRed : nil
+            ) else {
+                return nil
+            }
+            menuImageCache[key] = image
+            return image
         case .applicationIcon(let data, let fallbackSymbolName):
-            return makeApplicationIconImage(from: data) ?? makeMenuSymbolImage(named: fallbackSymbolName)
+            let key = MenuImageCacheKey.applicationIcon(data: data)
+            if let cached = menuImageCache[key] {
+                return cached
+            }
+            guard let image = makeApplicationIconImage(from: data)
+                ?? makeMenuSymbolImage(named: fallbackSymbolName) else {
+                return nil
+            }
+            menuImageCache[key] = image
+            return image
         case .none:
             return nil
         }
-    }
-
-    private static func isCleanupScriptID(_ scriptID: String) -> Bool {
-        let prefix = "builtIn."
-        guard scriptID.hasPrefix(prefix) else { return false }
-        let rawType = String(scriptID.dropFirst(prefix.count))
-        return BuiltInType(rawValue: rawType)?.isCleanup == true
     }
 
     private func makeMenuSymbolImage(
@@ -560,10 +568,6 @@ class FinderSync: FIFinderSync {
         }
     }
 
-    @objc func openWithApp(_ sender: NSMenuItem) {
-        openScriptBackedEntry(sender)
-    }
-
     /// 路由失败写入错误队列，让 App 侧看得见。
     ///
     /// 此前这里只打日志，用户的感受是「点了没反应」而 App 完全不知情。
@@ -672,16 +676,6 @@ class FinderSync: FIFinderSync {
         SharedPreferencesStore.propertyListModificationDate(at: preferencesURL)
     }
 
-    private func parentMenuTitle(for sender: NSMenuItem) -> String? {
-        if let menuTitle = sender.menu?.title, !menuTitle.isEmpty {
-            return menuTitle
-        }
-        if let parentTitle = sender.parent?.title, !parentTitle.isEmpty {
-            return parentTitle
-        }
-        return nil
-    }
-
     @objc func copyPath(_ sender: NSMenuItem) {
         guard let targetPath = resolveTargetPath() else {
             logger.error("拷贝路径: 无法解析目标路径")
@@ -751,4 +745,9 @@ class FinderSync: FIFinderSync {
         // 回退：使用 targetedURL（右键空白背景时）
         return controller.targetedURL()?.path
     }
+}
+
+private enum MenuImageCacheKey: Hashable {
+    case symbol(name: String, destructive: Bool)
+    case applicationIcon(data: Data)
 }

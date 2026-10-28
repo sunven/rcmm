@@ -6,6 +6,7 @@ public enum RuntimeConfiguration {
     public static let defaultFinderExtensionBundleID = "com.sunven.rcmm.FinderExtension"
     public static let debugFinderExtensionBundleID = "com.sunven.rcmm.debug.FinderExtension"
     public static let defaultNotificationPrefix = "com.sunven.rcmm"
+    public static let finderExtensionRelativePath = "Contents/PlugIns/RCMMFinderExtension.appex"
 
     public static var appDisplayName: String {
         stringValue(

@@ -56,9 +56,9 @@ final class ScriptInstallerService {
             return scriptsDirectoryOverride
         }
 
-        return fileManager.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Scripts")
-            .appendingPathComponent(extensionBundleID)
+        return SharedPaths.extensionScriptsDirectory(
+            finderExtensionBundleID: extensionBundleID
+        )
     }
 
     /// 同步脚本文件：删除多余脚本，编译当前脚本，并写入 Finder 可读的发布状态。

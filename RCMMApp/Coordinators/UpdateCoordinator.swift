@@ -207,25 +207,20 @@ final class UpdateCoordinator {
         state = .checking
 
         do {
-            let bundleInfo = try loadBundleInfo()
-            currentDisplayVersion = bundleInfo.displayVersion
-            guard bundleInfo.updatesEnabled, let feedURL = bundleInfo.feedURL else {
-                state = .disabled(bundleInfo.releasePageURL)
-                return
-            }
-
-            let latestItem = try await fetchLatestItem(feedURL)
-            let eligibility = UpdatePolicy.installEligibility(
-                bundlePath: bundleInfo.bundlePath,
-                releasePageURL: bundleInfo.releasePageURL
+            guard let context = try await fetchUpdateContext() else { return }
+            let decision = UpdatePolicy.startupDecision(
+                latestItem: context.latestItem,
+                currentVersion: context.bundleInfo.currentVersion,
+                bundlePath: context.bundleInfo.bundlePath,
+                dismissedDisplayVersion: nil,
+                releasePageURL: context.bundleInfo.releasePageURL
             )
 
-            if latestItem.version > bundleInfo.currentVersion {
-                state = .available(latestItem, eligibility)
-            } else if !silent {
-                state = .current(lastCheckedAt: now())
-            } else {
-                state = .idle
+            switch decision {
+            case .none:
+                state = silent ? .idle : .current(lastCheckedAt: now())
+            case .present(let item, let eligibility):
+                state = .available(item, eligibility)
             }
         } catch {
             state = .failed("检查更新失败：\(error.localizedDescription)")
@@ -234,19 +229,13 @@ final class UpdateCoordinator {
 
     private func performStartupUpdateCheck() async {
         do {
-            let bundleInfo = try loadBundleInfo()
-            guard bundleInfo.updatesEnabled, let feedURL = bundleInfo.feedURL else {
-                state = .disabled(bundleInfo.releasePageURL)
-                return
-            }
-
-            let latestItem = try await fetchLatestItem(feedURL)
+            guard let context = try await fetchUpdateContext() else { return }
             let decision = UpdatePolicy.startupDecision(
-                latestItem: latestItem,
-                currentVersion: bundleInfo.currentVersion,
-                bundlePath: bundleInfo.bundlePath,
+                latestItem: context.latestItem,
+                currentVersion: context.bundleInfo.currentVersion,
+                bundlePath: context.bundleInfo.bundlePath,
                 dismissedDisplayVersion: dismissedUpdateDisplayVersion,
-                releasePageURL: bundleInfo.releasePageURL
+                releasePageURL: context.bundleInfo.releasePageURL
             )
 
             switch decision {
@@ -259,6 +248,21 @@ final class UpdateCoordinator {
         } catch {
             state = .failed("检查更新失败：\(error.localizedDescription)")
         }
+    }
+
+    private func fetchUpdateContext() async throws -> (
+        bundleInfo: AppBundleUpdateInfo,
+        latestItem: DevAppcastItem
+    )? {
+        let bundleInfo = try loadBundleInfo()
+        currentDisplayVersion = bundleInfo.displayVersion
+        guard bundleInfo.updatesEnabled, let feedURL = bundleInfo.feedURL else {
+            state = .disabled(bundleInfo.releasePageURL)
+            return nil
+        }
+
+        let latestItem = try await fetchLatestItem(feedURL)
+        return (bundleInfo, latestItem)
     }
 
     private static func primaryButtonTitle(for eligibility: UpdateInstallEligibility) -> String {

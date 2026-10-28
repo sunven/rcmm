@@ -7,7 +7,7 @@ public enum ExtensionInstallHealthResolver {
         pluginKitOutput: String?,
         siblingPluginKitOutput: String? = nil
     ) -> ExtensionInstallHealth {
-        let normalizedCurrentExtensionPath = currentExtensionPath.map(normalizePath(_:))
+        let normalizedCurrentExtensionPath = currentExtensionPath.map(SharedPaths.normalizedPath(_:))
         let siblingEnabledPaths = siblingPluginKitOutput.map(enabledExtensionPaths(from:)) ?? []
 
         if !siblingEnabledPaths.isEmpty {
@@ -84,14 +84,10 @@ public enum ExtensionInstallHealthResolver {
                 else {
                     return nil
                 }
-                return normalizePath(rawPath)
+                return SharedPaths.normalizedPath(rawPath)
             }
 
         return deduplicatedPaths(paths)
-    }
-
-    private static func normalizePath(_ path: String) -> String {
-        URL(fileURLWithPath: path).standardizedFileURL.path
     }
 
     private static func deduplicatedPaths(_ paths: [String]) -> [String] {

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum ExtensionCleanupPlanner {
-    private static let finderExtensionSuffix = "/Contents/PlugIns/RCMMFinderExtension.appex"
+    private static let finderExtensionSuffix = "/" + RuntimeConfiguration.finderExtensionRelativePath
     private static let devReleaseSegment = "/build/dev-release/"
     private static let devReleaseComponents = ["build", "dev-release"]
     private static let derivedDataComponents = ["Library", "Developer", "Xcode", "DerivedData"]
@@ -25,12 +25,12 @@ public enum ExtensionCleanupPlanner {
         repositoryRoot: String?,
         extensionBundleID: String = RuntimeConfiguration.defaultFinderExtensionBundleID
     ) -> ExtensionCleanupPlan {
-        let normalizedCurrentAppPath = currentAppPath.map(normalizePath(_:))
-        let normalizedRepositoryRoot = repositoryRoot.map(normalizePath(_:))
+        let normalizedCurrentAppPath = currentAppPath.map(SharedPaths.normalizedPath(_:))
+        let normalizedRepositoryRoot = repositoryRoot.map(SharedPaths.normalizedPath(_:))
         let normalizedRunningProcesses = runningProcesses.compactMap(normalizedProcess(_:))
 
         let pluginKitAppPaths = pluginKitExtensionPaths.compactMap(appPath(fromExtensionPath:))
-        let discoveredNormalized = discoveredAppPaths.map(normalizePath(_:))
+        let discoveredNormalized = discoveredAppPaths.map(SharedPaths.normalizedPath(_:))
         let allAppPaths = sortedDeduplicatedPaths(pluginKitAppPaths + discoveredNormalized)
         let filteredAppPaths = allAppPaths.filter { path in
             guard let normalizedCurrentAppPath else { return true }
@@ -108,7 +108,7 @@ public enum ExtensionCleanupPlanner {
     }
 
     private static func appPath(fromExtensionPath extensionPath: String) -> String? {
-        let normalizedExtensionPath = normalizePath(extensionPath)
+        let normalizedExtensionPath = SharedPaths.normalizedPath(extensionPath)
         guard normalizedExtensionPath.hasSuffix(finderExtensionSuffix) else {
             return nil
         }
@@ -230,12 +230,8 @@ public enum ExtensionCleanupPlanner {
         )
     }
 
-    private static func normalizePath(_ path: String) -> String {
-        URL(fileURLWithPath: path).standardizedFileURL.path
-    }
-
     private static func normalizedProcess(_ process: ExtensionCleanupProcess) -> ExtensionCleanupProcess? {
-        ExtensionCleanupProcess(pid: process.pid, appPath: normalizePath(process.appPath))
+        ExtensionCleanupProcess(pid: process.pid, appPath: SharedPaths.normalizedPath(process.appPath))
     }
 
     private static func isAllowedDerivedDataApp(_ appPath: String) -> Bool {

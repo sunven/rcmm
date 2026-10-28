@@ -37,6 +37,7 @@ final class ApplicationIconPublisher: ApplicationIconPublishing {
             icons[config.id.uuidString] = iconData
         }
 
+        guard icons != iconStore.loadIcons() else { return }
         iconStore.saveIcons(icons)
     }
 

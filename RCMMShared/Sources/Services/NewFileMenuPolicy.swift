@@ -141,17 +141,11 @@ public enum NewFileMenuPolicy: Sendable {
         preferredName: String,
         existingNames: Set<String>
     ) -> String {
-        let trimmedName = preferredName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseName = trimmedName.isEmpty ? "模板" : trimmedName
-        guard existingNames.contains(baseName) else {
-            return baseName
-        }
-
-        var suffix = 2
-        while existingNames.contains("\(baseName) \(suffix)") {
-            suffix += 1
-        }
-        return "\(baseName) \(suffix)"
+        UniqueName.make(
+            preferredName: preferredName,
+            fallbackName: "模板",
+            existingNames: existingNames
+        )
     }
 }
 

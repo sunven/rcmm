@@ -41,10 +41,7 @@ public final class SharedConfigService: @unchecked Sendable {
     public func loadEntries() -> [MenuEntry] {
         let envelopes = loadEntryEnvelopes()
         if !envelopes.isEmpty {
-            let entries = envelopes.compactMap(\.entry)
-            if !entries.isEmpty || hasSavedEntriesData {
-                return entries
-            }
+            return envelopes.compactMap(\.entry)
         }
 
         if hasSavedEntriesData {

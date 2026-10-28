@@ -67,10 +67,11 @@ struct ScriptSourceGenerator {
                 bundleId: item.bundleId
             )
         } else {
-            let escapedAppPath = CommandTemplateProcessor.escapeForAppleScript(item.appPath)
-            command = """
-                do shell script "open -a " & quoted form of "\(escapedAppPath)" & " " & quoted form of thePath
-            """
+            command = CommandTemplateProcessor.buildAppleScriptCommand(
+                template: CompositeCommandTemplates.legacyOpenApp,
+                appPath: item.appPath,
+                quoteAppPlaceholder: true
+            )
         }
 
         return wrap(commands: [command])
@@ -181,27 +182,8 @@ struct ScriptSourceGenerator {
         commands: [CompositeScriptCommand],
         postSuccessCommands: [CompositeScriptCommand]
     ) -> String {
-        let commandBlocks = commands.map { scriptCommand in
-            let escapedStepName = CommandTemplateProcessor.escapeForAppleScript(scriptCommand.stepName)
-            return """
-            try
-            \(scriptCommand.command)
-            on error errorMessage number errorNumber
-            copy "\(escapedStepName): " & errorMessage to end of stepFailures
-            end try
-            """
-        }
-        let postSuccessBlocks = postSuccessCommands.map { scriptCommand in
-            let escapedStepName = CommandTemplateProcessor.escapeForAppleScript(scriptCommand.stepName)
-            return """
-            try
-            delay 0.2
-            \(scriptCommand.command)
-            on error errorMessage number errorNumber
-            copy "\(escapedStepName): " & errorMessage to end of stepFailures
-            end try
-            """
-        }
+        let commandBlocks = commands.map { commandBlock(for: $0, delay: false) }
+        let postSuccessBlocks = postSuccessCommands.map { commandBlock(for: $0, delay: true) }
 
         let failureCheck = """
         if (count of stepFailures) > 0 then
@@ -223,20 +205,34 @@ struct ScriptSourceGenerator {
         """
     }
 
-    private func effectiveCommandTemplate(for step: CompositeCommandStep) -> String {
-        guard step.bundleId == "com.microsoft.VSCode",
-              CompositeCommandTemplates.shouldMigrateVSCodeTemplate(step.commandTemplate) else {
-            return step.commandTemplate
-        }
+    private func commandBlock(
+        for scriptCommand: CompositeScriptCommand,
+        delay: Bool
+    ) -> String {
+        let escapedStepName = CommandTemplateProcessor.escapeForAppleScript(scriptCommand.stepName)
+        let prelude = delay ? "delay 0.2\n" : ""
+        return """
+        try
+        \(prelude)\(scriptCommand.command)
+        on error errorMessage number errorNumber
+        copy "\(escapedStepName): " & errorMessage to end of stepFailures
+        end try
+        """
+    }
 
-        return CompositeCommandTemplates.vsCodeCLI
+    private func effectiveCommandTemplate(for step: CompositeCommandStep) -> String {
+        CompositeCommandTemplates.migratedVSCodeStepTemplate(
+            bundleId: step.bundleId,
+            template: step.commandTemplate
+        )
     }
 
     private func vsCodeActivationCommand(appPath: String) -> String {
-        let escapedAppPath = CommandTemplateProcessor.escapeForAppleScript(appPath)
-        return """
-        do shell script "open -a " & quoted form of "\(escapedAppPath)"
-        """
+        CommandTemplateProcessor.buildAppleScriptCommand(
+            template: CompositeCommandTemplates.openApp,
+            appPath: appPath,
+            quoteAppPlaceholder: true
+        )
     }
 }
 
@@ -250,6 +246,15 @@ enum CompositeCommandTemplates {
     static let legacyVSCodeCLI = "{app}/Contents/Resources/app/bin/code -r {path}"
     static let vsCodeCLI = "{app}/Contents/Resources/app/bin/code -n {path}"
     static let openBundle = "open -b {bundle} {path}"
+    static let openApp = "open -a {app}"
+
+    static func migratedVSCodeStepTemplate(bundleId: String?, template: String) -> String {
+        guard bundleId == "com.microsoft.VSCode",
+              shouldMigrateVSCodeTemplate(template) else {
+            return template
+        }
+        return vsCodeCLI
+    }
 
     static func vsCodeCLIPath(appPath: String) -> String {
         (appPath as NSString)

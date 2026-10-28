@@ -9,8 +9,16 @@ import os.log
 final class ExtensionHealthMonitor {
     var extensionStatus: ExtensionStatus = .unknown
     var extensionStatusDetail: String?
-    var popoverState: PopoverState = .normal
     private(set) var isMonitoring = false
+
+    var popoverState: PopoverState {
+        switch extensionStatus {
+        case .enabled, .unknown:
+            return .normal
+        case .otherBuildEnabled, .otherInstallationEnabled, .disabled:
+            return .healthWarning
+        }
+    }
 
     private let healthReport: @MainActor () -> ExtensionInstallHealth
     private let detailMessage: @MainActor (ExtensionInstallHealth) -> String?
@@ -46,13 +54,6 @@ final class ExtensionHealthMonitor {
 
         extensionStatus = newStatus
         extensionStatusDetail = newDetail
-
-        switch newStatus {
-        case .enabled, .unknown:
-            popoverState = .normal
-        case .otherBuildEnabled, .otherInstallationEnabled, .disabled:
-            popoverState = .healthWarning
-        }
 
         logger.info("Extension 状态变化: \(oldStatus.rawValue) → \(newStatus.rawValue), popoverState: \(String(describing: self.popoverState))")
     }

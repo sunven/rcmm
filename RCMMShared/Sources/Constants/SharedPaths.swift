@@ -27,6 +27,11 @@ public enum SharedPaths {
         return FileManager.default.homeDirectoryForCurrentUser
     }
 
+    /// 统一路径比较口径：清理白名单与扩展启用路径都靠字符串相等判断。
+    public static func normalizedPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path
+    }
+
     /// 共享配置（菜单项、图标缓存、发布状态）所在的 plist。
     ///
     /// 沙盒对扩展自己的 Application Scripts 目录天然授予读权限，无需 entitlement，

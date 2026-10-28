@@ -169,18 +169,11 @@ final class SettingsDraftStore {
             return MenuEntryStatus(kind: .disabled, text: "已停用", detail: nil)
         }
         let evaluation = MenuEntryEvaluator.evaluate(entry, environment: .filesystemAware)
-        let states = coordinator.configStore.scriptPublishStates
-        if entry.isEnabled && !evaluation.hasErrors {
-            for script in evaluation.scriptBacked {
-                guard let state = states[script.id], state.fingerprint == script.fingerprint else {
-                    return MenuEntryStatus(kind: .syncing, text: "同步中", detail: "配置尚未应用到 Finder")
-                }
-                if state.status == .compileFailed {
-                    return MenuEntryStatus(kind: .failed, text: "同步失败", detail: state.errorSummary)
-                }
-            }
-        }
-        return MenuEntryStatusResolver.status(for: entry, evaluation: evaluation, publishStates: states)
+        return MenuEntryStatusResolver.status(
+            for: entry,
+            evaluation: evaluation,
+            publishStates: coordinator.configStore.scriptPublishStates
+        )
     }
 
     func retrySync() async {

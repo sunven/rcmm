@@ -70,10 +70,9 @@ final class MenuConfigStore {
             )
             menuEntries = [
                 .custom(terminalConfig),
-                .builtIn(BuiltInMenuItem(type: .copyPath, isEnabled: true)),
-                .builtIn(BuiltInMenuItem(type: .cleanNodeModules, isEnabled: true)),
-                .builtIn(BuiltInMenuItem(type: .cleanJavaTarget, isEnabled: true)),
-                .builtIn(BuiltInMenuItem(type: .cleanRustTarget, isEnabled: true)),
+            ] + BuiltInType.allCases.map { type in
+                MenuEntry.builtIn(BuiltInMenuItem(type: type, isEnabled: true))
+            } + [
                 .newFile(NewFileMenuConfig()),
             ]
             configService.saveEntries(menuEntries)
@@ -135,12 +134,13 @@ final class MenuConfigStore {
 
             for index in config.steps.indices {
                 let step = config.steps[index]
-                guard step.bundleId == "com.microsoft.VSCode",
-                      CompositeCommandTemplates.shouldMigrateVSCodeTemplate(step.commandTemplate) else {
-                    continue
-                }
+                let migratedTemplate = CompositeCommandTemplates.migratedVSCodeStepTemplate(
+                    bundleId: step.bundleId,
+                    template: step.commandTemplate
+                )
+                guard migratedTemplate != step.commandTemplate else { continue }
 
-                config.steps[index].commandTemplate = CompositeCommandTemplates.vsCodeCLI
+                config.steps[index].commandTemplate = migratedTemplate
                 didChange = true
             }
 
@@ -154,18 +154,6 @@ final class MenuConfigStore {
     }
 
     // MARK: - Add Menu Items
-
-    @discardableResult
-    func addMenuItem(from appInfo: AppInfo) -> UUID? {
-        guard !containsCustomMenuItem(matching: appInfo) else { return nil }
-        let newItem = MenuItemConfig(
-            appName: appInfo.name,
-            bundleId: appInfo.bundleId,
-            appPath: appInfo.path
-        )
-        menuEntries.append(.custom(newItem))
-        return newItem.id
-    }
 
     @discardableResult
     func addMenuItems(from appInfos: [AppInfo]) -> [UUID] {
@@ -348,33 +336,6 @@ final class MenuConfigStore {
         }
     }
 
-    func updateCompositeStep(
-        compositeId: UUID,
-        stepId: UUID,
-        name: String,
-        commandTemplate: String,
-        appPath: String?,
-        bundleId: String?,
-        isEnabled: Bool
-    ) {
-        updateComposite(for: compositeId) { config in
-            guard let stepIndex = config.steps.firstIndex(where: { $0.id == stepId }) else {
-                return
-            }
-            config.steps[stepIndex].name = name
-            config.steps[stepIndex].commandTemplate = commandTemplate
-            config.steps[stepIndex].appPath = appPath
-            config.steps[stepIndex].bundleId = bundleId
-            config.steps[stepIndex].isEnabled = isEnabled
-        }
-    }
-
-    func addShellStep(to compositeId: UUID) {
-        updateComposite(for: compositeId) { config in
-            config.steps.append(Self.makeShellStep())
-        }
-    }
-
     static func makeShellStep() -> CompositeCommandStep {
         CompositeCommandStep(kind: .shell, name: "Shell", commandTemplate: "open -a Terminal {path}")
     }
@@ -532,7 +493,7 @@ final class MenuConfigStore {
                 return trimmed.isEmpty ? nil : trimmed
             }
         )
-        return uniqueName(
+        return UniqueName.make(
             preferredName: preferredName,
             fallbackName: "新建",
             existingNames: existingNames
@@ -549,7 +510,7 @@ final class MenuConfigStore {
                 return trimmed.isEmpty ? nil : trimmed
             }
         )
-        return uniqueName(
+        return UniqueName.make(
             preferredName: preferredName,
             fallbackName: "新组合命令",
             existingNames: existingNames
@@ -565,44 +526,17 @@ final class MenuConfigStore {
                 .map { $0.displayName.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
         )
-        return uniqueName(
+        return UniqueName.make(
             preferredName: preferredName,
             fallbackName: "模板",
             existingNames: existingNames
         )
     }
 
-    private func uniqueName(
-        preferredName: String,
-        fallbackName: String,
-        existingNames: Set<String>
-    ) -> String {
-        let trimmedPreferredName = preferredName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let baseName = trimmedPreferredName.isEmpty ? fallbackName : trimmedPreferredName
-
-        guard existingNames.contains(baseName) else {
-            return baseName
-        }
-
-        var index = 2
-        while true {
-            let candidate = "\(baseName) \(index)"
-            if !existingNames.contains(candidate) {
-                return candidate
-            }
-            index += 1
-        }
-    }
-
     // MARK: - Publish States
 
     func loadPublishStates() {
         scriptPublishStates = publishStore.loadAll()
-    }
-
-    func updatePublishState(_ state: ScriptPublishState) {
-        publishStore.upsert(state)
-        scriptPublishStates[state.entryID] = state
     }
 
     // MARK: - Error Queue

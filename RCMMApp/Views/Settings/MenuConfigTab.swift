@@ -24,14 +24,19 @@ struct MenuConfigTab: View {
     }
 
     var body: some View {
+        let summaries = FinderMenuEntrySummaryBuilder.summaries(
+            for: configStore.menuEntries,
+            publishStates: configStore.scriptPublishStates
+        )
+
         HStack(spacing: 0) {
-            centerPane
+            centerPane(summaries: summaries)
                 .frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
 
             FinderMenuInspector(
-                summary: selectedSummary,
+                summary: summaries.first { $0.id == selectedEntryID },
                 entry: selectedEntry,
                 onOpenNewFileSettings: onOpenNewFileSettings,
                 onOpenCompositeSettings: {
@@ -78,48 +83,26 @@ struct MenuConfigTab: View {
         }
     }
 
-    private var summaries: [FinderMenuEntrySummary] {
-        FinderMenuEntrySummaryBuilder.summaries(
-            for: configStore.menuEntries,
-            publishStates: configStore.scriptPublishStates
-        )
-    }
-
     private var selectedEntry: MenuEntry? {
         guard let selectedEntryID else { return nil }
         return configStore.menuEntries.first { $0.id == selectedEntryID }
     }
 
-    private var selectedSummary: FinderMenuEntrySummary? {
-        guard let selectedEntryID else { return nil }
-        return summaries.first { $0.id == selectedEntryID }
-    }
+    private func centerPane(summaries: [FinderMenuEntrySummary]) -> some View {
+        let summariesByID = Dictionary(
+            summaries.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
 
-    private var enabledCount: Int {
-        summaries.filter(\.isEnabled).count
-    }
-
-    private var issueCount: Int {
-        summaries.filter { summary in
-            switch summary.statusKind {
-            case .failed, .unavailable, .partiallyAvailable, .warning, .syncing:
-                return true
-            case .ready, .disabled, .system:
-                return false
-            }
-        }.count
-    }
-
-    private var centerPane: some View {
-        VStack(spacing: 0) {
-            header
+        return VStack(spacing: 0) {
+            header(summaries: summaries)
 
             Divider()
 
             if configStore.menuEntries.isEmpty {
                 emptyState
             } else {
-                menuList
+                menuList(summariesByID: summariesByID)
             }
 
             Divider()
@@ -128,8 +111,18 @@ struct MenuConfigTab: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func header(summaries: [FinderMenuEntrySummary]) -> some View {
+        let enabledCount = summaries.filter(\.isEnabled).count
+        let issueCount = summaries.filter { summary in
+            switch summary.statusKind {
+            case .failed, .unavailable, .partiallyAvailable, .warning, .syncing:
+                return true
+            case .ready, .disabled, .system:
+                return false
+            }
+        }.count
+
+        return VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Finder 菜单")
                     .font(.title3.weight(.semibold))
@@ -211,13 +204,15 @@ struct MenuConfigTab: View {
         )
     }
 
-    private var menuList: some View {
+    private func menuList(summariesByID: [String: FinderMenuEntrySummary]) -> some View {
         ZStack(alignment: .topLeading) {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(configStore.menuEntries.enumerated()), id: \.element.id) { index, entry in
                         SelectableMenuRow(isSelected: selectedEntryID == entry.id) {
-                            row(for: entry, at: index)
+                            if let summary = summariesByID[entry.id] {
+                                row(for: entry, at: index, summary: summary)
+                            }
                         }
                         .padding(Layout.rowInsets)
                         .opacity(reorderSession?.draggedID == entry.id ? 0.28 : 1)
@@ -229,7 +224,7 @@ struct MenuConfigTab: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            dragOverlay
+            dragOverlay(summariesByID: summariesByID)
         }
         .coordinateSpace(name: MenuListCoordinateSpace.name)
         .onPreferenceChange(MenuRowFramePreferenceKey.self) { frames in
@@ -238,14 +233,16 @@ struct MenuConfigTab: View {
     }
 
     @ViewBuilder
-    private var dragOverlay: some View {
+    private func dragOverlay(summariesByID: [String: FinderMenuEntrySummary]) -> some View {
         if let session = reorderSession,
            let location = dragLocation,
-           let entry = configStore.menuEntries.first(where: { $0.id == session.draggedID }) {
+           let entry = configStore.menuEntries.first(where: { $0.id == session.draggedID }),
+           let summary = summariesByID[entry.id] {
             SelectableMenuRow(isSelected: true) {
                 row(
                     for: entry,
-                    at: configStore.menuEntries.firstIndex(where: { $0.id == session.draggedID }) ?? 0
+                    at: configStore.menuEntries.firstIndex(where: { $0.id == session.draggedID }) ?? 0,
+                    summary: summary
                 )
             }
             .padding(Layout.rowInsets)
@@ -312,86 +309,74 @@ struct MenuConfigTab: View {
         .background(.bar)
     }
 
-    @ViewBuilder
-    private func row(for entry: MenuEntry, at index: Int) -> some View {
-        let summary = summary(for: entry, at: index)
-
-        switch entry {
-        case .builtIn(let item):
-            AlignedMenuRow(dragGesture: dragGesture(for: entry)) {
-                BuiltInListRow(
-                    item: item,
-                    summary: summary,
-                    onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                    onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
-                    onToggle: { isEnabled in
-                        appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
-                    }
-                )
-            }
-            .onTapGesture {
-                selectedEntryID = entry.id
-            }
-        case .custom(let config):
-            AlignedMenuRow(dragGesture: dragGesture(for: entry)) {
-                AppListRow(
-                    menuItem: config,
-                    summary: summary,
-                    hasUnsavedChanges: drafts.hasChanges(.command(config.id)),
-                    onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                    onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
-                    onDelete: { requestDeletion(of: entry, title: summary.title) },
-                    onToggle: { isEnabled in
-                        appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
-                    }
-                )
-            }
-            .onTapGesture {
-                selectedEntryID = entry.id
-            }
-        case .composite(let config):
-            AlignedMenuRow(dragGesture: dragGesture(for: entry)) {
-                CompositeListRow(
-                    config: config,
-                    summary: summary,
-                    hasUnsavedChanges: drafts.hasChanges(.composite(config.id)),
-                    onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                    onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
-                    onDelete: { requestDeletion(of: entry, title: summary.title) },
-                    onToggle: { isEnabled in
-                        appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
-                    }
-                )
-            }
-            .onTapGesture {
-                selectedEntryID = entry.id
+    private func row(
+        for entry: MenuEntry,
+        at index: Int,
+        summary: FinderMenuEntrySummary
+    ) -> some View {
+        AlignedMenuRow(dragGesture: dragGesture(for: entry)) {
+            rowContent(for: entry, at: index, summary: summary)
+        }
+        .onTapGesture {
+            selectedEntryID = entry.id
+            if case .composite = entry {
                 onOpenCompositeSettings(entry.id)
-            }
-        case .newFile(let config):
-            AlignedMenuRow(dragGesture: dragGesture(for: entry)) {
-                NewFileListRow(
-                    config: config,
-                    summary: summary,
-                    onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
-                    onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
-                    onToggle: { isEnabled in
-                        appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
-                    }
-                )
-            }
-            .onTapGesture {
-                selectedEntryID = entry.id
             }
         }
     }
 
-    private func summary(for entry: MenuEntry, at index: Int) -> FinderMenuEntrySummary {
-        summaries.first { $0.id == entry.id } ?? FinderMenuEntrySummaryBuilder.summary(
-            for: entry,
-            position: index + 1,
-            total: max(configStore.menuEntries.count, 1),
-            publishStates: configStore.scriptPublishStates
-        )
+    @ViewBuilder
+    private func rowContent(
+        for entry: MenuEntry,
+        at index: Int,
+        summary: FinderMenuEntrySummary
+    ) -> some View {
+        switch entry {
+        case .builtIn(let item):
+            BuiltInListRow(
+                item: item,
+                summary: summary,
+                onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
+                onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                onToggle: { isEnabled in
+                    appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
+                }
+            )
+        case .custom(let config):
+            AppListRow(
+                menuItem: config,
+                summary: summary,
+                hasUnsavedChanges: drafts.hasChanges(.command(config.id)),
+                onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
+                onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                onDelete: { requestDeletion(of: entry, title: summary.title) },
+                onToggle: { isEnabled in
+                    appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
+                }
+            )
+        case .composite(let config):
+            CompositeListRow(
+                config: config,
+                summary: summary,
+                hasUnsavedChanges: drafts.hasChanges(.composite(config.id)),
+                onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
+                onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                onDelete: { requestDeletion(of: entry, title: summary.title) },
+                onToggle: { isEnabled in
+                    appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
+                }
+            )
+        case .newFile(let config):
+            NewFileListRow(
+                config: config,
+                summary: summary,
+                onMoveUp: index > 0 ? { moveItem(at: index, direction: -1) } : nil,
+                onMoveDown: index < configStore.menuEntries.count - 1 ? { moveItem(at: index, direction: 1) } : nil,
+                onToggle: { isEnabled in
+                    appCoordinator.edit { $0.toggleEntry(for: entry.id, isEnabled: isEnabled) }
+                }
+            )
+        }
     }
 
     private func dragGesture(for entry: MenuEntry) -> AnyGesture<DragGesture.Value> {
