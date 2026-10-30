@@ -6,13 +6,15 @@ struct MenuItemButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .padding(.vertical, 4)
+            .font(RCMMFont.body)
+            .padding(.vertical, 5)
             .padding(.horizontal, 8)
             .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(isHovered ? Color.accentColor.opacity(0.2) : Color.clear)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(isHovered ? Color.primary.opacity(0.07) : Color.clear)
             )
             .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.75 : 1)
     }
 }
 

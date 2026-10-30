@@ -8,9 +8,9 @@ public enum PopoverState: Sendable {
     public var preferredPopoverWidth: Double {
         switch self {
         case .healthWarning:
-            return 340
+            return 360
         case .normal, .onboarding:
-            return 220
+            return 260
         }
     }
 }

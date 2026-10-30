@@ -20,65 +20,23 @@ struct OnboardingFlowView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 步骤指示器
             OnboardingStepIndicator(currentStep: currentStep)
-                .padding(.top, 24)
-                .padding(.bottom, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 14)
 
-            Divider()
+            RCMMDivider()
 
             stepContent
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.horizontal, 24)
-            .padding(.top, 16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
 
-            Divider()
+            RCMMDivider()
 
-            // 底部导航
-            HStack {
-                if !isCompleting {
-                    Button("跳过") {
-                        skipOnboarding()
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if !isCompleting {
-                    if canGoBack {
-                        Button("上一步") {
-                            returnToPreviousStep()
-                        }
-                        .buttonStyle(.bordered)
-                    }
-
-                    if currentStep == .enableExtension {
-                        Button("下一步") {
-                            advanceToNextStep()
-                        }
-                        .buttonStyle(AppPrimaryButtonStyle())
-                        .disabled(!isExtensionEnabled)
-                    } else if currentStep == .selectApps {
-                        Button("下一步") {
-                            advanceToNextStep()
-                        }
-                        .buttonStyle(AppPrimaryButtonStyle())
-                        .disabled(!canContinueFromSelection)
-                    } else if currentStep == .verify {
-                        Button("完成") {
-                            completeOnboarding()
-                        }
-                        .buttonStyle(AppPrimaryButtonStyle())
-                        .disabled(!verification.isConfirmed(in: appCoordinator.configStore))
-                    }
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            bottomBar
         }
         .frame(width: 480, height: 500)
+        .background(RCMMColor.window)
         .onDisappear {
             verification.leave()
         }
@@ -97,62 +55,98 @@ struct OnboardingFlowView: View {
         }
     }
 
-    @ViewBuilder
-    private var stepContent: some View {
-        if isCompleting {
-            scrollableStep {
-                completionConfirmationView
-            }
-        } else {
-            switch currentStep {
-            case .enableExtension:
-                scrollableStep {
-                    EnableExtensionStepView(
-                        isExtensionEnabled: $isExtensionEnabled,
-                        autoAdvanceWhenEnabled: autoAdvanceWhenExtensionEnabled,
-                        onNext: { advanceFromExtensionStep() }
-                    )
+    private var bottomBar: some View {
+        HStack(spacing: 8) {
+            if !isCompleting {
+                Button("跳过") {
+                    skipOnboarding()
                 }
-            case .selectApps:
-                SelectAppsStepView(selectedAppIds: $selectedAppIds, didPreselectApps: $didPreselectApps)
-            case .verify:
-                scrollableStep {
-                    VerifyStepView(launchAtLogin: $launchAtLogin, verification: verification)
+                .buttonStyle(.plain)
+                .font(RCMMFont.caption)
+                .foregroundStyle(RCMMColor.textMuted)
+            }
+
+            Spacer()
+
+            if !isCompleting {
+                if canGoBack {
+                    Button("上一步") {
+                        returnToPreviousStep()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                }
+
+                if currentStep == .enableExtension {
+                    Button("下一步") {
+                        advanceToNextStep()
+                    }
+                    .buttonStyle(AppPrimaryButtonStyle())
+                    .controlSize(.regular)
+                    .disabled(!isExtensionEnabled)
+                } else if currentStep == .selectApps {
+                    Button("下一步") {
+                        advanceToNextStep()
+                    }
+                    .buttonStyle(AppPrimaryButtonStyle())
+                    .controlSize(.regular)
+                    .disabled(!canContinueFromSelection)
+                } else if currentStep == .verify {
+                    Button("完成") {
+                        completeOnboarding()
+                    }
+                    .buttonStyle(AppPrimaryButtonStyle())
+                    .controlSize(.regular)
+                    .disabled(!verification.isConfirmed(in: appCoordinator.configStore))
                 }
             }
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 12)
+        .background(RCMMColor.surfaceSoft)
     }
 
-    private func scrollableStep<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ScrollView {
-            content()
-                .frame(maxWidth: .infinity)
+    @ViewBuilder
+    private var stepContent: some View {
+        if isCompleting {
+            completionConfirmationView
+        } else {
+            switch currentStep {
+            case .enableExtension:
+                EnableExtensionStepView(
+                    isExtensionEnabled: $isExtensionEnabled,
+                    autoAdvanceWhenEnabled: autoAdvanceWhenExtensionEnabled,
+                    onNext: { advanceFromExtensionStep() }
+                )
+            case .selectApps:
+                SelectAppsStepView(selectedAppIds: $selectedAppIds, didPreselectApps: $didPreselectApps)
+            case .verify:
+                VerifyStepView(launchAtLogin: $launchAtLogin, verification: verification)
+            }
         }
     }
 
     // MARK: - 完成确认视图
 
     private var completionConfirmationView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 10) {
             Spacer()
 
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.green)
+                .font(.system(size: 40))
+                .foregroundStyle(RCMMColor.success)
 
-            Text("设置完成！")
-                .font(.title2.bold())
+            Text("设置完成")
+                .font(RCMMFont.pageTitle)
+                .foregroundStyle(RCMMColor.textPrimary)
 
-            Text("现在可以在 Finder 中右键目录使用 rcmm 了")
-                .font(.body)
-                .foregroundStyle(.secondary)
+            Text("在 Finder 中右键目录即可使用 rcmm")
+                .font(RCMMFont.secondary)
+                .foregroundStyle(RCMMColor.textMuted)
                 .multilineTextAlignment(.center)
 
             if let errorMessage = registrationErrorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .multilineTextAlignment(.center)
+                RCMMInlineMessage(errorMessage, kind: .warning)
                     .padding(.top, 4)
             }
 
@@ -177,7 +171,7 @@ struct OnboardingFlowView: View {
     }
 
     private func advanceToStep(_ step: OnboardingStep) {
-        withAnimation(.easeInOut(duration: 0.3)) {
+        withAnimation(.easeInOut(duration: 0.25)) {
             currentStep = step
         }
     }
@@ -239,7 +233,7 @@ struct OnboardingFlowView: View {
         }
 
         // 显示完成确认，短暂延迟后关闭窗口
-        withAnimation(.easeInOut(duration: 0.3)) {
+        withAnimation(.easeInOut(duration: 0.25)) {
             isCompleting = true
         }
 

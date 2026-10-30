@@ -9,97 +9,102 @@ struct EnableExtensionStepView: View {
     @State private var timerCancellable: Timer?
 
     var body: some View {
-        VStack(spacing: 24) {
-            // 顶部图标和标题
-            VStack(spacing: 12) {
-                Image(systemName: "puzzlepiece.extension.fill")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Color.accentColor)
-
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("启用 Finder 扩展")
-                    .font(.title2.bold())
+                    .font(RCMMFont.pageTitle)
+                    .foregroundStyle(RCMMColor.textPrimary)
 
-                Text("\(PluginKitService.appDisplayName) 需要启用 Finder Sync 扩展才能在右键菜单中显示快捷操作。")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
+                Text("\(PluginKitService.appDisplayName) 需要启用 Finder Sync 扩展，才会出现在右键菜单中。")
+                    .font(RCMMFont.secondary)
+                    .foregroundStyle(RCMMColor.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Divider()
-
-            // 说明文字（适配 macOS 版本）
-            VStack(alignment: .leading, spacing: 8) {
-                Text("请在系统设置中启用扩展：")
-                    .font(.subheadline.bold())
-
+            RCMMPanel(title: "在系统设置中启用") {
                 if #available(macOS 15.2, *) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("打开 系统设置", systemImage: "1.circle.fill")
-                        Label("前往 通用 > 登录项与扩展", systemImage: "2.circle.fill")
-                        Label("找到 \(PluginKitService.appDisplayName) 并开启扩展", systemImage: "3.circle.fill")
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    instructionRow(1, "打开 系统设置")
+                    instructionRow(2, "前往 通用 > 登录项与扩展")
+                    instructionRow(3, "找到 \(PluginKitService.appDisplayName) 并开启扩展")
                 } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("点击下方「前往系统设置」按钮", systemImage: "1.circle.fill")
-                        Label("在扩展列表中找到 \(PluginKitService.appDisplayName) 并开启", systemImage: "2.circle.fill")
-                    }
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    instructionRow(1, "点击下方「前往系统设置」按钮")
+                    instructionRow(2, "在扩展列表中找到 \(PluginKitService.appDisplayName) 并开启")
 
-                    Text("如果系统设置中未显示扩展选项，可在终端中执行：")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .padding(.top, 4)
-                    Text(PluginKitService.extensionEnableCommand)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .textSelection(.enabled)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("如果系统设置中未显示扩展选项，可在终端中执行：")
+                            .font(RCMMFont.caption)
+                            .foregroundStyle(RCMMColor.textMuted)
+                            .padding(.top, 4)
+                        RCMMCodeBlock(text: PluginKitService.extensionEnableCommand)
+                    }
+                }
+
+                if isExtensionEnabled {
+                    RCMMInlineMessage("Finder 扩展已启用", kind: .success)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal)
 
-            // 状态显示
-            if isExtensionEnabled {
-                Label("Extension 已启用", systemImage: "checkmark.circle.fill")
-                    .font(.headline)
-                    .foregroundStyle(.green)
+            RCMMPanel(title: "启用后") {
+                benefitRow("Finder 右键菜单会显示你添加的应用和命令。")
+                benefitRow("扩展只读取 rcmm 的菜单配置，不会改动 Finder 本身。")
+                benefitRow("可随时在系统设置中关闭扩展，右键菜单立即恢复原样。")
             }
 
-            // 操作按钮
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 Button {
                     PluginKitService.showExtensionManagement()
                 } label: {
-                    Text("前往系统设置")
-                        .frame(maxWidth: .infinity)
-                        .lineLimit(1)
+                    Label("前往系统设置", systemImage: "arrow.up.forward.app")
                 }
                 .buttonStyle(AppPrimaryButtonStyle())
-                .controlSize(.large)
+                .controlSize(.regular)
 
                 Button {
                     checkExtensionStatus()
                 } label: {
-                    Text("重新检测")
-                        .frame(maxWidth: .infinity)
-                        .lineLimit(1)
+                    Label("重新检测", systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.large)
+                .controlSize(.regular)
             }
-            .padding(.horizontal)
+
+            Spacer(minLength: 0)
         }
-        .frame(maxHeight: .infinity, alignment: .top)
         .onAppear {
             checkExtensionStatus()
             startPolling()
         }
         .onDisappear {
             stopPolling()
+        }
+    }
+
+    private func instructionRow(_ index: Int, _ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text("\(index)")
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(RCMMColor.accentText)
+                .frame(width: 16, height: 16)
+                .background(Circle().fill(RCMMColor.accentSoft))
+
+            Text(text)
+                .font(RCMMFont.secondary)
+                .foregroundStyle(RCMMColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func benefitRow(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(RCMMColor.accentText)
+                .frame(width: 16)
+
+            Text(text)
+                .font(RCMMFont.secondary)
+                .foregroundStyle(RCMMColor.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -134,7 +139,9 @@ struct EnableExtensionStepView: View {
         isExtensionEnabled: .constant(false),
         onNext: {}
     )
-    .frame(width: 440, height: 420)
+    .padding(24)
+    .frame(width: 460, height: 440)
+    .background(RCMMColor.window)
 }
 
 #Preview("已启用") {
@@ -142,5 +149,7 @@ struct EnableExtensionStepView: View {
         isExtensionEnabled: .constant(true),
         onNext: {}
     )
-    .frame(width: 440, height: 420)
+    .padding(24)
+    .frame(width: 460, height: 440)
+    .background(RCMMColor.window)
 }

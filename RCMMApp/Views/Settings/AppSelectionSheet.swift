@@ -13,14 +13,28 @@ struct AppSelectionSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 4) {
-                Text("选择应用")
-                    .font(.headline)
-                Text("仅显示 /Applications 和 ~/Applications 中的应用")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("选择应用")
+                        .font(RCMMFont.sheetTitle)
+                        .foregroundStyle(RCMMColor.textPrimary)
+                    Text("仅显示 /Applications 和 ~/Applications 中的应用")
+                        .font(RCMMFont.caption)
+                        .foregroundStyle(RCMMColor.textMuted)
+                }
+
+                Spacer()
+
+                if !selectedAppIds.isEmpty {
+                    Text("已选择 \(selectedAppIds.count) 个")
+                        .font(RCMMFont.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(RCMMColor.accentText)
+                }
             }
-            .padding()
+            .padding(16)
+
+            RCMMDivider()
 
             AppPickerListView(
                 apps: applicationDiscovery.apps,
@@ -31,8 +45,10 @@ struct AppSelectionSheet: View {
                 emptyTitle: "未发现可添加应用",
                 emptySubtitle: "仅支持从 /Applications 和 ~/Applications 添加应用"
             )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
 
-            Divider()
+            RCMMDivider()
 
             HStack {
                 Button("取消") {
@@ -42,7 +58,7 @@ struct AppSelectionSheet: View {
 
                 Spacer()
 
-                Button("确认添加") {
+                Button(selectedAppIds.isEmpty ? "确认添加" : "添加 \(selectedAppIds.count) 个应用") {
                     addSelectedApps()
                     dismiss()
                 }
@@ -50,9 +66,10 @@ struct AppSelectionSheet: View {
                 .disabled(selectedAppIds.isEmpty)
                 .keyboardShortcut(.defaultAction)
             }
-            .padding()
+            .padding(16)
         }
-        .frame(width: 400, height: 500)
+        .frame(width: 420, height: 520)
+        .background(RCMMColor.window)
         .task {
             await applicationDiscovery.refresh()
         }

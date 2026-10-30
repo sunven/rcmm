@@ -5,8 +5,8 @@ import Testing
 struct PopoverStateTests {
     @Test("异常恢复面板使用更宽的弹层宽度")
     func healthWarningUsesWiderPopover() {
-        #expect(PopoverState.normal.preferredPopoverWidth == 220)
-        #expect(PopoverState.onboarding.preferredPopoverWidth == 220)
-        #expect(PopoverState.healthWarning.preferredPopoverWidth == 340)
+        #expect(PopoverState.normal.preferredPopoverWidth == 260)
+        #expect(PopoverState.onboarding.preferredPopoverWidth == 260)
+        #expect(PopoverState.healthWarning.preferredPopoverWidth == 360)
     }
 }

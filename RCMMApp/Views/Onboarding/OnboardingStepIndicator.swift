@@ -18,51 +18,50 @@ struct OnboardingStepIndicator: View {
     let currentStep: OnboardingStep
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 6) {
             ForEach(OnboardingStep.allCases, id: \.rawValue) { step in
                 if step.rawValue > 0 {
-                    connectorLine(before: step)
+                    Rectangle()
+                        .fill(step.rawValue <= currentStep.rawValue ? RCMMColor.accent : RCMMColor.line)
+                        .frame(width: 32, height: 1)
+                        .padding(.horizontal, 4)
                 }
-                stepCircle(for: step)
+
+                stepView(for: step)
             }
         }
     }
 
-    @ViewBuilder
-    private func stepCircle(for step: OnboardingStep) -> some View {
-        VStack(spacing: 6) {
+    private func stepView(for step: OnboardingStep) -> some View {
+        HStack(spacing: 6) {
             ZStack {
-                if step.rawValue < currentStep.rawValue {
-                    // 已完成
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.green)
-                } else if step == currentStep {
-                    // 当前
-                    Image(systemName: "circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color.accentColor)
-                } else {
-                    // 待完成
-                    Image(systemName: "circle")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
+                switch step.rawValue {
+                case ..<currentStep.rawValue:
+                    Circle()
+                        .fill(RCMMColor.accentSoft)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(RCMMColor.accentText)
+                case currentStep.rawValue:
+                    Circle()
+                        .fill(RCMMColor.accent)
+                    Text("\(step.rawValue + 1)")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                default:
+                    Circle()
+                        .stroke(RCMMColor.line, lineWidth: 1)
+                    Text("\(step.rawValue + 1)")
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(RCMMColor.textFaint)
                 }
             }
-            Text(step.title)
-                .font(.caption)
-                .foregroundStyle(step == currentStep ? .primary : .secondary)
-        }
-    }
+            .frame(width: 20, height: 20)
 
-    @ViewBuilder
-    private func connectorLine(before step: OnboardingStep) -> some View {
-        Rectangle()
-            .fill(step.rawValue <= currentStep.rawValue ? Color.accentColor : Color.secondary.opacity(0.3))
-            .frame(height: 2)
-            .frame(maxWidth: 60)
-            .padding(.horizontal, 8)
-            .padding(.bottom, 20)
+            Text(step.title)
+                .font(.system(size: 11, weight: step == currentStep ? .semibold : .regular))
+                .foregroundStyle(step == currentStep ? RCMMColor.textPrimary : RCMMColor.textMuted)
+        }
     }
 }
 

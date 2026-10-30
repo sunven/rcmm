@@ -29,15 +29,17 @@ struct MenuRowActionsMenu: View {
                     }
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 24, height: 24)
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(RCMMColor.textMuted)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
             .help("更多操作")
+            .accessibilityLabel("更多操作")
         }
     }
 }

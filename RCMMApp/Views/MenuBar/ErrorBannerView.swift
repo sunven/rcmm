@@ -28,15 +28,18 @@ struct ErrorBannerView: View {
                 actionBar
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: showAutoRepair)
+        .animation(.easeInOut(duration: 0.25), value: showAutoRepair)
     }
 
     private func autoRepairBanner(message: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "wrench.and.screwdriver.fill")
-                .foregroundStyle(.green)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(RCMMColor.success)
+                .frame(width: 14)
+
             Text(message)
-                .font(.subheadline)
+                .font(RCMMFont.caption)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -50,26 +53,31 @@ struct ErrorBannerView: View {
     private func errorRow(record: ErrorRecord) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
-                .font(.caption)
-            VStack(alignment: .leading, spacing: 4) {
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(RCMMColor.error)
+                .frame(width: 14)
+
+            VStack(alignment: .leading, spacing: 3) {
                 if let context = record.context {
                     Text(context)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.primary)
                 }
+
                 Text(record.message)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                    .font(RCMMFont.caption)
+                    .foregroundStyle(RCMMColor.error)
                     .textSelection(.enabled)
+
                 Text(recoveryAdvice(for: record))
-                    .font(.caption)
+                    .font(RCMMFont.caption)
                     .foregroundStyle(.secondary)
             }
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
     private var actionBar: some View {
@@ -121,7 +129,6 @@ struct ErrorBannerView: View {
 #Preview("有错误") {
     let appModel = AppModel(forPreview: true)
 
-    // 直接设置到 configStore
     appModel.appCoordinator.configStore.errorRecords = [
         ErrorRecord(
             source: "extension",
@@ -140,7 +147,7 @@ struct ErrorBannerView: View {
     return ErrorBannerView()
         .environment(appModel.appCoordinator)
         .environment(appModel.appCoordinator.configStore)
-        .frame(width: 196)
+        .frame(width: 240)
         .padding()
 }
 
@@ -160,7 +167,7 @@ struct ErrorBannerView: View {
     return ErrorBannerView()
         .environment(appModel.appCoordinator)
         .environment(appModel.appCoordinator.configStore)
-        .frame(width: 196)
+        .frame(width: 240)
         .padding()
 }
 
@@ -170,6 +177,6 @@ struct ErrorBannerView: View {
     return ErrorBannerView()
         .environment(appModel.appCoordinator)
         .environment(appModel.appCoordinator.configStore)
-        .frame(width: 196)
+        .frame(width: 240)
         .padding()
 }

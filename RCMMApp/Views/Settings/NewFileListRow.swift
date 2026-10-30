@@ -10,40 +10,18 @@ struct NewFileListRow: View {
     var onToggle: ((Bool) -> Void)?
 
     var body: some View {
-        HStack(spacing: 10) {
-            FinderMenuRowIcon(isEnabled: config.isEnabled, isUnavailable: summary.statusKind == .unavailable || summary.statusKind == .failed) {
-                Image(systemName: config.iconName ?? "document.badge.plus")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(config.isEnabled ? .primary : .secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(config.name)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(config.isEnabled ? .primary : .secondary)
-                    .lineLimit(1)
-
-                Text(summary.subtitle ?? "\(config.templates.count) 个模板")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            FinderMenuStatusBadge(summary: summary)
-
-            if let onToggle {
-                Toggle("", isOn: Binding(
-                    get: { config.isEnabled },
-                    set: { onToggle($0) }
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .labelsHidden()
-                .help(config.isEnabled ? "停用此新建菜单" : "启用此新建菜单")
-            }
-
+        FinderMenuRow(
+            title: config.name,
+            subtitle: summary.subtitle ?? "\(config.templates.count) 个模板",
+            isEnabled: config.isEnabled,
+            isUnavailable: summary.statusKind == .unavailable || summary.statusKind == .failed,
+            summary: summary,
+            onToggle: onToggle
+        ) {
+            Image(systemName: config.iconName ?? "document.badge.plus")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(config.isEnabled ? RCMMColor.textSecondary : RCMMColor.textMuted)
+        } trailing: {
             MenuRowActionsMenu(
                 onMoveUp: onMoveUp,
                 onMoveDown: onMoveDown,
@@ -51,10 +29,5 @@ struct NewFileListRow: View {
                 deleteLabel: "删除新建菜单"
             )
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 8)
-        .frame(minHeight: 40)
-        .controlSize(.small)
-        .contentShape(Rectangle())
     }
 }

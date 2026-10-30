@@ -38,68 +38,59 @@ struct CommandEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("菜单名称", text: $config.appName)
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.small)
-
-            Picker("执行模式", selection: $config.executionMode) {
-                ForEach(CustomCommandExecutionMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            RCMMField("菜单名称") {
+                TextField("菜单名称", text: $config.appName)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
             }
-            .pickerStyle(.segmented)
-            .controlSize(.small)
 
-            TextField(defaultCommand, text: Binding(get: { editedCommand }, set: { config.customCommand = $0.isEmpty ? nil : $0 }))
-                .font(.system(.callout, design: .monospaced))
-                .textFieldStyle(.roundedBorder)
+            RCMMField("执行方式") {
+                Picker("执行方式", selection: $config.executionMode) {
+                    ForEach(CustomCommandExecutionMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
                 .controlSize(.small)
-                .autocorrectionDisabled()
+                .labelsHidden()
+            }
 
-            Text(helpText)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(drafts.hasChanges(.command(config.id)) ? "草稿预览：" : "已保存命令预览：")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-
-                Text(previewCommand)
+            RCMMField(executionMode == .currentDirectory ? "Shell 命令" : "启动命令") {
+                TextField(defaultCommand, text: Binding(get: { editedCommand }, set: { config.customCommand = $0.isEmpty ? nil : $0 }))
                     .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+                    .autocorrectionDisabled()
+
+                Text(helpText)
+                    .font(RCMMFont.caption)
+                    .foregroundStyle(RCMMColor.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                RCMMFieldLabel(drafts.hasChanges(.command(config.id)) ? "草稿预览" : "已保存命令预览")
+                RCMMCodeBlock(text: previewCommand)
             }
 
             if !validationIssues.isEmpty {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(validationIssues.prefix(4)) { issue in
                         ValidationIssueRow(
                             isError: issue.severity == .error,
-                            message: issue.message,
-                            warningColor: .orange,
-                            colorText: true,
-                            spacing: 4,
-                            smallIcon: true
+                            message: issue.message
                         )
                     }
                 }
             }
 
             if isMissingPathPlaceholder {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                    Text("命令中未包含 {path}，目标目录可能不会被传递")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                }
+                RCMMInlineMessage("命令中未包含 {path}，目标目录可能不会被传递", kind: .warning)
             }
 
             if executionMode == .selectedPath && !editedCommand.isEmpty {
-                Button("重置为默认") { config.customCommand = nil }
+                Button("重置为默认命令") { config.customCommand = nil }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }
@@ -107,7 +98,6 @@ struct CommandEditor: View {
             EditorSaveBar(key: .command(config.id))
         }
         .padding(.top, 2)
-        .padding(.bottom, 4)
     }
 
     private var helpText: String {

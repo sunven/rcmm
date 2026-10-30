@@ -32,7 +32,7 @@ struct CompositeCommandsTab: View {
                         emptyState
                     } else {
                         sectionHeader("我的组合命令", count: composites.count)
-                        VStack(spacing: 12) {
+                        VStack(spacing: 10) {
                             ForEach(composites) { config in
                                 commandCard(config)
                                     .id(config.id.uuidString)
@@ -42,19 +42,20 @@ struct CompositeCommandsTab: View {
 
                     sectionHeader("内置模板", count: nil)
                     if applicationDiscovery.isScanning {
-                        Label("正在检查模板依赖…", systemImage: "hourglass")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("正在检查模板依赖…")
+                                .font(RCMMFont.caption)
+                                .foregroundStyle(RCMMColor.textMuted)
+                        }
                     } else if let message = applicationDiscovery.presetMessage {
-                        Label(message, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        RCMMInlineMessage(message, kind: .warning)
                     }
                     templates
                 }
                 .padding(18)
             }
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(RCMMColor.window)
             .onAppear {
                 scrollToFocused(proxy)
             }
@@ -130,23 +131,15 @@ struct CompositeCommandsTab: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("组合命令")
-                    .font(.title3.weight(.bold))
-                Text("把多个应用和 Shell 步骤组合成一个 Finder 菜单项")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+        RCMMPageHeader(
+            title: "组合命令",
+            subtitle: "把多个应用和 Shell 步骤组合成一个 Finder 菜单项"
+        ) {
+            HStack(alignment: .top, spacing: 16) {
+                RCMMMetric(value: "\(composites.count)", label: "组合命令")
+                RCMMMetric(value: "\(composites.filter(\.isEnabled).count)", label: "启用")
+                addMenu
             }
-
-            Spacer(minLength: 12)
-
-            HStack(spacing: 8) {
-                metric("\(composites.count) 个组合命令", systemImage: "rectangle.stack")
-                metric("\(composites.filter(\.isEnabled).count) 个启用", systemImage: "checkmark.circle")
-            }
-
-            addMenu
         }
     }
 
@@ -189,7 +182,7 @@ struct CompositeCommandsTab: View {
     }
 
     private var templates: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             CompositeCommandTemplateCard(
                 title: "编辑器 + Terminal",
                 description: "用首选编辑器打开目标，再打开 Terminal。",
@@ -228,43 +221,32 @@ struct CompositeCommandsTab: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 Image(systemName: draft.iconName ?? "rectangle.stack.badge.play")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.accentColor.opacity(0.10))
-                    )
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(RCMMColor.textSecondary)
+                    .frame(width: 26)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(draft.name.nilIfBlank ?? "未命名组合命令")
-                        .font(.headline.weight(.semibold))
-                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        Text(draft.name.nilIfBlank ?? "未命名组合命令")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(RCMMColor.textPrimary)
+                            .lineLimit(1)
+
+                        if drafts.hasChanges(.composite(config.id)) {
+                            Circle()
+                                .fill(RCMMColor.accent)
+                                .frame(width: 5, height: 5)
+                                .help("有未保存的修改")
+                        }
+                    }
+
                     Text("\(draft.steps.count) 个步骤")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(RCMMFont.caption)
+                        .foregroundStyle(RCMMColor.textMuted)
                 }
 
                 Spacer(minLength: 8)
 
-                Menu {
-                    ForEach(CompositeCommandIcon.allCases) { icon in
-                        Button {
-                            editComposite(config.id) { $0.iconName = icon.rawValue }
-                        } label: {
-                            Label(icon.title, systemImage: icon.rawValue)
-                        }
-                    }
-                } label: {
-                    Image(systemName: "paintpalette")
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .help("更换图标")
-
-                if drafts.hasChanges(.composite(config.id)) {
-                    Text("未保存").font(.caption2).foregroundStyle(.secondary)
-                }
                 FinderMenuStatusBadge(summary: summary)
 
                 Toggle("", isOn: Binding(
@@ -276,20 +258,10 @@ struct CompositeCommandsTab: View {
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .labelsHidden()
+                .accessibilityLabel(config.isEnabled ? "停用组合命令" : "启用组合命令")
                 .help(config.isEnabled ? "停用此组合命令" : "启用此组合命令")
 
-                Button {
-                    if config.steps.isEmpty && !drafts.hasChanges(.composite(config.id)) {
-                        appCoordinator.edit { $0.removeEntry(withID: config.id.uuidString) }
-                    } else {
-                        pendingDeletion = config
-                    }
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("删除组合命令")
+                cardActionsMenu(for: config)
             }
 
             CompositeCommandEditor(
@@ -329,6 +301,46 @@ struct CompositeCommandsTab: View {
         .background(compositeCardBackground)
     }
 
+    private func cardActionsMenu(for config: CompositeMenuItemConfig) -> some View {
+        Menu {
+            Section("更换图标") {
+                ForEach(CompositeCommandIcon.allCases) { icon in
+                    Button {
+                        editComposite(config.id) { $0.iconName = icon.rawValue }
+                    } label: {
+                        Label(icon.title, systemImage: icon.rawValue)
+                    }
+                }
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                requestDeletion(of: config)
+            } label: {
+                Label("删除组合命令", systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(RCMMColor.textMuted)
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("更多操作")
+    }
+
+    private func requestDeletion(of config: CompositeMenuItemConfig) {
+        if config.steps.isEmpty && !drafts.hasChanges(.composite(config.id)) {
+            appCoordinator.edit { $0.removeEntry(withID: config.id.uuidString) }
+        } else {
+            pendingDeletion = config
+        }
+    }
+
     private func editComposite(_ id: UUID, _ body: (inout CompositeMenuItemConfig) -> Void) {
         guard let saved = composites.first(where: { $0.id == id }) else { return }
         var draft = drafts.composite(for: saved)
@@ -337,43 +349,48 @@ struct CompositeCommandsTab: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 9) {
+        HStack(spacing: 12) {
             Image(systemName: "rectangle.stack.badge.plus")
-                .font(.system(size: 28))
-                .foregroundStyle(.secondary)
-                .symbolRenderingMode(.hierarchical)
-            Text("还没有组合命令")
-                .font(.callout.weight(.semibold))
-            Text("从下方模板开始，或创建一个空白组合命令。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(RCMMColor.textFaint)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("还没有组合命令")
+                    .font(RCMMFont.emptyTitle)
+                    .foregroundStyle(RCMMColor.textPrimary)
+                Text("从下方模板开始，或创建一个空白组合命令。")
+                    .font(RCMMFont.secondary)
+                    .foregroundStyle(RCMMColor.textMuted)
+            }
+
+            Spacer(minLength: 8)
+
+            Button("创建空白命令") {
+                createEmptyCommand()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
         }
-        .padding(24)
+        .padding(14)
         .frame(maxWidth: .infinity)
         .background(compositeCardBackground)
     }
 
     private func sectionHeader(_ title: String, count: Int?) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Text(title)
-                .font(.headline.weight(.semibold))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(RCMMColor.textPrimary)
+
             if let count {
                 Text("\(count)")
-                    .font(.caption.weight(.semibold))
+                    .font(RCMMFont.caption)
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(RCMMColor.textMuted)
             }
+
             Spacer()
         }
-    }
-
-    private func metric(_ title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(Color.primary.opacity(0.055)))
     }
 
     private func summary(for config: CompositeMenuItemConfig) -> FinderMenuEntrySummary {
@@ -462,23 +479,21 @@ private struct CompositeCommandTemplateCard: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: iconName)
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 38, height: 38)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.10))
-                )
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(RCMMColor.textSecondary)
+                .frame(width: 26)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.callout.weight(.semibold))
+                    .font(RCMMFont.rowTitle)
+                    .foregroundStyle(RCMMColor.textPrimary)
                 Text(description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(RCMMFont.caption)
+                    .foregroundStyle(RCMMColor.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(requirements)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(RCMMFont.caption)
+                    .foregroundStyle(isEnabled ? RCMMColor.textMuted : RCMMColor.warning)
             }
 
             Spacer(minLength: 10)
@@ -523,21 +538,22 @@ private struct CompositeAppStepSelectionSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(.headline)
+                        .font(RCMMFont.sheetTitle)
+                        .foregroundStyle(RCMMColor.textPrimary)
                     Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(RCMMFont.caption)
+                        .foregroundStyle(RCMMColor.textMuted)
                 }
                 Spacer()
                 Button("取消") { dismiss() }
                     .keyboardShortcut(.cancelAction)
             }
-            .padding()
+            .padding(16)
 
-            Divider()
+            RCMMDivider()
 
             if applicationDiscovery.isScanning {
                 Spacer()
@@ -547,11 +563,12 @@ private struct CompositeAppStepSelectionSheet: View {
                 Spacer()
                 VStack(spacing: 10) {
                     Text("未发现可用应用")
-                        .foregroundStyle(.secondary)
+                        .font(RCMMFont.secondary)
+                        .foregroundStyle(RCMMColor.textMuted)
                     Button("选择其他应用") {
                         chooseOtherApplication()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(AppPrimaryButtonStyle())
                 }
                 Spacer()
             } else {
@@ -563,25 +580,28 @@ private struct CompositeAppStepSelectionSheet: View {
                         HStack(spacing: 10) {
                             Image(nsImage: NSWorkspace.shared.icon(forFile: app.path))
                                 .resizable()
-                                .frame(width: 28, height: 28)
+                                .frame(width: 24, height: 24)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(app.name)
+                                    .font(RCMMFont.body)
                                 Text(app.path)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .font(RCMMFont.caption)
+                                    .foregroundStyle(RCMMColor.textMuted)
                                     .lineLimit(1)
                             }
                             Spacer()
                             Image(systemName: "chevron.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.tertiary)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(RCMMColor.textFaint)
                         }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
+                .listStyle(.inset)
             }
 
-            Divider()
+            RCMMDivider()
 
             HStack {
                 Button {
@@ -592,9 +612,10 @@ private struct CompositeAppStepSelectionSheet: View {
                 .buttonStyle(.bordered)
                 Spacer()
             }
-            .padding()
+            .padding(16)
         }
         .frame(width: 470, height: 460)
+        .background(RCMMColor.window)
         .task {
             await applicationDiscovery.refresh()
         }
@@ -628,10 +649,5 @@ private struct CompositeAppStepSelectionSheet: View {
 
 private var compositeCardBackground: some View {
     RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .fill(Color(nsColor: .controlBackgroundColor))
-        .shadow(color: .black.opacity(0.04), radius: 5, y: 2)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.primary.opacity(0.10), lineWidth: 1)
-        )
+        .fill(RCMMColor.surface)
 }

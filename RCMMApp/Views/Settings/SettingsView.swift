@@ -10,21 +10,41 @@ struct SettingsView: View {
         HStack(spacing: 0) {
             SettingsSidebar(selection: $selectedDestination)
 
-            Divider()
-
             content
         }
+        .background(RCMMColor.window)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if drafts.count > 0 {
-                Text("\(drafts.count) 项未保存 · 草稿仅在本次运行期间保留，退出应用后不保留。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.bar)
+                draftsBar
             }
         }
-        .frame(minWidth: 820, idealWidth: 820, minHeight: 500, idealHeight: 540)
+        .frame(minWidth: 880, idealWidth: 940, minHeight: 540, idealHeight: 600)
+    }
+
+    private var draftsBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(RCMMColor.accentText)
+
+            Text("\(drafts.count) 项未保存的修改")
+                .font(RCMMFont.caption)
+                .foregroundStyle(RCMMColor.textSecondary)
+                .monospacedDigit()
+
+            Text("草稿仅在本次运行期间保留")
+                .font(RCMMFont.caption)
+                .foregroundStyle(RCMMColor.textMuted)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RCMMColor.surfaceSoft)
+        .overlay(alignment: .top) {
+            RCMMDivider()
+        }
     }
 
     @ViewBuilder

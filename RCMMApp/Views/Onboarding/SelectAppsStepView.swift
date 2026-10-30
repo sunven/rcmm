@@ -14,32 +14,39 @@ struct SelectAppsStepView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("选择常用应用")
+                    .font(RCMMFont.pageTitle)
+                    .foregroundStyle(RCMMColor.textPrimary)
+
+                Text("选中的应用会加入 Finder 右键菜单，之后可以在设置中调整顺序。")
+                    .font(RCMMFont.secondary)
+                    .foregroundStyle(RCMMColor.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             AppPickerListView(
                 apps: applicationDiscovery.apps,
                 existingEntries: configStore.menuEntries,
                 selectedAppIds: $selectedAppIds,
                 isLoading: applicationDiscovery.isScanning,
-                loadingTitle: "正在扫描已安装应用...",
+                loadingTitle: "正在扫描已安装应用…",
                 emptyTitle: "未发现可用应用",
                 emptySubtitle: "仅显示 /Applications 和 ~/Applications 中的应用"
             )
 
-            Text("已添加的应用会保留，可在设置中删除。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, 8)
+            HStack(spacing: 6) {
+                Text("已选择 \(selectedAppIds.count) 个应用")
+                    .font(RCMMFont.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(selectedAppIds.isEmpty ? RCMMColor.textMuted : RCMMColor.accentText)
 
-            if !applicationDiscovery.isScanning && !applicationDiscovery.apps.isEmpty {
-                HStack {
-                    Text("已选择 \(selectedAppIds.count) 个应用")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                Spacer()
 
-                    Spacer()
-                }
-                .padding(.horizontal, 4)
-                .padding(.vertical, 8)
+                Text("已添加的应用会保留")
+                    .font(RCMMFont.caption)
+                    .foregroundStyle(RCMMColor.textFaint)
             }
         }
         .task {

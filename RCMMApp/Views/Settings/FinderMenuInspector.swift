@@ -10,7 +10,7 @@ struct FinderMenuInspector: View {
     var onOpenCompositeSettings: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        Group {
             if let summary {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
@@ -26,49 +26,47 @@ struct FinderMenuInspector: View {
                     .padding(14)
                 }
             } else {
-                VStack(spacing: 10) {
-                    Image(systemName: "sidebar.right")
-                        .font(.system(size: 28, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .symbolRenderingMode(.hierarchical)
-                    Text("选择一个菜单项")
-                        .font(.callout.weight(.semibold))
-                    Text("状态、路径、脚本同步和编辑器会显示在这里。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(20)
+                placeholder
             }
         }
-        .frame(minWidth: 300, maxWidth: 340, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(minWidth: 300, maxWidth: 330, maxHeight: .infinity)
+        .background(RCMMColor.window)
+    }
+
+    private var placeholder: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "sidebar.right")
+                .font(.system(size: 22, weight: .regular))
+                .foregroundStyle(RCMMColor.textFaint)
+                .symbolRenderingMode(.hierarchical)
+
+            Text("选择一个菜单项")
+                .font(RCMMFont.emptyTitle)
+                .foregroundStyle(RCMMColor.textPrimary)
+
+            Text("状态、路径、脚本同步和编辑器会显示在这里。")
+                .font(RCMMFont.secondary)
+                .foregroundStyle(RCMMColor.textMuted)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
     }
 
     private func header(_ summary: FinderMenuEntrySummary) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
                 icon(for: summary)
-                    .frame(width: 24, height: 24)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.primary.opacity(0.045))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Color.primary.opacity(0.06))
-                    )
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(summary.title)
-                        .font(.headline.weight(.semibold))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(RCMMColor.textPrimary)
                         .lineLimit(2)
 
                     Text("\(summary.typeLabel) · 第 \(summary.position) 项，共 \(summary.total) 项")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(RCMMFont.caption)
+                        .foregroundStyle(RCMMColor.textMuted)
                 }
 
                 Spacer(minLength: 0)
@@ -80,7 +78,7 @@ struct FinderMenuInspector: View {
     }
 
     private func statusPanel(_ summary: FinderMenuEntrySummary) -> some View {
-        InspectorPanel(title: "状态") {
+        RCMMPanel(title: "状态") {
             HStack(alignment: .top, spacing: 8) {
                 Image(systemName: FinderMenuStatusStyle.symbol(for: summary.statusKind))
                     .font(.system(size: 13, weight: .semibold))
@@ -88,57 +86,60 @@ struct FinderMenuInspector: View {
                     .frame(width: 18)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(summary.isEnabled ? "菜单项已启用" : "菜单项已停用")
-                        .font(.caption.weight(.semibold))
+                    Text(statusTitle(for: summary))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(RCMMColor.textPrimary)
+
                     Text(statusExplanation(for: summary))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(RCMMFont.secondary)
+                        .foregroundStyle(RCMMColor.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("下一步：\(nextStep(for: summary))")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let nextStep = nextStep(for: summary) {
+                        Text("下一步：\(nextStep)")
+                            .font(RCMMFont.caption)
+                            .foregroundStyle(RCMMColor.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
 
-            if let statusDetail = summary.statusDetail, !statusDetail.isEmpty {
-                Text(statusDetail)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(4)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
+            if summary.statusKind != .ready,
+               let statusDetail = summary.statusDetail,
+               !statusDetail.isEmpty {
+                RCMMCodeBlock(text: statusDetail)
             }
         }
     }
 
     private func detailPanel(_ summary: FinderMenuEntrySummary) -> some View {
-        InspectorPanel(title: "详情") {
-            DetailRow(label: "类型", value: summary.typeLabel)
-            DetailRow(label: "位置", value: "\(summary.position) / \(summary.total)")
-
-            if let subtitle = summary.subtitle, !subtitle.isEmpty {
-                DetailRow(label: "说明", value: subtitle)
-            }
+        RCMMPanel(title: "详情") {
+            RCMMInfoRow(label: "类型", value: summary.typeLabel)
+            RCMMInfoRow(label: "位置", value: "\(summary.position) / \(summary.total)")
 
             switch entry {
             case .custom(let config):
                 if config.executionMode == .currentDirectory {
-                    DetailRow(label: "执行方式", value: config.executionMode.displayName)
-                    DetailRow(label: "命令", value: config.customCommand ?? "未设置")
+                    RCMMInfoRow(label: "执行方式", value: config.executionMode.displayName)
+                    RCMMInfoRow(label: "命令", value: config.customCommand ?? "未设置", monospaced: true)
                 } else {
-                    DetailRow(label: "应用路径", value: config.appPath)
+                    RCMMInfoRow(label: "应用路径", value: config.appPath, monospaced: true)
                     if let bundleId = config.bundleId {
-                        DetailRow(label: "Bundle ID", value: bundleId)
+                        RCMMInfoRow(label: "Bundle ID", value: bundleId, monospaced: true)
                     }
                 }
             case .composite(let config):
-                DetailRow(label: "步骤", value: "\(config.steps.count)")
+                RCMMInfoRow(label: "步骤", value: "\(config.steps.count)")
                 ForEach(Array(config.steps.prefix(4).enumerated()), id: \.element.id) { index, step in
-                    DetailRow(label: "\(index + 1)", value: step.name)
+                    RCMMInfoRow(label: "\(index + 1)", value: step.name)
+                }
+                if config.steps.count > 4 {
+                    Text("另有 \(config.steps.count - 4) 个步骤")
+                        .font(RCMMFont.caption)
+                        .foregroundStyle(RCMMColor.textMuted)
                 }
             case .newFile(let config):
-                DetailRow(label: "模板", value: "\(config.templates.count)")
+                RCMMInfoRow(label: "模板", value: "\(config.templates.count)")
             case .builtIn, .none:
                 EmptyView()
             }
@@ -149,7 +150,7 @@ struct FinderMenuInspector: View {
     private func editorPanel() -> some View {
         switch entry {
         case .custom(let config):
-            InspectorPanel(title: config.executionMode == .currentDirectory ? "命令编辑" : "应用命令") {
+            RCMMPanel(title: config.executionMode == .currentDirectory ? "命令编辑" : "应用命令") {
                 CommandEditor(
                     config: Binding(
                         get: { drafts.command(for: config) },
@@ -160,10 +161,10 @@ struct FinderMenuInspector: View {
                 .id(config.id)
             }
         case .composite:
-            InspectorPanel(title: "组合命令") {
+            RCMMPanel(title: "组合命令") {
                 Text("组合命令在独立设置页中创建和编辑。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(RCMMFont.secondary)
+                    .foregroundStyle(RCMMColor.textMuted)
 
                 Button {
                     onOpenCompositeSettings()
@@ -179,9 +180,18 @@ struct FinderMenuInspector: View {
     }
 
     private func newFilePanel(_ config: NewFileMenuConfig) -> some View {
-        InspectorPanel(title: "新建文件") {
+        RCMMPanel(title: "新建文件") {
             ForEach(config.templates.prefix(3)) { template in
-                DetailRow(label: template.displayName, value: ".\(template.fileExtension)")
+                HStack(spacing: 8) {
+                    Text(template.displayName)
+                        .font(RCMMFont.secondary)
+                        .foregroundStyle(RCMMColor.textSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(".\(template.fileExtension)")
+                        .font(RCMMFont.code)
+                        .foregroundStyle(RCMMColor.textMuted)
+                }
             }
 
             Button {
@@ -200,18 +210,38 @@ struct FinderMenuInspector: View {
             Image(nsImage: NSWorkspace.shared.icon(forFile: appPath))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
+                .frame(width: 30, height: 30)
         } else if let symbolName = summary.symbolName {
             Image(systemName: symbolName)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .foregroundStyle(.secondary)
-                .padding(4)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(RCMMColor.textMuted)
+                .frame(width: 30, height: 30)
         } else {
             Image(systemName: "app")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .foregroundStyle(.secondary)
-                .padding(4)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(RCMMColor.textMuted)
+                .frame(width: 30, height: 30)
+        }
+    }
+
+    private func statusTitle(for summary: FinderMenuEntrySummary) -> String {
+        switch summary.statusKind {
+        case .ready:
+            return "已启用并已发布"
+        case .syncing:
+            return "正在同步"
+        case .failed:
+            return "同步失败"
+        case .unavailable:
+            return "当前不可用"
+        case .partiallyAvailable:
+            return "部分可用"
+        case .warning:
+            return "可用，但有警告"
+        case .disabled:
+            return "已停用"
+        case .system:
+            return "内置系统菜单项"
         }
     }
 
@@ -246,63 +276,16 @@ struct FinderMenuInspector: View {
         }
     }
 
-    private func nextStep(for summary: FinderMenuEntrySummary) -> String {
+    private func nextStep(for summary: FinderMenuEntrySummary) -> String? {
         switch summary.statusKind {
         case .ready, .system:
-            return "可在 Finder 右键菜单中使用。"
+            return nil
         case .syncing:
             return "等待同步完成，完成后状态会变为就绪。"
         case .failed, .unavailable, .partiallyAvailable, .warning:
             return "修复下方配置后保存。"
         case .disabled:
             return "打开开关后才会显示在 Finder 中。"
-        }
-    }
-
-}
-
-private struct InspectorPanel<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 8) {
-                content
-            }
-            .padding(11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.primary.opacity(0.06))
-            )
-        }
-    }
-}
-
-private struct DetailRow: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-            Text(value.isEmpty ? "未设置" : value)
-                .font(value.count > 32 ? .caption.monospaced() : .caption)
-                .foregroundStyle(.primary)
-                .lineLimit(3)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
         }
     }
 }

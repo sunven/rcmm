@@ -7,8 +7,8 @@ struct AppPrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .fontWeight(.semibold)
-            .foregroundStyle(.white.opacity(isEnabled ? 1 : 0.9))
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(isEnabled ? Color.white : RCMMColor.textMuted)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
             .background(
@@ -16,9 +16,8 @@ struct AppPrimaryButtonStyle: ButtonStyle {
                     .fill(backgroundColor(isPressed: configuration.isPressed))
             )
             .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .opacity(isEnabled ? 1 : 0.72)
             .scaleEffect(configuration.isPressed && isEnabled ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 
     private var horizontalPadding: CGFloat {
@@ -54,25 +53,23 @@ struct AppPrimaryButtonStyle: ButtonStyle {
     private var cornerRadius: CGFloat {
         switch controlSize {
         case .mini:
-            return 6
+            return 5
         case .small:
-            return 7
+            return 6
         case .regular:
-            return 9
+            return 7
         case .large:
-            return 10
+            return 8
         @unknown default:
-            return 9
+            return 7
         }
     }
 
     private func backgroundColor(isPressed: Bool) -> Color {
-        let accentColor = Color(nsColor: .controlAccentColor)
-
         guard isEnabled else {
-            return accentColor.opacity(0.42)
+            return Color.primary.opacity(0.08)
         }
 
-        return isPressed ? accentColor.opacity(0.82) : accentColor
+        return isPressed ? RCMMColor.accent.opacity(0.82) : RCMMColor.accent
     }
 }

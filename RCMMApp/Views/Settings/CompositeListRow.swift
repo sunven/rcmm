@@ -11,40 +11,19 @@ struct CompositeListRow: View {
     var onToggle: ((Bool) -> Void)?
 
     var body: some View {
-        HStack(spacing: 10) {
-            FinderMenuRowIcon(isEnabled: config.isEnabled, isUnavailable: summary.statusKind == .unavailable || summary.statusKind == .failed) {
-                Image(systemName: config.iconName ?? "rectangle.stack.badge.play")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(config.isEnabled ? .primary : .secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(config.name)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(config.isEnabled ? .primary : .secondary)
-                    .lineLimit(1)
-
-                Text(hasUnsavedChanges ? "未保存修改" : (summary.subtitle ?? "\(config.steps.count) 个步骤"))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            FinderMenuStatusBadge(summary: summary)
-
-            if let onToggle {
-                Toggle("", isOn: Binding(
-                    get: { config.isEnabled },
-                    set: { onToggle($0) }
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .labelsHidden()
-                .help(config.isEnabled ? "停用此组合命令" : "启用此组合命令")
-            }
-
+        FinderMenuRow(
+            title: config.name,
+            subtitle: summary.subtitle ?? "\(config.steps.count) 个步骤",
+            isEnabled: config.isEnabled,
+            isUnavailable: summary.statusKind == .unavailable || summary.statusKind == .failed,
+            hasUnsavedChanges: hasUnsavedChanges,
+            summary: summary,
+            onToggle: onToggle
+        ) {
+            Image(systemName: config.iconName ?? "rectangle.stack.badge.play")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(config.isEnabled ? RCMMColor.textSecondary : RCMMColor.textMuted)
+        } trailing: {
             MenuRowActionsMenu(
                 onMoveUp: onMoveUp,
                 onMoveDown: onMoveDown,
@@ -52,10 +31,5 @@ struct CompositeListRow: View {
                 deleteLabel: "删除组合命令"
             )
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 8)
-        .frame(minHeight: 40)
-        .controlSize(.small)
-        .contentShape(Rectangle())
     }
 }

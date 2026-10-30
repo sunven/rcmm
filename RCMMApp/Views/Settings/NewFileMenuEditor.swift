@@ -11,7 +11,7 @@ struct NewFileMenuEditor: View {
     @State private var templatePendingDeletion: NewFileTemplateConfig?
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             if config.templates.isEmpty {
                 emptyState
             } else {
@@ -63,17 +63,19 @@ struct NewFileMenuEditor: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: 8) {
             Image(systemName: "document.badge.plus")
-                .font(.system(size: 26))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 22))
+                .foregroundStyle(RCMMColor.textFaint)
                 .symbolRenderingMode(.hierarchical)
 
             Text("暂无模板")
-                .font(.callout.weight(.semibold))
+                .font(RCMMFont.emptyTitle)
+                .foregroundStyle(RCMMColor.textPrimary)
+
             Text("使用右上角的“添加模板”创建第一个文件模板。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(RCMMFont.secondary)
+                .foregroundStyle(RCMMColor.textMuted)
         }
         .padding(24)
         .frame(maxWidth: .infinity)
@@ -117,21 +119,37 @@ private struct NewFileTemplateCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             cardHeader
 
-            HStack(spacing: 8) {
-                TextField("基础文件名", text: $template.baseName)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.regular)
-                    .focused($focusedField, equals: .baseName)
+            HStack(alignment: .top, spacing: 10) {
+                RCMMField("基础文件名") {
+                    TextField("例如 未命名", text: $template.baseName)
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.regular)
+                        .focused($focusedField, equals: .baseName)
+                }
+                .frame(maxWidth: .infinity)
 
-                TextField(".txt", text: extensionBinding)
-                    .textFieldStyle(.roundedBorder)
+                RCMMField("扩展名") {
+                    TextField(".txt", text: extensionBinding)
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.regular)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(width: 86)
+                        .focused($focusedField, equals: .fileExtension)
+                }
+
+                RCMMField("创建方式") {
+                    Picker("创建方式", selection: $template.creationMode) {
+                        ForEach(NewFileCreationMode.allCases) { mode in
+                            Text(creationModeTitle(for: mode)).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
                     .controlSize(.regular)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(width: 100)
-                    .focused($focusedField, equals: .fileExtension)
+                    .frame(width: 116)
+                }
             }
 
             creationModeEditor
@@ -139,9 +157,10 @@ private struct NewFileTemplateCard: View {
             if !currentIssues.isEmpty {
                 issueList
             }
+
             EditorSaveBar(key: .template(menuID: menuID, templateID: template.id))
         }
-        .padding(11)
+        .padding(12)
         .background(templateCardBackground)
         .onChange(of: focusedField) { oldValue, newValue in
             if oldValue == .displayName, newValue != .displayName {
@@ -151,75 +170,74 @@ private struct NewFileTemplateCard: View {
     }
 
     private var cardHeader: some View {
-        HStack(spacing: 9) {
+        HStack(alignment: .center, spacing: 10) {
             TemplateFileBadge(fileExtension: fileExtension)
 
-            if isRenaming {
-                TextField("模板名称", text: $template.displayName)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.small)
-                    .frame(maxWidth: 150)
-                    .focused($focusedField, equals: .displayName)
-                    .onSubmit {
-                        finishRenaming()
-                    }
-            } else {
-                Text(displayName.nilIfBlank ?? "未命名模板")
-                    .font(.headline)
-                    .lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    if isRenaming {
+                        TextField("模板名称", text: $template.displayName)
+                            .textFieldStyle(.roundedBorder)
+                            .controlSize(.small)
+                            .frame(maxWidth: 160)
+                            .focused($focusedField, equals: .displayName)
+                            .onSubmit {
+                                finishRenaming()
+                            }
+                    } else {
+                        Text(displayName.nilIfBlank ?? "未命名模板")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(RCMMColor.textPrimary)
+                            .lineLimit(1)
 
-                Button {
-                    isRenaming = true
-                    focusedField = .displayName
-                } label: {
-                    Image(systemName: "pencil")
-                        .frame(width: 18, height: 18)
+                        Button {
+                            isRenaming = true
+                            focusedField = .displayName
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(RCMMColor.textMuted)
+                                .frame(width: 18, height: 18)
+                        }
+                        .buttonStyle(.plain)
+                        .help("重命名模板")
+                    }
+
+                    if drafts.hasChanges(.template(menuID: menuID, templateID: template.id)) {
+                        Circle()
+                            .fill(RCMMColor.accent)
+                            .frame(width: 5, height: 5)
+                            .help("有未保存的修改")
+                    }
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
-                .help("重命名模板")
+
+                HStack(spacing: 4) {
+                    Image(systemName: templateStatusPresentation.symbol)
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(templateStatusPresentation.label)
+                        .lineLimit(1)
+                }
+                .font(RCMMFont.caption)
+                .foregroundStyle(templateStatusPresentation.color)
+                .help(templateStatusPresentation.label)
             }
 
             Spacer(minLength: 6)
-
-            Text("创建方式")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Picker("创建方式", selection: $template.creationMode) {
-                ForEach(NewFileCreationMode.allCases) { mode in
-                    Text(creationModeTitle(for: mode)).tag(mode)
-                }
-            }
-            .labelsHidden()
-            .controlSize(.small)
-            .frame(width: 122)
-
-            if drafts.hasChanges(.template(menuID: menuID, templateID: template.id)) {
-                Text("未保存").font(.caption2).foregroundStyle(.secondary)
-            }
-            templateStatus
 
             Toggle("", isOn: $template.isEnabled)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .accessibilityLabel(isEnabled ? "停用 \(displayName) 模板" : "启用 \(displayName) 模板")
                 .help(isEnabled ? "停用此模板" : "启用此模板")
 
-            compactActionButton("chevron.up", help: "上移", disabled: !canMoveUp, action: onMoveUp)
-            compactActionButton("chevron.down", help: "下移", disabled: !canMoveDown, action: onMoveDown)
-            compactActionButton("trash", help: "删除模板", role: .destructive, action: onRequestDelete)
+            MenuRowActionsMenu(
+                onMoveUp: canMoveUp ? onMoveUp : nil,
+                onMoveDown: canMoveDown ? onMoveDown : nil,
+                onDelete: onRequestDelete,
+                deleteLabel: "删除模板"
+            )
         }
-    }
-
-    private var templateStatus: some View {
-        let status = templateStatusPresentation
-
-        return Image(systemName: status.symbol)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(status.color)
-            .frame(width: 16, height: 18)
-            .help(status.label)
     }
 
     @ViewBuilder
@@ -229,32 +247,36 @@ private struct NewFileTemplateCard: View {
             EmptyView()
 
         case .textContent:
-            TextEditor(text: Binding(get: { template.initialContent ?? "" }, set: { template.initialContent = $0 }))
-                .font(.system(.caption, design: .monospaced))
-                .scrollContentBackground(.hidden)
-                .padding(5)
-                .frame(minHeight: 64)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .overlay(fieldBorder)
-                .focused($focusedField, equals: .initialContent)
+            RCMMField("初始内容") {
+                TextEditor(text: Binding(get: { template.initialContent ?? "" }, set: { template.initialContent = $0 }))
+                    .font(.system(.caption, design: .monospaced))
+                    .scrollContentBackground(.hidden)
+                    .padding(5)
+                    .frame(minHeight: 68)
+                    .background(RCMMColor.surfaceSoft)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(fieldBorder)
+                    .focused($focusedField, equals: .initialContent)
+            }
 
         case .copyTemplate:
-            HStack(spacing: 7) {
-                TextField("选择模板文件", text: Binding(get: { templatePath }, set: { template.templatePath = $0 }))
-                    .font(.system(.caption, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.regular)
-                    .focused($focusedField, equals: .templatePath)
+            RCMMField("模板文件") {
+                HStack(spacing: 7) {
+                    TextField("选择模板文件", text: Binding(get: { templatePath }, set: { template.templatePath = $0 }))
+                        .font(.system(.caption, design: .monospaced))
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.regular)
+                        .focused($focusedField, equals: .templatePath)
 
-                Button {
-                    chooseTemplateFile()
-                } label: {
-                    Image(systemName: "folder")
-                        .frame(width: 18, height: 18)
+                    Button {
+                        chooseTemplateFile()
+                    } label: {
+                        Image(systemName: "folder")
+                            .frame(width: 18, height: 18)
+                    }
+                    .controlSize(.regular)
+                    .help("选择模板文件")
                 }
-                .controlSize(.regular)
-                .help("选择模板文件")
             }
         }
     }
@@ -264,8 +286,7 @@ private struct NewFileTemplateCard: View {
             ForEach(currentIssues) { issue in
                 ValidationIssueRow(
                     isError: issue.severity == .error,
-                    message: issue.message,
-                    warningColor: NewFileSettingsColor.warning
+                    message: issue.message
                 )
             }
         }
@@ -274,7 +295,7 @@ private struct NewFileTemplateCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(issueTint.opacity(0.08))
+                .fill(issueTint.opacity(0.10))
         )
     }
 
@@ -287,27 +308,27 @@ private struct NewFileTemplateCard: View {
             return TemplateStatusPresentation(
                 label: issue.message,
                 symbol: "xmark.octagon.fill",
-                color: NewFileSettingsColor.error
+                color: RCMMColor.error
             )
         }
         if let issue = currentIssues.first(where: { $0.severity == .warning }) {
             return TemplateStatusPresentation(
                 label: issue.message,
                 symbol: "exclamationmark.triangle.fill",
-                color: NewFileSettingsColor.warning
+                color: RCMMColor.warning
             )
         }
         if copyTemplateResourceHasChanged {
             return TemplateStatusPresentation(
                 label: "模板文件已变化",
                 symbol: "exclamationmark.triangle.fill",
-                color: NewFileSettingsColor.warning
+                color: RCMMColor.warning
             )
         }
         return TemplateStatusPresentation(
             label: "配置有效",
             symbol: "checkmark.circle.fill",
-            color: NewFileSettingsColor.success
+            color: RCMMColor.success
         )
     }
 
@@ -333,31 +354,13 @@ private struct NewFileTemplateCard: View {
 
     private var issueTint: Color {
         currentIssues.contains { $0.severity == .error }
-            ? NewFileSettingsColor.error
-            : NewFileSettingsColor.warning
+            ? RCMMColor.error
+            : RCMMColor.warning
     }
 
     private var fieldBorder: some View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .stroke(Color.primary.opacity(0.14), lineWidth: 1)
-    }
-
-    private func compactActionButton(
-        _ systemName: String,
-        help: String,
-        disabled: Bool = false,
-        role: ButtonRole? = nil,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(role: role, action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 11, weight: .semibold))
-                .frame(width: 18, height: 18)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(role == .destructive ? NewFileSettingsColor.error : Color.secondary)
-        .disabled(disabled)
-        .help(help)
+            .stroke(RCMMColor.line, lineWidth: 1)
     }
 
     private func finishRenaming() {
@@ -386,18 +389,18 @@ private struct TemplateFileBadge: View {
     let fileExtension: String
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 1) {
             Image(systemName: "doc")
                 .font(.system(size: 9, weight: .semibold))
             Text(badgeText)
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
                 .lineLimit(1)
         }
-        .foregroundStyle(Color.accentColor)
-        .frame(width: 34, height: 34)
+        .foregroundStyle(RCMMColor.textSecondary)
+        .frame(width: 32, height: 32)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.accentColor.opacity(0.10))
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(RCMMColor.surfaceSoft)
         )
     }
 
@@ -415,19 +418,7 @@ private struct TemplateStatusPresentation {
 
 private var templateCardBackground: some View {
     RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .fill(Color(nsColor: .controlBackgroundColor))
-        .shadow(color: .black.opacity(0.04), radius: 5, y: 2)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.primary.opacity(0.10), lineWidth: 1)
-        )
-}
-
-enum NewFileSettingsColor {
-    static let success = Color(red: 47 / 255, green: 158 / 255, blue: 68 / 255)
-    static let warning = Color(red: 183 / 255, green: 121 / 255, blue: 31 / 255)
-    static let error = Color(red: 217 / 255, green: 45 / 255, blue: 32 / 255)
-    static let info = Color(red: 37 / 255, green: 99 / 255, blue: 235 / 255)
+        .fill(RCMMColor.surface)
 }
 
 private func creationModeTitle(

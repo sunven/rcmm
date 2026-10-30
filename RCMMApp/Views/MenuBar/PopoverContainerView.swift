@@ -20,7 +20,7 @@ struct PopoverContainerView: View {
         }
         .frame(width: configStore.errorRecords.isEmpty
             ? healthMonitor.popoverState.preferredPopoverWidth
-            : max(360, healthMonitor.popoverState.preferredPopoverWidth))
+            : max(380, healthMonitor.popoverState.preferredPopoverWidth))
         .onAppear {
             healthMonitor.refresh()
             appCoordinator.loadErrors()

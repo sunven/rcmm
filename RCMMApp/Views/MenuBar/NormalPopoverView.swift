@@ -10,18 +10,36 @@ struct NormalPopoverView: View {
     @State private var settingsHovered = false
     @State private var quitHovered = false
 
+    private var enabledCount: Int {
+        configStore.menuEntries.filter(\.isEnabled).count
+    }
+
     var body: some View {
-        VStack(spacing: 8) {
-            HealthStatusPanel(status: healthMonitor.extensionStatus)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 4)
+        VStack(spacing: 0) {
+            header
+
+            RCMMDivider()
+                .padding(.vertical, 8)
+
+            VStack(alignment: .leading, spacing: 6) {
+                HealthStatusPanel(status: healthMonitor.extensionStatus)
+
+                Text("\(configStore.menuEntries.count) 个菜单项 · \(enabledCount) 个启用")
+                    .font(RCMMFont.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(RCMMColor.textMuted)
+                    .padding(.leading, 22)
+            }
 
             if !configStore.errorRecords.isEmpty || appCoordinator.autoRepairMessage != nil {
-                Divider()
+                RCMMDivider()
+                    .padding(.vertical, 8)
                 ErrorBannerView()
             }
 
-            Divider()
+            RCMMDivider()
+                .padding(.top, 8)
+                .padding(.bottom, 6)
 
             OpenSettingsButton(
                 preAction: {
@@ -32,8 +50,7 @@ struct NormalPopoverView: View {
                     ActivationPolicyManager.refocusSettingsAfterMenuAction()
                 }
             ) {
-                Text("打开设置…")
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                menuRowLabel("打开设置…", systemImage: "gearshape", shortcut: "⌘,")
             }
             .buttonStyle(MenuItemButtonStyle())
             .environment(\.isHovered, settingsHovered)
@@ -43,15 +60,56 @@ struct NormalPopoverView: View {
             Button {
                 NSApplication.shared.terminate(nil)
             } label: {
-                Text("退出")
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                menuRowLabel("退出 rcmm", systemImage: "power", shortcut: "⌘Q")
             }
             .buttonStyle(MenuItemButtonStyle())
             .environment(\.isHovered, quitHovered)
             .onHover { quitHovered = $0 }
             .keyboardShortcut("q", modifiers: .command)
         }
-        .padding(10)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 22, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text("rcmm")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                Text("Finder 右键菜单")
+                    .font(RCMMFont.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func menuRowLabel(_ title: String, systemImage: String, shortcut: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(RCMMColor.textMuted)
+                .frame(width: 16)
+
+            Text(title)
+                .font(RCMMFont.body)
+                .foregroundStyle(.primary)
+
+            Spacer(minLength: 8)
+
+            Text(shortcut)
+                .font(RCMMFont.caption)
+                .foregroundStyle(RCMMColor.textFaint)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -63,7 +121,7 @@ struct NormalPopoverView: View {
         .environment(appModel.appCoordinator.configStore)
         .environment(appModel.extensionHealthMonitor)
         .environment(appModel.appFlowCoordinator)
-        .frame(width: 220)
+        .frame(width: 260)
 }
 
 #Preview("有错误") {
@@ -83,5 +141,5 @@ struct NormalPopoverView: View {
         .environment(appModel.appCoordinator.configStore)
         .environment(appModel.extensionHealthMonitor)
         .environment(appModel.appFlowCoordinator)
-        .frame(width: 220)
+        .frame(width: 380)
 }

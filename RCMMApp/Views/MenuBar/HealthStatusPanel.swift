@@ -19,25 +19,29 @@ struct HealthStatusPanel: View {
 
     private var statusColor: Color {
         switch status {
-        case .enabled: .green
-        case .otherBuildEnabled, .otherInstallationEnabled: .orange
-        case .unknown: .yellow
-        case .disabled: .red
+        case .enabled: RCMMColor.success
+        case .otherBuildEnabled, .otherInstallationEnabled: RCMMColor.warning
+        case .unknown: RCMMColor.warning
+        case .disabled: RCMMColor.error
         }
     }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: statusIcon)
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(statusColor)
-                .font(.body)
+                .frame(width: 14)
+
             Text(status.statusDescription)
-                .font(.subheadline)
+                .font(RCMMFont.body)
+                .foregroundStyle(.primary)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }
 

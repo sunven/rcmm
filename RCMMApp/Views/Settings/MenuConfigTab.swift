@@ -19,8 +19,8 @@ struct MenuConfigTab: View {
     @State private var entryPendingDeletion: EntryDeletionRequest?
 
     private enum Layout {
-        static let rowInsets = EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 10)
-        static let footerPadding = EdgeInsets(top: 10, leading: 12, bottom: 12, trailing: 12)
+        static let rowInsets = EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8)
+        static let footerPadding = EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
     }
 
     var body: some View {
@@ -33,7 +33,7 @@ struct MenuConfigTab: View {
             centerPane(summaries: summaries)
                 .frame(minWidth: 340, maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
+            RCMMDivider(axis: .vertical)
 
             FinderMenuInspector(
                 summary: summaries.first { $0.id == selectedEntryID },
@@ -45,7 +45,6 @@ struct MenuConfigTab: View {
                 }
             )
         }
-        .background(Color(nsColor: .windowBackgroundColor))
         .sheet(isPresented: $showingAppSelection) {
             AppSelectionSheet { addedIDs in
                 if let id = addedIDs.first {
@@ -97,7 +96,7 @@ struct MenuConfigTab: View {
         return VStack(spacing: 0) {
             header(summaries: summaries)
 
-            Divider()
+            RCMMDivider()
 
             if configStore.menuEntries.isEmpty {
                 emptyState
@@ -105,10 +104,11 @@ struct MenuConfigTab: View {
                 menuList(summariesByID: summariesByID)
             }
 
-            Divider()
+            RCMMDivider()
 
             toolbar
         }
+        .background(RCMMColor.surface)
     }
 
     private func header(summaries: [FinderMenuEntrySummary]) -> some View {
@@ -122,41 +122,46 @@ struct MenuConfigTab: View {
             }
         }.count
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Finder 菜单")
-                    .font(.title3.weight(.semibold))
-                Text("按 Finder 右键出现顺序排列")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(RCMMFont.pageTitle)
+                    .foregroundStyle(RCMMColor.textPrimary)
+                Text("右键菜单按这里的顺序显示")
+                    .font(RCMMFont.secondary)
+                    .foregroundStyle(RCMMColor.textMuted)
             }
 
-            HStack(spacing: 6) {
-                headerMetric("\(summaries.count)", label: "菜单项", systemImage: "list.bullet")
-                headerMetric("\(enabledCount)", label: "启用", systemImage: "checkmark.circle")
+            Spacer(minLength: 8)
+
+            HStack(alignment: .top, spacing: 18) {
+                RCMMMetric(value: "\(summaries.count)", label: "菜单项")
+                RCMMMetric(value: "\(enabledCount)", label: "启用")
                 if issueCount > 0 {
-                    headerMetric("\(issueCount)", label: "待处理", systemImage: "exclamationmark.triangle")
+                    RCMMMetric(value: "\(issueCount)", label: "待处理", tint: RCMMColor.warning)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
     }
 
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "list.bullet.rectangle")
-                .font(.system(size: 30, weight: .regular))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 26, weight: .regular))
+                .foregroundStyle(RCMMColor.textFaint)
                 .symbolRenderingMode(.hierarchical)
 
             VStack(spacing: 4) {
                 Text("暂无 Finder 菜单项")
-                    .font(.callout.weight(.semibold))
+                    .font(RCMMFont.emptyTitle)
+                    .foregroundStyle(RCMMColor.textPrimary)
                 Text("先添加应用或命令，Finder 右键菜单会按这里的顺序显示。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(RCMMFont.secondary)
+                    .foregroundStyle(RCMMColor.textMuted)
                     .multilineTextAlignment(.center)
             }
 
@@ -175,33 +180,13 @@ struct MenuConfigTab: View {
                 } label: {
                     Label("Git Pull 命令", systemImage: "terminal")
                 }
+                .buttonStyle(.bordered)
                 .controlSize(.small)
             }
         }
         .padding(24)
-        .frame(maxWidth: 320)
+        .frame(maxWidth: 340)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func headerMetric(_ value: String, label: String, systemImage: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: systemImage)
-                .font(.system(size: 10, weight: .semibold))
-            Text(value)
-                .font(.caption.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(.primary)
-            Text(label)
-                .font(.caption)
-        }
-        .fixedSize(horizontal: true, vertical: false)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            Capsule()
-                .fill(Color.primary.opacity(0.055))
-        )
     }
 
     private func menuList(summariesByID: [String: FinderMenuEntrySummary]) -> some View {
@@ -239,11 +224,16 @@ struct MenuConfigTab: View {
            let entry = configStore.menuEntries.first(where: { $0.id == session.draggedID }),
            let summary = summariesByID[entry.id] {
             SelectableMenuRow(isSelected: true) {
-                row(
-                    for: entry,
-                    at: configStore.menuEntries.firstIndex(where: { $0.id == session.draggedID }) ?? 0,
-                    summary: summary
-                )
+                HStack(spacing: 0) {
+                    Color.clear
+                        .frame(width: MenuRowAlignment.leadingSlotWidth, height: MenuRowAlignment.rowHeight)
+
+                    row(
+                        for: entry,
+                        at: configStore.menuEntries.firstIndex(where: { $0.id == session.draggedID }) ?? 0,
+                        summary: summary
+                    )
+                }
             }
             .padding(Layout.rowInsets)
             .frame(
@@ -262,51 +252,50 @@ struct MenuConfigTab: View {
     }
 
     private var toolbar: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 10) {
-                Text("右键菜单")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 10) {
+            Text("显示方式")
+                .font(RCMMFont.caption)
+                .foregroundStyle(RCMMColor.textMuted)
+                .lineLimit(1)
+                .fixedSize()
 
-                Picker(
-                    "右键菜单显示方式",
-                    selection: Binding(
-                        get: { configStore.menuPresentationMode },
-                        set: { appCoordinator.updateMenuPresentationMode($0) }
-                    )
-                ) {
-                    ForEach(MenuPresentationMode.allCases) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
+            Picker(
+                "右键菜单显示方式",
+                selection: Binding(
+                    get: { configStore.menuPresentationMode },
+                    set: { appCoordinator.updateMenuPresentationMode($0) }
+                )
+            ) {
+                ForEach(MenuPresentationMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.small)
-
-                Spacer()
             }
+            .pickerStyle(.segmented)
+            .controlSize(.small)
+            .labelsHidden()
+            .frame(width: 168)
+            .layoutPriority(1)
 
-            HStack(spacing: 8) {
-                Menu {
-                    Button("添加应用") {
-                        showingAppSelection = true
-                    }
-                    Button("Git Pull 命令") {
-                        let id = appCoordinator.edit { $0.addGitPullCommand() }
-                        selectEntry(id.uuidString)
-                    }
-                } label: {
-                    Label("添加", systemImage: "plus")
+            Spacer(minLength: 4)
+
+            Menu {
+                Button("添加应用") {
+                    showingAppSelection = true
                 }
-                .menuStyle(.button)
-                .buttonStyle(AppPrimaryButtonStyle())
-                .controlSize(.small)
-
-                Spacer()
+                Button("Git Pull 命令") {
+                    let id = appCoordinator.edit { $0.addGitPullCommand() }
+                    selectEntry(id.uuidString)
+                }
+            } label: {
+                Label("添加", systemImage: "plus")
             }
-
+            .menuStyle(.button)
+            .buttonStyle(AppPrimaryButtonStyle())
+            .controlSize(.small)
+            .fixedSize()
         }
         .padding(Layout.footerPadding)
-        .background(.bar)
+        .background(RCMMColor.surfaceSoft)
     }
 
     private func row(
@@ -514,8 +503,8 @@ struct MenuConfigTab: View {
 }
 
 private enum MenuRowAlignment {
-    static let leadingSlotWidth: CGFloat = 18
-    static let rowHeight: CGFloat = 40
+    static let leadingSlotWidth: CGFloat = 16
+    static let rowHeight: CGFloat = 42
 }
 
 private struct EntryDeletionRequest {
@@ -556,7 +545,7 @@ private struct AlignedMenuRow<Label: View>: View {
         HStack(alignment: .center, spacing: 0) {
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(RCMMColor.textFaint)
                 .frame(width: MenuRowAlignment.leadingSlotWidth, height: MenuRowAlignment.rowHeight)
                 .contentShape(Rectangle())
                 .gesture(dragGesture)
@@ -589,10 +578,10 @@ private struct SelectableMenuRow<Content: View>: View {
 
     private var backgroundColor: Color {
         if isSelected {
-            return Color.accentColor.opacity(0.13)
+            return RCMMColor.accentSoft
         }
         if isHovered {
-            return Color.primary.opacity(0.055)
+            return Color.primary.opacity(0.045)
         }
         return .clear
     }

@@ -1,8 +1,22 @@
 import RCMMShared
 import SwiftUI
 
+/// 行内状态标记。就绪、系统与停用保持安静；只有需要处理的同步中、警告和失败使用着色胶囊。
 struct FinderMenuStatusBadge: View {
     let summary: FinderMenuEntrySummary
+
+    private var isQuiet: Bool {
+        switch summary.statusKind {
+        case .ready, .disabled, .system:
+            return true
+        case .syncing, .failed, .unavailable, .partiallyAvailable, .warning:
+            return false
+        }
+    }
+
+    private var tint: Color {
+        FinderMenuStatusStyle.color(for: summary.statusKind)
+    }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -10,16 +24,19 @@ struct FinderMenuStatusBadge: View {
                 .font(.system(size: 9, weight: .bold))
 
             Text(summary.statusText)
-                .font(.caption2.weight(.semibold))
+                .font(RCMMFont.badge)
         }
-        .font(.caption2.weight(.medium))
-        .foregroundStyle(FinderMenuStatusStyle.color(for: summary.statusKind))
-        .padding(.horizontal, 7)
+        .foregroundStyle(isQuiet ? RCMMColor.textMuted : tint)
+        .padding(.horizontal, isQuiet ? 3 : 7)
         .padding(.vertical, 3)
         .background(
             Capsule()
-                .fill(FinderMenuStatusStyle.color(for: summary.statusKind).opacity(0.12))
+                .fill(isQuiet ? Color.clear : tint.opacity(0.12))
         )
+        .fixedSize()
+        .help(summary.statusDetail ?? summary.statusText)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("状态：\(summary.statusText)")
     }
 }
 
@@ -44,15 +61,15 @@ enum FinderMenuStatusStyle {
     static func color(for kind: FinderMenuEntryStatusKind) -> Color {
         switch kind {
         case .failed, .unavailable:
-            return .red
+            return RCMMColor.error
         case .partiallyAvailable, .warning:
-            return .orange
+            return RCMMColor.warning
         case .syncing:
-            return .blue
+            return RCMMColor.accentText
         case .ready:
-            return .green
+            return RCMMColor.success
         case .disabled, .system:
-            return .secondary
+            return RCMMColor.textMuted
         }
     }
 }

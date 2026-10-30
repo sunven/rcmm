@@ -14,7 +14,7 @@ struct RecoveryGuidePanel: View {
     @State private var transitionTask: Task<Void, Never>?
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             if isRecovered {
                 recoverySuccessContent
                     .transition(.opacity)
@@ -23,8 +23,9 @@ struct RecoveryGuidePanel: View {
                     .transition(.opacity)
             }
         }
-        .padding(10)
-        .animation(.easeInOut(duration: 0.3), value: isRecovered)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .animation(.easeInOut(duration: 0.25), value: isRecovered)
         .onAppear {
             startPolling()
         }
@@ -34,28 +35,56 @@ struct RecoveryGuidePanel: View {
     }
 
     private var recoveryGuideContent: some View {
-        VStack(spacing: 8) {
-            HealthStatusPanel(status: healthMonitor.extensionStatus)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 4)
+        VStack(spacing: 0) {
+            header
 
-            Divider()
+            RCMMDivider()
+                .padding(.vertical, 8)
 
             ScrollView {
-                recoveryDetails
+                VStack(alignment: .leading, spacing: 10) {
+                    HealthStatusPanel(status: healthMonitor.extensionStatus)
+
+                    Text(primaryRecoveryText)
+                        .font(RCMMFont.secondary)
+                        .foregroundStyle(RCMMColor.textSecondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if let detail = healthMonitor.extensionStatusDetail {
+                        RCMMCodeBlock(text: detail)
+                    }
+
+                    if let activationError {
+                        RCMMInlineMessage(activationError, kind: .error)
+                    }
+
+                    Text(recoveryCommandHint)
+                        .font(RCMMFont.caption)
+                        .foregroundStyle(RCMMColor.textMuted)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if healthMonitor.extensionStatus != .otherBuildEnabled {
+                        RCMMCodeBlock(text: PluginKitService.extensionEnableCommand)
+                    }
+
+                    Text("必要时请关闭旧的 rcmm 调试/测试版本，并重新启动 Finder。")
+                        .font(RCMMFont.caption)
+                        .foregroundStyle(RCMMColor.textFaint)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .frame(maxHeight: 240)
 
-            if healthMonitor.extensionStatus == .otherBuildEnabled {
-                Button {
-                    activateCurrentExtension()
-                } label: {
-                    Text(isActivatingCurrentExtension ? "正在切换…" : "切换到当前版本扩展")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isActivatingCurrentExtension)
-            }
+            RCMMDivider()
+                .padding(.vertical, 8)
+
+            primaryAction
 
             if healthMonitor.extensionStatus == .otherInstallationEnabled {
                 Button {
@@ -65,98 +94,94 @@ struct RecoveryGuidePanel: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .padding(.top, 6)
             }
+
+            HStack(spacing: 8) {
+                Button("稍后") {
+                    NSApp.keyWindow?.close()
+                }
+                .buttonStyle(.plain)
+                .font(RCMMFont.caption)
+                .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button("退出 rcmm") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .buttonStyle(.plain)
+                .font(RCMMFont.caption)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.top, 10)
+        }
+    }
+
+    @ViewBuilder
+    private var primaryAction: some View {
+        if healthMonitor.extensionStatus == .otherBuildEnabled {
+            Button {
+                activateCurrentExtension()
+            } label: {
+                Text(isActivatingCurrentExtension ? "正在切换…" : "切换到当前版本扩展")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(AppPrimaryButtonStyle())
+            .disabled(isActivatingCurrentExtension)
 
             Button {
                 PluginKitService.showExtensionManagement()
             } label: {
-                Text("修复")
+                Text("打开系统设置")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .padding(.top, 6)
+        } else {
+            Button {
+                PluginKitService.showExtensionManagement()
+            } label: {
+                Text("打开系统设置")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(AppPrimaryButtonStyle())
-
-            Button {
-                NSApp.keyWindow?.close()
-            } label: {
-                Text("稍后")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                Text("退出")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
         }
     }
 
-    private var recoveryDetails: some View {
-        VStack(spacing: 8) {
-            Text(primaryRecoveryText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    private var header: some View {
+        HStack(spacing: 8) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 22, height: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
 
-            if let detail = healthMonitor.extensionStatusDetail {
-                Text(detail)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .textSelection(.enabled)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("rcmm")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                Text("Finder 扩展需要处理")
+                    .font(RCMMFont.caption)
+                    .foregroundStyle(.secondary)
             }
 
-            if let activationError {
-                Text(activationError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Text(recoveryCommandHint)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if healthMonitor.extensionStatus != .otherBuildEnabled {
-                Text(PluginKitService.extensionEnableCommand)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .textSelection(.enabled)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            Text("必要时请关闭旧的 rcmm 调试/测试版本，并重新启动 Finder。")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.leading)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
         }
     }
 
     private var recoverySuccessContent: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 32))
-                .foregroundStyle(.green)
+                .font(.system(size: 30))
+                .foregroundStyle(RCMMColor.success)
 
             Text("扩展已恢复")
-                .font(.headline)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.primary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
+        .padding(.vertical, 28)
     }
 
     private func startPolling() {
@@ -231,7 +256,7 @@ struct RecoveryGuidePanel: View {
     return RecoveryGuidePanel()
         .environment(appModel.extensionHealthMonitor)
         .environment(appModel.appFlowCoordinator)
-        .frame(width: 300)
+        .frame(width: 360)
 }
 
 #Preview("异常状态 - Dark Mode") {
@@ -240,6 +265,6 @@ struct RecoveryGuidePanel: View {
     return RecoveryGuidePanel()
         .environment(appModel.extensionHealthMonitor)
         .environment(appModel.appFlowCoordinator)
-        .frame(width: 300)
+        .frame(width: 360)
         .preferredColorScheme(.dark)
 }

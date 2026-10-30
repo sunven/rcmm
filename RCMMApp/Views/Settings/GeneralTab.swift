@@ -17,26 +17,30 @@ struct GeneralTab: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                pageHeader
+            VStack(alignment: .leading, spacing: 18) {
+                RCMMPageHeader(
+                    title: "通用",
+                    subtitle: "启动项、设置向导和 Finder 扩展维护"
+                )
 
-                GeneralSettingsPanel(title: "开机自启", systemImage: "power") {
+                RCMMPanel(title: "开机自启") {
                     Toggle("开机时自动启动 rcmm", isOn: $isLoginItemEnabled)
+                        .font(RCMMFont.body)
 
-                    InlineSettingsMessage(
-                        text: isLoginItemEnabled ? "已启用：rcmm 将在开机时自动启动。" : "未启用：需要时可以从应用手动启动。",
+                    RCMMInlineMessage(
+                        isLoginItemEnabled ? "已启用：rcmm 将在开机时自动启动。" : "未启用：需要时可以从应用手动启动。",
                         kind: isLoginItemEnabled ? .success : .neutral
                     )
 
                     if let errorMessage {
-                        InlineSettingsMessage(text: errorMessage, kind: .error)
+                        RCMMInlineMessage(errorMessage, kind: .error)
                     }
                 }
 
-                GeneralSettingsPanel(title: "设置向导", systemImage: "checklist") {
+                RCMMPanel(title: "设置向导") {
                     Text("重新打开首次设置流程，用于检查 Finder 扩展、添加应用和设置开机自启。不会清空已有菜单配置。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(RCMMFont.secondary)
+                        .foregroundStyle(RCMMColor.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Button {
@@ -44,20 +48,21 @@ struct GeneralTab: View {
                     } label: {
                         Label("重新打开设置向导", systemImage: "arrow.clockwise")
                     }
+                    .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
 
-                GeneralSettingsPanel(title: "扩展维护", systemImage: "wrench.and.screwdriver") {
+                RCMMPanel(title: "扩展维护") {
                     if (healthMonitor.extensionStatus == .otherBuildEnabled
                         || healthMonitor.extensionStatus == .otherInstallationEnabled),
                        let detail = healthMonitor.extensionStatusDetail {
-                        InlineSettingsMessage(text: detail, kind: .warning)
+                        RCMMInlineMessage(detail, kind: .warning)
                             .textSelection(.enabled)
                     }
 
                     Text("如果 Finder 右键菜单刚更新或扩展状态异常，可以手动重启 Finder 让系统重新加载扩展。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(RCMMFont.secondary)
+                        .foregroundStyle(RCMMColor.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 8) {
@@ -95,16 +100,17 @@ struct GeneralTab: View {
                     }
 
                     if let maintenanceMessage {
-                        InlineSettingsMessage(
-                            text: maintenanceMessage,
+                        RCMMInlineMessage(
+                            maintenanceMessage,
                             kind: maintenanceMessageIsError ? .error : .success
                         )
                     }
                 }
             }
-            .padding(16)
+            .padding(18)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(RCMMColor.window)
         .onAppear {
             isUpdating = true
             isLoginItemEnabled = SMAppService.mainApp.status == .enabled
@@ -138,17 +144,6 @@ struct GeneralTab: View {
                 logger.error("开机自启操作失败: \(error.localizedDescription)")
             }
         }
-    }
-
-    private var pageHeader: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text("通用")
-                .font(.title3.weight(.semibold))
-            Text("启动项、设置向导和 Finder 扩展维护")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.bottom, 2)
     }
 
     private func restartFinder() {
@@ -208,85 +203,5 @@ struct GeneralTab: View {
     GeneralTab()
         .environment(appModel.extensionHealthMonitor)
         .environment(appModel.appFlowCoordinator)
-        .frame(width: 480, height: 400)
-}
-
-private struct GeneralSettingsPanel<Content: View>: View {
-    let title: String
-    let systemImage: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 9) {
-                content
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.primary.opacity(0.06))
-            )
-        }
-    }
-}
-
-private enum InlineSettingsMessageKind {
-    case neutral
-    case success
-    case warning
-    case error
-}
-
-private struct InlineSettingsMessage: View {
-    let text: String
-    let kind: InlineSettingsMessageKind
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Image(systemName: symbolName)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(width: 14)
-
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(kind == .neutral ? .secondary : color)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var symbolName: String {
-        switch kind {
-        case .neutral:
-            return "info.circle"
-        case .success:
-            return "checkmark.circle.fill"
-        case .warning:
-            return "exclamationmark.circle.fill"
-        case .error:
-            return "exclamationmark.triangle.fill"
-        }
-    }
-
-    private var color: Color {
-        switch kind {
-        case .neutral:
-            return .secondary
-        case .success:
-            return .green
-        case .warning:
-            return .orange
-        case .error:
-            return .red
-        }
-    }
+        .frame(width: 560, height: 480)
 }
